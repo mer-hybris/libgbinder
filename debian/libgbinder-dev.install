@@ -1,0 +1,3 @@
+debian/tmp/usr/lib/libgbinder.so usr/lib
+include/*.h usr/include/gbinder
+build/libgbinder.pc usr/lib/pkgconfig

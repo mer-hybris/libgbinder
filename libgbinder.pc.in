@@ -1,0 +1,10 @@
+name=gbinder
+libdir=/usr/lib
+includedir=/usr/include
+
+Name: libgbinder
+Description: Binder client library
+Version: [version]
+Requires: glib-2.0 libglibutil
+Libs: -L${libdir} -l${name}
+Cflags: -I${includedir} -I${includedir}/${name}

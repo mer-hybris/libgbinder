@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# This script requires lcov, dirname
+#
+
+TESTS="\
+unit_buffer \
+unit_client \
+unit_driver \
+unit_ipc \
+unit_local_object \
+unit_local_reply \
+unit_local_request \
+unit_protocol \
+unit_reader \
+unit_remote_object \
+unit_remote_reply \
+unit_remote_request \
+unit_writer"
+
+function err() {
+    echo "*** ERROR!" $1
+    exit 1
+}
+
+# Check the required tools
+which lcov >> /dev/null || err "Please install lcov"
+which dirname >> /dev/null || err "Please install dirname"
+
+# LCOV 1.10 has branch coverage disabled per default
+# Previous versions didn't have the --rc option
+if  [ ! -z "$(lcov --help | grep ' --rc ')" ] ; then
+    LCOV_OPT="--rc lcov_branch_coverage=1"
+    GENHTML_OPT="--branch-coverage"
+fi
+
+pushd `dirname $0` > /dev/null
+COV_DIR="$PWD"
+pushd .. > /dev/null
+TEST_DIR="$PWD"
+pushd .. > /dev/null
+TOP_DIR="$PWD"
+popd > /dev/null
+popd > /dev/null
+popd > /dev/null
+
+make -C "$TOP_DIR" clean
+for t in $TESTS ; do
+    pushd "$TEST_DIR/$t"
+    make -C "$TEST_DIR/$t" clean coverage || exit 1
+    build/coverage/$t || exit 1
+    popd
+done
+
+FULL_COV="$COV_DIR/full.gcov"
+LIB_COV="$COV_DIR/lib.gcov"
+rm -f "$FULL_COV" "$LIB_COV"
+lcov $LCOV_OPT -c -d "$TOP_DIR/build/coverage" -b "$TOP_DIR/src" -o "$FULL_COV" || exit 1
+lcov $LCOV_OPT -e "$FULL_COV" "$TOP_DIR/src/*" -o "$LIB_COV" || exit 1
+genhtml $GENHTML_OPT "$LIB_COV" -t "libgbinder" --output-directory "$COV_DIR/report" || exit 1

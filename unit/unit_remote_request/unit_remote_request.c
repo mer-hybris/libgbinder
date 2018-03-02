@@ -1,0 +1,257 @@
+/*
+ * Copyright (C) 2018 Jolla Ltd.
+ * Contact: Slava Monich <slava.monich@jolla.com>
+ *
+ * You may use this file under the terms of BSD license as follows:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *   1. Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *      documentation and/or other materials provided with the distribution.
+ *   3. Neither the name of Jolla Ltd nor the names of its contributors may
+ *      be used to endorse or promote products derived from this software
+ *      without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#include "test_common.h"
+
+#include "gbinder_buffer_p.h"
+#include "gbinder_driver.h"
+#include "gbinder_reader.h"
+#include "gbinder_remote_request_p.h"
+#include "gbinder_rpc_protocol.h"
+
+static TestOpt test_opt;
+
+#define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
+#define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
+
+#define TEST_RPC_IFACE "foo"
+#define TEST_RPC_HEADER \
+    TEST_INT32_BYTES(BINDER_RPC_FLAGS), \
+    TEST_INT32_BYTES(3), \
+    TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'), \
+    TEST_INT16_BYTES('o'), 0x00, 0x00
+
+/*==========================================================================*
+ * null
+ *==========================================================================*/
+
+static
+void
+test_null(
+    void)
+{
+    GBinderReader reader;
+
+    g_assert(!gbinder_remote_request_ref(NULL));
+    gbinder_remote_request_unref(NULL);
+    gbinder_remote_request_set_data(NULL, NULL, NULL);
+    gbinder_remote_request_init_reader(NULL, &reader);
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(!gbinder_remote_request_interface(NULL));
+    g_assert(!gbinder_remote_request_read_int32(NULL, NULL));
+    g_assert(!gbinder_remote_request_read_uint32(NULL, NULL));
+    g_assert(!gbinder_remote_request_read_int64(NULL, NULL));
+    g_assert(!gbinder_remote_request_read_uint64(NULL, NULL));
+    g_assert(!gbinder_remote_request_read_string8(NULL));
+    g_assert(!gbinder_remote_request_read_string16(NULL));
+    g_assert(!gbinder_remote_request_read_object(NULL));
+}
+
+/*==========================================================================*
+ * basic
+ *==========================================================================*/
+
+static
+void
+test_basic(
+    void)
+{
+    GBinderReader reader;
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
+        gbinder_rpc_protocol_for_device(NULL));
+
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(!gbinder_remote_request_interface(req));
+    g_assert(gbinder_remote_request_ref(req) == req);
+    g_assert(!gbinder_remote_request_read_object(req));
+    gbinder_remote_request_unref(req);
+    gbinder_remote_request_unref(req);
+}
+
+/*==========================================================================*
+ * int32
+ *==========================================================================*/
+
+static
+void
+test_int32(
+    void)
+{
+    static const guint8 request_data [] = {
+        TEST_RPC_HEADER,
+        TEST_INT32_BYTES(42)
+    };
+    guint32 out1 = 0;
+    gint32 out2 = 0;
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
+        gbinder_rpc_protocol_for_device(dev));
+
+    gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
+        g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
+        NULL);
+
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_RPC_IFACE));
+    g_assert(gbinder_remote_request_read_uint32(req, &out1));
+    g_assert(gbinder_remote_request_read_int32(req, &out2));
+    g_assert(out1 == 42);
+    g_assert(out2 == 42u);
+
+    gbinder_remote_request_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * int64
+ *==========================================================================*/
+
+static
+void
+test_int64(
+    void)
+{
+    static const guint8 request_data [] = {
+        TEST_RPC_HEADER,
+        TEST_INT64_BYTES(42)
+    };
+    guint64 out1 = 0;
+    gint64 out2 = 0;
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
+        gbinder_rpc_protocol_for_device(dev));
+
+    gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
+        g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
+        NULL);
+
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_RPC_IFACE));
+    g_assert(gbinder_remote_request_read_uint64(req, &out1));
+    g_assert(gbinder_remote_request_read_int64(req, &out2));
+    g_assert(out1 == 42);
+    g_assert(out2 == 42u);
+
+    gbinder_remote_request_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * string8
+ *==========================================================================*/
+
+static
+void
+test_string8(
+    void)
+{
+    static const guint8 request_data [] = {
+        TEST_RPC_HEADER,
+        'b', 'a', 'r', 0x00
+    };
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
+        gbinder_rpc_protocol_for_device(dev));
+
+    gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
+        g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
+        NULL);
+
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_RPC_IFACE));
+    g_assert(!g_strcmp0(gbinder_remote_request_read_string8(req), "bar"));
+
+    gbinder_remote_request_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * string16
+ *==========================================================================*/
+
+static
+void
+test_string16(
+    void)
+{
+    static const guint8 request_data [] = {
+        TEST_RPC_HEADER,
+        TEST_INT32_BYTES(3),
+        TEST_INT16_BYTES('b'), TEST_INT16_BYTES('a'),
+        TEST_INT16_BYTES('r'), 0x00, 0x00
+    };
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
+        gbinder_rpc_protocol_for_device(dev));
+    char* str;
+
+    gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
+        g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
+        NULL);
+
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_RPC_IFACE));
+    str = gbinder_remote_request_read_string16(req);
+    g_assert(!g_strcmp0(str, "bar"));
+    g_free(str);
+
+    gbinder_remote_request_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * Common
+ *==========================================================================*/
+
+#define TEST_PREFIX "/remote_request/"
+
+int main(int argc, char* argv[])
+{
+    g_test_init(&argc, &argv, NULL);
+    g_test_add_func(TEST_PREFIX "null", test_null);
+    g_test_add_func(TEST_PREFIX "basic", test_basic);
+    g_test_add_func(TEST_PREFIX "int32", test_int32);
+    g_test_add_func(TEST_PREFIX "int64", test_int64);
+    g_test_add_func(TEST_PREFIX "string8", test_string8);
+    g_test_add_func(TEST_PREFIX "string16", test_string16);
+    test_init(&test_opt, argc, argv);
+    return g_test_run();
+}
+
+/*
+ * Remote Variables:
+ * mode: C
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

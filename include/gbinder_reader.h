@@ -1,0 +1,155 @@
+/*
+ * Copyright (C) 2018 Jolla Ltd.
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ *
+ * You may use this file under the terms of BSD license as follows:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *   1. Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *      documentation and/or other materials provided with the distribution.
+ *   3. Neither the name of Jolla Ltd nor the names of its contributors may
+ *      be used to endorse or promote products derived from this software
+ *      without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#ifndef GBINDER_READER_H
+#define GBINDER_READER_H
+
+#include "gbinder_types.h"
+
+G_BEGIN_DECLS
+
+/*
+ * Normally, the reader is initialized by gbinder_remote_reply_init_reader or
+ * gbinder_remote_request_init_reader function. Note that the reader doesn't
+ * copy the data nor does it reference the object which initialized it. The
+ * caller must make sure that the data outlive the reader.
+ *
+ * Also, these functions are not NULL tolerant. The reader is normally
+ * allocated on stack.
+ */
+
+struct gbinder_reader {
+    gconstpointer d[6];
+};
+
+gboolean
+gbinder_reader_at_end(
+    GBinderReader* reader);
+
+gboolean
+gbinder_reader_read_byte(
+    GBinderReader* reader,
+    guchar* value);
+
+gboolean
+gbinder_reader_read_bool(
+    GBinderReader* reader,
+    gboolean* value);
+
+gboolean
+gbinder_reader_read_int32(
+    GBinderReader* reader,
+    gint32* value);
+
+gboolean
+gbinder_reader_read_uint32(
+    GBinderReader* reader,
+    guint32* value);
+
+gboolean
+gbinder_reader_read_int64(
+    GBinderReader* reader,
+    gint64* value);
+
+gboolean
+gbinder_reader_read_uint64(
+    GBinderReader* reader,
+    guint64* value);
+
+gboolean
+gbinder_reader_read_nullable_object(
+    GBinderReader* reader,
+    GBinderRemoteObject** obj);
+
+GBinderRemoteObject*
+gbinder_reader_read_object(
+    GBinderReader* reader)
+    G_GNUC_WARN_UNUSED_RESULT;
+
+#define gbinder_reader_skip_object(reader) \
+    gbinder_reader_read_nullable_object(reader, NULL)
+
+GBinderBuffer*
+gbinder_reader_read_buffer(
+    GBinderReader* reader)
+    G_GNUC_WARN_UNUSED_RESULT;
+
+char*
+gbinder_reader_read_hidl_string(
+    GBinderReader* reader)
+    G_GNUC_WARN_UNUSED_RESULT;
+
+char**
+gbinder_reader_read_hidl_string_vec(
+    GBinderReader* reader);
+
+gboolean
+gbinder_reader_skip_buffer(
+    GBinderReader* reader);
+
+const char*
+gbinder_reader_read_string8(
+    GBinderReader* reader);
+
+char*
+gbinder_reader_read_string16(
+    GBinderReader* reader)
+    G_GNUC_WARN_UNUSED_RESULT;
+
+gboolean
+gbinder_reader_read_nullable_string16(
+    GBinderReader* reader,
+    char** out);
+
+gboolean
+gbinder_reader_skip_string16(
+    GBinderReader* reader);
+
+gsize
+gbinder_reader_bytes_read(
+    GBinderReader* reader);
+
+gsize
+gbinder_reader_bytes_remaining(
+    GBinderReader* reader);
+
+G_END_DECLS
+
+#endif /* GBINDER_READER_H */
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ */
