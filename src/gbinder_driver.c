@@ -311,10 +311,13 @@ gbinder_driver_read_init(
     rb->buf.ptr = (uintptr_t)(rb->data);
     rb->buf.size = sizeof(rb->data);
     rb->buf.consumed = 0;
-#ifdef DEBUG
-    /* Otherwise valgrind complains about uninitialised data */
+
+    /*
+     * It shouldn't be necessary to zero-initialize the buffer but
+     * valgrind complains about access to uninitialised data if we
+     * don't do so. Oh well...
+     */
     memset(rb->data, 0, sizeof(rb->data));
-#endif
 }
 
 static
