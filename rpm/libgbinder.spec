@@ -4,7 +4,7 @@ Release: 0
 Summary: Binder client library
 Group: Development/Libraries
 License: BSD
-URL: https://git.merproject.org/mer-core/libgbinder
+URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
 Requires: libglibutil >= 1.0.29
 BuildRequires: pkgconfig(glib-2.0)
