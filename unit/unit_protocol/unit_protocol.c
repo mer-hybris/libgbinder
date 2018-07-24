@@ -100,7 +100,7 @@ test_no_header(
     void)
 {
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER));
+        gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER), 0, 0);
 
     gbinder_remote_request_set_data(req, NULL, NULL);
     g_assert(!gbinder_remote_request_interface(req));
@@ -142,7 +142,7 @@ test_read_header(
     const TestHeaderData* test = test_data;
     GBinderDriver* driver = gbinder_driver_new(test->dev);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(test->dev));
+        gbinder_rpc_protocol_for_device(test->dev), 0, 0);
 
     gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
         g_memdup(test->header, test->header_size), test->header_size), NULL);

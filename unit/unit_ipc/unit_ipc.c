@@ -46,7 +46,9 @@
 
 #include <gutil_log.h>
 
+#include <unistd.h>
 #include <errno.h>
+#include <sys/types.h>
 
 static TestOpt test_opt;
 
@@ -593,6 +595,8 @@ test_transact_incoming_proc(
 {
     GVERBOSE_("\"%s\" %u", gbinder_remote_request_interface(req), code);
     g_assert(!flags);
+    g_assert(gbinder_remote_request_sender_pid(req) == getpid());
+    g_assert(gbinder_remote_request_sender_euid(req) == geteuid());
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), "test"));
     g_assert(!g_strcmp0(gbinder_remote_request_read_string8(req), "message"));
     g_assert(code == 1);
