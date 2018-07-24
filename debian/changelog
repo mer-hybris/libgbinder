@@ -1,3 +1,10 @@
+libgbinder (1.0.2) unstable; urgency=low
+
+  * Added gbinder_remote_request_sender_pid()
+  * Added gbinder_remote_request_sender_euid()
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 25 Jul 2018 00:51:39 +0300
+
 libgbinder (1.0.1) unstable; urgency=low
 
   * Initialize the buffer passed to the driver
