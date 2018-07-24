@@ -67,6 +67,8 @@ test_null(
     gbinder_remote_request_init_reader(NULL, &reader);
     g_assert(gbinder_reader_at_end(&reader));
     g_assert(!gbinder_remote_request_interface(NULL));
+    g_assert(gbinder_remote_request_sender_pid(NULL) == (pid_t)(-1));
+    g_assert(gbinder_remote_request_sender_euid(NULL) == (uid_t)(-1));
     g_assert(!gbinder_remote_request_read_int32(NULL, NULL));
     g_assert(!gbinder_remote_request_read_uint32(NULL, NULL));
     g_assert(!gbinder_remote_request_read_int64(NULL, NULL));
@@ -87,7 +89,7 @@ test_basic(
 {
     GBinderReader reader;
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(NULL));
+        gbinder_rpc_protocol_for_device(NULL), 0, 0);
 
     gbinder_remote_request_init_reader(req, &reader);
     g_assert(gbinder_reader_at_end(&reader));
@@ -116,7 +118,7 @@ test_int32(
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderDriver* driver = gbinder_driver_new(dev);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(dev));
+        gbinder_rpc_protocol_for_device(dev), 0, 0);
 
     gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
         g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
@@ -150,7 +152,7 @@ test_int64(
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderDriver* driver = gbinder_driver_new(dev);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(dev));
+        gbinder_rpc_protocol_for_device(dev), 0, 0);
 
     gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
         g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
@@ -182,7 +184,7 @@ test_string8(
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderDriver* driver = gbinder_driver_new(dev);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(dev));
+        gbinder_rpc_protocol_for_device(dev), 0, 0);
 
     gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
         g_memdup(request_data, sizeof(request_data)), sizeof(request_data)),
@@ -213,7 +215,7 @@ test_string16(
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderDriver* driver = gbinder_driver_new(dev);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
-        gbinder_rpc_protocol_for_device(dev));
+        gbinder_rpc_protocol_for_device(dev), 0, 0);
     char* str;
 
     gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,

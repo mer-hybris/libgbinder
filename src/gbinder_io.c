@@ -278,6 +278,8 @@ GBINDER_IO_FN(decode_transaction_data)(
     tx->objects = NULL;
     tx->code = tr->code;
     tx->flags = 0;
+    tx->pid = tr->sender_pid;
+    tx->euid = tr->sender_euid;
     tx->target = (void*)(uintptr_t)tr->target.ptr;
     tx->data = (void*)(uintptr_t)tr->data.ptr.buffer;
     if (tr->flags & TF_STATUS_CODE) {

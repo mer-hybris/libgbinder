@@ -40,7 +40,9 @@
 GBinderRemoteRequest*
 gbinder_remote_request_new(
     GBinderObjectRegistry* reg,
-    const GBinderRpcProtocol* protocol);
+    const GBinderRpcProtocol* protocol,
+    pid_t pid,
+    uid_t euid);
 
 void
 gbinder_remote_request_set_data(

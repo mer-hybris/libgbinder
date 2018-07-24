@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
@@ -263,6 +264,8 @@ test_binder_fill_transaction_data(
     tr->handle = handle;
     tr->code = code;
     tr->data_size = bytes->len;
+    tr->sender_pid = getpid();
+    tr->sender_euid = geteuid();
     /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
     tr->data_buffer = (gsize)g_memdup(bytes->data, bytes->len);
 }

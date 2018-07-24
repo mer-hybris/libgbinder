@@ -41,6 +41,8 @@
 
 struct gbinder_remote_request {
     gint refcount;
+    pid_t pid;
+    uid_t euid;
     const GBinderRpcProtocol* protocol;
     const char* iface;
     char* iface2;
@@ -51,12 +53,16 @@ struct gbinder_remote_request {
 GBinderRemoteRequest*
 gbinder_remote_request_new(
     GBinderObjectRegistry* reg,
-    const GBinderRpcProtocol* protocol)
+    const GBinderRpcProtocol* protocol,
+    pid_t pid,
+    uid_t euid)
 {
     GBinderRemoteRequest* self = g_slice_new0(GBinderRemoteRequest);
     GBinderReaderData* data = &self->data;
 
     g_atomic_int_set(&self->refcount, 1);
+    self->pid = pid;
+    self->euid = euid;
     self->protocol = protocol;
     data->reg = gbinder_object_registry_ref(reg);
     return self;
@@ -162,6 +168,20 @@ gbinder_remote_request_init_reader(
     } else {
         gbinder_reader_init(reader, NULL, 0, 0);
     }
+}
+
+pid_t
+gbinder_remote_request_sender_pid(
+    GBinderRemoteRequest* self)
+{
+    return G_LIKELY(self) ? self->pid : (uid_t)(-1);
+}
+
+uid_t
+gbinder_remote_request_sender_euid(
+    GBinderRemoteRequest* self)
+{
+    return G_LIKELY(self) ? self->euid : (uid_t)(-1);
 }
 
 gboolean

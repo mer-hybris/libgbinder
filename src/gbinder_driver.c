@@ -425,7 +425,7 @@ gbinder_driver_handle_transaction(
     const void* data)
 {
     GBinderLocalReply* reply = NULL;
-    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, self->protocol);
+    GBinderRemoteRequest* req;
     GBinderIoTxData tx;
     GBinderLocalObject* obj;
     const char* iface;
@@ -433,6 +433,7 @@ gbinder_driver_handle_transaction(
 
     self->io->decode_transaction_data(data, &tx);
     gbinder_driver_verbose_transaction_data("BR_TRANSACTION", &tx);
+    req = gbinder_remote_request_new(reg, self->protocol, tx.pid, tx.euid);
     obj = gbinder_object_registry_get_local(reg, tx.target);
 
     /* Transfer data ownership to the request */

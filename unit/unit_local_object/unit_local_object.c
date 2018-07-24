@@ -202,8 +202,8 @@ test_get_descriptor(
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    GBinderRemoteRequest* req = gbinder_remote_request_new
-        (gbinder_ipc_object_registry(ipc), prot);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
     GBinderLocalObject* obj =
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
@@ -257,8 +257,8 @@ test_descriptor_chain(
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    GBinderRemoteRequest* req = gbinder_remote_request_new
-        (gbinder_ipc_object_registry(ipc), prot);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
     GBinderLocalObject* obj =
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
@@ -324,8 +324,8 @@ test_custom_iface(
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    GBinderRemoteRequest* req = gbinder_remote_request_new
-        (gbinder_ipc_object_registry(ipc), prot);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, custom_iface,
         test_custom_iface_handler, &count);
     GBinderLocalReply* reply;
@@ -430,7 +430,7 @@ test_reply_status(
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
-    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, custom_iface,
         test_reply_status_handler, &count);
 

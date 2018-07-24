@@ -47,6 +47,8 @@ typedef struct gbinder_io_tx_data {
     int status;
     guint32 code;
     guint32 flags;   /* GBINDER_TX_FLAG_xxx */
+    pid_t pid;
+    uid_t euid;
     void* target;
     void* data;
     gsize size;
@@ -57,11 +59,11 @@ typedef struct gbinder_io_tx_data {
 #define GBINDER_IO_READ_BUFFER_SIZE (128)
 
 /*
- * There are (at least) 2 versions of the binder ioctl API, implemented
+ * There are (at least) 2 versions of the binder ioctl API, implemented by
  * 32-bit and 64-bit kernels. The ioctl codes, transaction commands - many
  * of those are derived from the sizes of the structures being passed
  * between the driver and the user space client. All these differences
- * are abstracted away by the GBinderIo interfaces.
+ * are abstracted away by GBinderIo interfaces.
  *
  * The API version is returned by BINDER_VERSION ioctl which itself doesn't
  * depend on the API version (it would be very strange if it did).
