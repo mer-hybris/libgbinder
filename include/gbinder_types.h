@@ -74,13 +74,13 @@ typedef struct gbinder_parent GBinderParent;
 
 /*
  * Each RPC call is identified by the interface name returned
- * by gbinder_remote_request_interface() the the transaction code.
+ * by gbinder_remote_request_interface() the transaction code.
  * Transaction code itself is not unique.
  *
- * The value return from GBinderLocalTransactFunc callbacl will be
- * ignored for one-way transactions. If GBINDER_TX_FLAG_ONEWAY is
- * passed in, the callback should return NULL and that won't be
- * interpreted as an error.
+ * The value returned from GBinderLocalTransactFunc callback will
+ * be ignored for one-way transactions. If GBINDER_TX_FLAG_ONEWAY
+ * is passed in, the callback may and should return NULL and that
+ * won't be interpreted as an error.
  */
 typedef
 GBinderLocalReply*
