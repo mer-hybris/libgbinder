@@ -961,6 +961,7 @@ gbinder_ipc_tx_proc(
     GBinderIpcTxPriv* tx = data;
     GBinderIpc* self = GBINDER_IPC(object);
     GBinderIpcPriv* priv = self->priv;
+    GSource* source = g_idle_source_new();
 
     if (!tx->pub.cancelled) {
         tx->fn_exec(tx);
@@ -969,8 +970,9 @@ gbinder_ipc_tx_proc(
     }
 
     /* The result is handled by the main thread */
-    g_main_context_invoke_full(priv->context, G_PRIORITY_DEFAULT,
-        gbinder_ipc_tx_done, tx, gbinder_ipc_tx_free);
+    g_source_set_callback(source, gbinder_ipc_tx_done, tx, gbinder_ipc_tx_free);
+    g_source_attach(source, priv->context);
+    g_source_unref(source);
 }
 
 /*==========================================================================*
