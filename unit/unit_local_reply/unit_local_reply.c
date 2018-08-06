@@ -111,6 +111,47 @@ test_cleanup(
 }
 
 /*==========================================================================*
+ * bool
+ *==========================================================================*/
+
+static
+void
+test_bool(
+    void)
+{
+    static const guint8 output_true[] = { 0x01, 0xff, 0xff, 0xff };
+    static const guint8 output_false[] = { 0x00, 0xff, 0xff, 0xff };
+    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderOutputData* data;
+
+    gbinder_local_reply_append_bool(reply, FALSE);
+    data = gbinder_local_reply_data(reply);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_false));
+    g_assert(!memcmp(data->bytes->data, output_false, data->bytes->len));
+    gbinder_local_reply_unref(reply);
+
+    reply = gbinder_local_reply_new(&gbinder_io_32);
+    gbinder_local_reply_append_bool(reply, TRUE);
+    data = gbinder_local_reply_data(reply);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_true));
+    g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
+    gbinder_local_reply_unref(reply);
+
+    reply = gbinder_local_reply_new(&gbinder_io_32);
+    gbinder_local_reply_append_bool(reply, 42);
+    data = gbinder_local_reply_data(reply);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_true));
+    g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
+    gbinder_local_reply_unref(reply);
+}
+
+/*==========================================================================*
  * int32
  *==========================================================================*/
 
@@ -361,6 +402,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "cleanup", test_cleanup);
+    g_test_add_func(TEST_PREFIX "bool", test_bool);
     g_test_add_func(TEST_PREFIX "int32", test_int32);
     g_test_add_func(TEST_PREFIX "int64", test_int64);
     g_test_add_func(TEST_PREFIX "string8", test_string8);
