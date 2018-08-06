@@ -170,6 +170,17 @@ gbinder_local_request_init_writer(
 }
 
 GBinderLocalRequest*
+gbinder_local_request_append_bool(
+    GBinderLocalRequest* self,
+    gboolean value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_bool(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalRequest*
 gbinder_local_request_append_int32(
     GBinderLocalRequest* self,
     guint32 value)

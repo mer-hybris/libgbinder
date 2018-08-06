@@ -57,6 +57,11 @@ gbinder_local_request_cleanup(
     gpointer pointer);
 
 GBinderLocalRequest*
+gbinder_local_request_append_bool(
+    GBinderLocalRequest* request,
+    gboolean value); /* since 1.0.3 */
+
+GBinderLocalRequest*
 gbinder_local_request_append_int32(
     GBinderLocalRequest* request,
     guint32 value);

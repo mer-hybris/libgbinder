@@ -97,6 +97,31 @@ gbinder_writer_init(
 }
 
 void
+gbinder_writer_append_bool(
+    GBinderWriter* self,
+    gboolean value)
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_bool(data, value);
+    }
+}
+
+void
+gbinder_writer_data_append_bool(
+    GBinderWriterData* data,
+    gboolean value)
+{
+    guint8 padded[4];
+
+    /* Boolean values are padded to 4-byte boundary */
+    padded[0] = (value != FALSE);
+    padded[1] = padded[2] = padded[3] = 0xff;
+    g_byte_array_append(data->bytes, padded, sizeof(padded));
+}
+
+void
 gbinder_writer_append_int32(
     GBinderWriter* self,
     guint32 value)
@@ -289,19 +314,6 @@ gbinder_writer_data_append_string16_len(
         /* NULL string */
         gbinder_writer_data_append_int32(data, -1);
     }
-}
-
-void
-gbinder_writer_append_bool(
-    GBinderWriter* self,
-    gboolean value)
-{
-    guint8 padded[4];
-
-    /* Boolean values are padded to 4-byte boundary */
-    padded[0] = (value != FALSE);
-    padded[1] = padded[2] = padded[3] = 0xff;
-    gbinder_writer_append_bytes(self, padded, sizeof(padded));
 }
 
 void

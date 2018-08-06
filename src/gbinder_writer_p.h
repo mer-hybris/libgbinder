@@ -51,6 +51,11 @@ gbinder_writer_init(
     GBinderWriterData* data);
 
 void
+gbinder_writer_data_append_bool(
+    GBinderWriterData* data,
+    gboolean value);
+
+void
 gbinder_writer_data_append_int32(
     GBinderWriterData* data,
     guint32 value);
