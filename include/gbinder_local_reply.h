@@ -57,6 +57,11 @@ gbinder_local_reply_cleanup(
     gpointer pointer);
 
 GBinderLocalReply*
+gbinder_local_reply_append_bool(
+    GBinderLocalReply* reply,
+    gboolean value); /* since 1.0.3 */
+
+GBinderLocalReply*
 gbinder_local_reply_append_int32(
     GBinderLocalReply* reply,
     guint32 value);
