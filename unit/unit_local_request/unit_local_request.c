@@ -76,6 +76,7 @@ test_null(
     g_assert(count == 1);
 
     g_assert(!gbinder_local_request_data(NULL));
+    g_assert(!gbinder_local_request_append_bool(NULL, FALSE));
     g_assert(!gbinder_local_request_append_int32(NULL, 0));
     g_assert(!gbinder_local_request_append_int64(NULL, 0));
     g_assert(!gbinder_local_request_append_string8(NULL, NULL));
@@ -138,6 +139,47 @@ test_init_data(
     gbinder_local_request_unref(req);
 
     g_bytes_unref(init_bytes);
+}
+
+/*==========================================================================*
+ * bool
+ *==========================================================================*/
+
+static
+void
+test_bool(
+    void)
+{
+    static const guint8 output_true[] = { 0x01, 0xff, 0xff, 0xff };
+    static const guint8 output_false[] = { 0x00, 0xff, 0xff, 0xff };
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+
+    gbinder_local_request_append_bool(req, FALSE);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_false));
+    g_assert(!memcmp(data->bytes->data, output_false, data->bytes->len));
+    gbinder_local_request_unref(req);
+
+    req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    gbinder_local_request_append_bool(req, TRUE);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_true));
+    g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
+    gbinder_local_request_unref(req);
+
+    req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    gbinder_local_request_append_bool(req, 42);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(output_true));
+    g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
+    gbinder_local_request_unref(req);
 }
 
 /*==========================================================================*
@@ -360,6 +402,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "cleanup", test_cleanup);
     g_test_add_func(TEST_PREFIX "init_data", test_init_data);
+    g_test_add_func(TEST_PREFIX "bool", test_bool);
     g_test_add_func(TEST_PREFIX "int32", test_int32);
     g_test_add_func(TEST_PREFIX "int64", test_int64);
     g_test_add_func(TEST_PREFIX "string8", test_string8);
