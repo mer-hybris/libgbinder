@@ -161,6 +161,17 @@ gbinder_local_reply_init_writer(
 }
 
 GBinderLocalReply*
+gbinder_local_reply_append_bool(
+    GBinderLocalReply* self,
+    gboolean value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_bool(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalReply*
 gbinder_local_reply_append_int32(
     GBinderLocalReply* self,
     guint32 value)
