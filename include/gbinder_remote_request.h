@@ -56,11 +56,11 @@ gbinder_remote_request_init_reader(
 
 pid_t
 gbinder_remote_request_sender_pid(
-    GBinderRemoteRequest* req);
+    GBinderRemoteRequest* req); /* since 1.0.2 */
 
 uid_t
 gbinder_remote_request_sender_euid(
-    GBinderRemoteRequest* req);
+    GBinderRemoteRequest* req); /* since 1.0.2 */
 
 /* Convenience function to decode requests with just one data item */
 

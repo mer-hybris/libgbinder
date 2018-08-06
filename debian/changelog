@@ -1,3 +1,10 @@
+libgbinder (1.0.3) unstable; urgency=low
+
+  * Added gbinder_local_request_append_bool()
+  * Added gbinder_local_reply_append_bool()
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 06 Aug 2018 19:15:29 +0300
+
 libgbinder (1.0.2) unstable; urgency=low
 
   * Added gbinder_remote_request_sender_pid()
