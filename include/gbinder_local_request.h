@@ -72,6 +72,16 @@ gbinder_local_request_append_int64(
     guint64 value);
 
 GBinderLocalRequest*
+gbinder_local_request_append_float(
+    GBinderLocalRequest* request,
+    gfloat value);
+
+GBinderLocalRequest*
+gbinder_local_request_append_double(
+    GBinderLocalRequest* request,
+    gdouble value);
+
+GBinderLocalRequest*
 gbinder_local_request_append_string8(
     GBinderLocalRequest* request,
     const char* str);

@@ -66,6 +66,16 @@ gbinder_writer_append_int64(
     guint64 value);
 
 void
+gbinder_writer_append_float(
+    GBinderWriter* writer,
+    gfloat value);
+
+void
+gbinder_writer_append_double(
+    GBinderWriter* writer,
+    gdouble value);
+
+void
 gbinder_writer_append_string16(
     GBinderWriter* writer,
     const char* utf8);

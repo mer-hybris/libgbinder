@@ -170,6 +170,54 @@ gbinder_writer_data_append_int64(
 }
 
 void
+gbinder_writer_append_float(
+    GBinderWriter* self,
+    gfloat value)
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_float(data, value);
+    }
+}
+
+void
+gbinder_writer_data_append_float(
+    GBinderWriterData* data,
+    gfloat value)
+{
+    gfloat* ptr;
+
+    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
+    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    *ptr = value;
+}
+
+void
+gbinder_writer_append_double(
+    GBinderWriter* self,
+    gdouble value)
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_double(data, value);
+    }
+}
+
+void
+gbinder_writer_data_append_double(
+    GBinderWriterData* data,
+    gdouble value)
+{
+    gdouble* ptr;
+
+    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
+    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    *ptr = value;
+}
+
+void
 gbinder_writer_append_string8(
     GBinderWriter* self,
     const char* str)

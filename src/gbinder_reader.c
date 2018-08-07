@@ -190,6 +190,46 @@ gbinder_reader_read_uint64(
 }
 
 gboolean
+gbinder_reader_read_float(
+    GBinderReader* reader,
+    gfloat* value)
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+    if (gbinder_reader_can_read(p, sizeof(*value))) {
+        if (value) {
+            const gfloat* ptr = (void*)p->ptr;
+
+            *value = *ptr;
+        }
+        p->ptr += sizeof(*value);
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+gboolean
+gbinder_reader_read_double(
+    GBinderReader* reader,
+    gdouble* value)
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+    if (gbinder_reader_can_read(p, sizeof(*value))) {
+        if (value) {
+            const gdouble* ptr = (void*)p->ptr;
+
+            *value = *ptr;
+        }
+        p->ptr += sizeof(*value);
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+gboolean
 gbinder_reader_read_nullable_object(
     GBinderReader* reader,
     GBinderRemoteObject** out)

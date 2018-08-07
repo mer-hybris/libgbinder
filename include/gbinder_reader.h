@@ -86,6 +86,16 @@ gbinder_reader_read_uint64(
     guint64* value);
 
 gboolean
+gbinder_reader_read_float(
+    GBinderReader* reader,
+    gfloat* value);
+
+gboolean
+gbinder_reader_read_double(
+    GBinderReader* reader,
+    gdouble* value);
+
+gboolean
 gbinder_reader_read_nullable_object(
     GBinderReader* reader,
     GBinderRemoteObject** obj);
