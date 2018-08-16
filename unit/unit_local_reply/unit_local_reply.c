@@ -79,6 +79,7 @@ test_null(
     gbinder_local_reply_cleanup(NULL, test_int_inc, &count);
     g_assert(count == 1);
 
+    g_assert(!gbinder_local_reply_append_bool(NULL, FALSE));
     g_assert(!gbinder_local_reply_append_int32(NULL, 0));
     g_assert(!gbinder_local_reply_append_int64(NULL, 0));
     g_assert(!gbinder_local_reply_append_float(NULL, 0));
