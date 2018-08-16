@@ -1,3 +1,9 @@
+libgbinder (1.0.5) unstable; urgency=low
+
+  * Added double and float support
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 17 Aug 2018 00:01:27 +0300
+
 libgbinder (1.0.4) unstable; urgency=low
 
   * Handle transaction result on main thread
