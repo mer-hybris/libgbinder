@@ -203,6 +203,28 @@ gbinder_local_request_append_int64(
 }
 
 GBinderLocalRequest*
+gbinder_local_request_append_float(
+    GBinderLocalRequest* self,
+    gfloat value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_float(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalRequest*
+gbinder_local_request_append_double(
+    GBinderLocalRequest* self,
+    gdouble value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_double(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalRequest*
 gbinder_local_request_append_string8(
     GBinderLocalRequest* self,
     const char* str)

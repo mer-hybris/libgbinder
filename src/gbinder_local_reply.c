@@ -194,6 +194,28 @@ gbinder_local_reply_append_int64(
 }
 
 GBinderLocalReply*
+gbinder_local_reply_append_float(
+    GBinderLocalReply* self,
+    gfloat value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_float(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalReply*
+gbinder_local_reply_append_double(
+    GBinderLocalReply* self,
+    gdouble value)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_double(&self->data, value);
+    }
+    return self;
+}
+
+GBinderLocalReply*
 gbinder_local_reply_append_string8(
     GBinderLocalReply* self,
     const char* str)

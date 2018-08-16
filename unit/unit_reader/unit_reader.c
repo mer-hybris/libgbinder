@@ -73,6 +73,8 @@ test_empty(
     g_assert(!gbinder_reader_read_uint32(&reader, NULL));
     g_assert(!gbinder_reader_read_int64(&reader, NULL));
     g_assert(!gbinder_reader_read_uint64(&reader, NULL));
+    g_assert(!gbinder_reader_read_float(&reader, NULL));
+    g_assert(!gbinder_reader_read_double(&reader, NULL));
     g_assert(!gbinder_reader_read_object(&reader));
     g_assert(!gbinder_reader_read_nullable_object(&reader, NULL));
     g_assert(!gbinder_reader_read_buffer(&reader));
@@ -238,6 +240,84 @@ test_int64(
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_int64(&reader, NULL));
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * float
+ *==========================================================================*/
+
+static
+void
+test_float(
+    void)
+{
+    const gfloat in = 42;
+    gfloat out1 = 0;
+    gfloat out2 = 0;
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderReader reader;
+    GBinderReaderData data;
+
+    g_assert(driver);
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
+        sizeof(in));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_float(&reader, &out1));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(in == out1);
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_float(&reader, &out2));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(in == (gfloat)out2);
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_float(&reader, NULL));
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * double
+ *==========================================================================*/
+
+static
+void
+test_double(
+    void)
+{
+    const gdouble in = 42;
+    gdouble out1 = 0;
+    gdouble out2 = 0;
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderReader reader;
+    GBinderReaderData data;
+
+    g_assert(driver);
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
+        sizeof(in));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_double(&reader, &out1));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(in == out1);
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_double(&reader, &out2));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(in == (gdouble)out2);
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(in));
+    g_assert(gbinder_reader_read_double(&reader, NULL));
     g_assert(gbinder_reader_at_end(&reader));
 
     gbinder_buffer_free(data.buffer);
@@ -659,6 +739,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "bool", test_bool);
     g_test_add_func(TEST_PREFIX "int32", test_int32);
     g_test_add_func(TEST_PREFIX "int64", test_int64);
+    g_test_add_func(TEST_PREFIX "float", test_float);
+    g_test_add_func(TEST_PREFIX "double", test_double);
 
     for (i = 0; i < G_N_ELEMENTS(test_string8_tests); i++) {
         const TestStringData* test = test_string8_tests + i;

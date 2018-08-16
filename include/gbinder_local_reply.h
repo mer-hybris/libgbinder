@@ -72,6 +72,16 @@ gbinder_local_reply_append_int64(
     guint64 value);
 
 GBinderLocalReply*
+gbinder_local_reply_append_float(
+    GBinderLocalReply* reply,
+    gfloat value);
+
+GBinderLocalReply*
+gbinder_local_reply_append_double(
+    GBinderLocalReply* reply,
+    gdouble value);
+
+GBinderLocalReply*
 gbinder_local_reply_append_string8(
     GBinderLocalReply* reply,
     const char* str);

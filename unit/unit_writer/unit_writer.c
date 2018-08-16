@@ -62,6 +62,10 @@ test_null(
     gbinder_writer_append_int32(&writer, 0);
     gbinder_writer_append_int64(NULL, 0);
     gbinder_writer_append_int64(&writer, 0);
+    gbinder_writer_append_float(NULL, 0);
+    gbinder_writer_append_float(&writer, 0);
+    gbinder_writer_append_double(NULL, 0);
+    gbinder_writer_append_double(&writer, 0);
     gbinder_writer_append_string8(NULL, NULL);
     gbinder_writer_append_string8(&writer, NULL);
     gbinder_writer_append_string8_len(NULL, NULL, 0);
@@ -131,6 +135,54 @@ test_int64(
 
     gbinder_local_request_init_writer(req, &writer);
     gbinder_writer_append_int64(&writer, value);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(value));
+    g_assert(!memcmp(data->bytes->data, &value, data->bytes->len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * float
+ *==========================================================================*/
+
+static
+void
+test_float(
+    void)
+{
+    const gfloat value = 12345678;
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_float(&writer, value);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(value));
+    g_assert(!memcmp(data->bytes->data, &value, data->bytes->len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * double
+ *==========================================================================*/
+
+static
+void
+test_double(
+    void)
+{
+    const gdouble value = 12345678;
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_double(&writer, value);
     data = gbinder_local_request_data(req);
     g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
@@ -583,6 +635,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "int32", test_int32);
     g_test_add_func(TEST_PREFIX "int64", test_int64);
+    g_test_add_func(TEST_PREFIX "float", test_float);
+    g_test_add_func(TEST_PREFIX "double", test_double);
     g_test_add_func(TEST_PREFIX "bool", test_bool);
     g_test_add_func(TEST_PREFIX "bytes", test_bytes);
     g_test_add_func(TEST_PREFIX "string8", test_string8);
