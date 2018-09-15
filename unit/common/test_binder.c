@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -32,7 +32,9 @@
 
 #include "gbinder_system.h"
 
+#define GLOG_MODULE_NAME test_binder_log
 #include <gutil_log.h>
+GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -61,6 +63,7 @@ typedef struct test_binder_node {
     char* path;
     int refcount;
     const TestBinderIo* io;
+    GHashTable* destroy_map;
 } TestBinderNode;
 
 typedef struct test_binder {
@@ -124,6 +127,25 @@ typedef struct binder_pre_cookie_64 {
 #define BR_FAILED_REPLY          _IO('r', 17)
 
 static
+void
+test_io_free_buffer(
+    TestBinder* binder,
+    void* ptr)
+{
+    if (ptr) {
+        TestBinderNode* node = binder->node;
+        GDestroyNotify destroy = g_hash_table_lookup(node->destroy_map, ptr);
+
+        if (destroy) {
+            g_hash_table_remove(node->destroy_map, ptr);
+            destroy(ptr);
+        } else {
+            g_free(ptr);
+        }
+    }
+}
+
+static
 int
 test_io_handle_write_read_64(
     TestBinder* binder,
@@ -151,7 +173,8 @@ test_io_handle_write_read_64(
                 /* Is there anything special about transactions and replies? */
                 break;
             case BC_FREE_BUFFER_64:
-                g_free((void*)(gsize)(*(guint64*)write_ptr));
+                test_io_free_buffer(binder,
+                    GSIZE_TO_POINTER(*(guint64*)write_ptr));
                 break;
             case BC_INCREFS:
             case BC_ACQUIRE:
@@ -219,6 +242,7 @@ test_binder_node_unref(
     node->refcount--;
     if (!node->refcount) {
         g_hash_table_remove(test_node_map, node->path);
+        g_hash_table_destroy(node->destroy_map);
         g_free(node->path);
         g_free(node);
     }
@@ -229,23 +253,56 @@ test_binder_node_unref(
 }
 
 static
+TestBinder*
+test_binder_from_fd(
+    int fd)
+{
+    TestBinder* binder = NULL;
+    GASSERT(test_fd_map);
+    if (test_fd_map) {
+        binder = g_hash_table_lookup(test_fd_map, GINT_TO_POINTER(fd));
+        GASSERT(binder);
+    }
+    return binder;
+}
+
+static
+void
+test_io_destroy_none(
+    gpointer data)
+{
+    GDEBUG("Not freeing %p", data);
+}
+
+void
+test_binder_set_destroy(
+    int fd,
+    gpointer ptr,
+    GDestroyNotify destroy)
+{
+    TestBinder* binder = test_binder_from_fd(fd);
+
+    if (binder) {
+        TestBinderNode* node = binder->node;
+
+        g_hash_table_replace(node->destroy_map, ptr,
+            destroy ? destroy : test_io_destroy_none);
+    }
+}
+
+static
 gboolean
 test_binder_push_data(
     int fd,
     const void* data)
 {
-    GASSERT(test_fd_map);
-    if (test_fd_map) {
-        gpointer key = GINT_TO_POINTER(fd);
-        TestBinder* binder = g_hash_table_lookup(test_fd_map, key);
+    TestBinder* binder = test_binder_from_fd(fd);
 
-        GASSERT(binder);
-        if (binder) {
-            const guint32* cmd = data;
-            const int len = sizeof(*cmd) + _IOC_SIZE(*cmd);
+    if (binder) {
+        const guint32* cmd = data;
+        const int len = sizeof(*cmd) + _IOC_SIZE(*cmd);
 
-            return write(binder->private_fd, data, len) == len;
-        }
+        return write(binder->private_fd, data, len) == len;
     }
     return FALSE;
 }
@@ -440,6 +497,7 @@ gbinder_system_open(
             node->path = g_strdup(path);
             node->refcount = 1;
             node->io = &test_io_64;
+            node->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
             if (!test_node_map) {
                 test_node_map = g_hash_table_new(g_str_hash, g_str_equal);
             }
@@ -466,24 +524,19 @@ int
 gbinder_system_close(
     int fd)
 {
-    GASSERT(test_fd_map);
-    if (test_fd_map) {
-        gpointer key = GINT_TO_POINTER(fd);
-        TestBinder* binder = g_hash_table_lookup(test_fd_map, key);
+    TestBinder* binder = test_binder_from_fd(fd);
 
-        GASSERT(binder);
-        if (binder) {
-            g_hash_table_remove(test_fd_map, key);
-            if (!g_hash_table_size(test_fd_map)) {
-                g_hash_table_unref(test_fd_map);
-                test_fd_map = NULL;
-            }
-            test_binder_node_unref(binder->node);
-            close(binder->public_fd);
-            close(binder->private_fd);
-            g_free(binder);
-            return 0;
+    if (binder) {
+        g_hash_table_remove(test_fd_map, GINT_TO_POINTER(fd));
+        if (!g_hash_table_size(test_fd_map)) {
+            g_hash_table_unref(test_fd_map);
+            test_fd_map = NULL;
         }
+        test_binder_node_unref(binder->node);
+        close(binder->public_fd);
+        close(binder->private_fd);
+        g_free(binder);
+        return 0;
     }
     errno = EBADF;
     return -1;
@@ -495,27 +548,21 @@ gbinder_system_ioctl(
     int request,
     void* data)
 {
-    GASSERT(test_fd_map);
-    if (test_fd_map) {
-        gpointer key = GINT_TO_POINTER(fd);
-        TestBinder* binder = g_hash_table_lookup(test_fd_map, key);
+    TestBinder* binder = test_binder_from_fd(fd);
+    if (binder) {
+        const TestBinderIo* io = binder->node->io;
 
-        GASSERT(binder);
-        if (binder) {
-            const TestBinderIo* io = binder->node->io;
-
-            switch (request) {
-            case BINDER_VERSION:
-                return test_binder_ioctl_version(binder, data);
-            case BINDER_SET_MAX_THREADS:
-                return 0;
-            default:
-                if (request == io->write_read_request) {
-                    return io->handle_write_read(binder, data);
-                } else {
-                    errno = EINVAL;
-                    return -1;
-                }
+        switch (request) {
+        case BINDER_VERSION:
+            return test_binder_ioctl_version(binder, data);
+        case BINDER_SET_MAX_THREADS:
+            return 0;
+        default:
+            if (request == io->write_read_request) {
+                return io->handle_write_read(binder, data);
+            } else {
+                errno = EINVAL;
+                return -1;
             }
         }
     }

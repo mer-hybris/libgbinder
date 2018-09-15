@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -49,6 +49,7 @@ test_null(
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
     GBinderBuffer* buf = gbinder_buffer_new(NULL, NULL, 0);
     GBinderBuffer* buf2;
+    gsize size = 1;
 
     gbinder_buffer_free(buf);
 
@@ -66,6 +67,10 @@ test_null(
 
     gbinder_buffer_free(NULL);
     g_assert(!gbinder_buffer_driver(NULL));
+    g_assert(!gbinder_buffer_io(NULL));
+    g_assert(!gbinder_buffer_data(NULL, NULL));
+    g_assert(!gbinder_buffer_data(NULL, &size));
+    g_assert(!size);
     gbinder_driver_unref(driver);
 }
 
@@ -80,12 +85,20 @@ test_parent(
 {
     static const guint8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
     void* ptr = g_memdup(data, sizeof(data));
+    gsize size = 0;
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
     GBinderBuffer* parent = gbinder_buffer_new(driver, ptr, sizeof(data));
     GBinderBuffer* buf = gbinder_buffer_new_with_parent
         (parent, ptr, sizeof(data));
 
     g_assert(gbinder_buffer_driver(buf) == driver);
+    g_assert(gbinder_buffer_io(buf));
+    g_assert(gbinder_buffer_io(buf) == gbinder_driver_io(driver));
+    g_assert(gbinder_buffer_memory(buf));
+    g_assert(gbinder_buffer_data(buf, NULL) == ptr);
+    g_assert(gbinder_buffer_data(buf, &size) == ptr);
+    g_assert(size == sizeof(data));
+
     gbinder_buffer_free(buf);
     gbinder_buffer_free(parent);
     gbinder_driver_unref(driver);

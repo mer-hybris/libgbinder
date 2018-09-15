@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,9 +31,12 @@
  */
 
 #include "test_common.h"
+#include "test_binder.h"
 
 #include "gbinder_local_request_p.h"
 #include "gbinder_output_data.h"
+#include "gbinder_buffer_p.h"
+#include "gbinder_driver.h"
 #include "gbinder_writer.h"
 #include "gbinder_io.h"
 
@@ -54,6 +57,17 @@ test_int_inc(
     (*((int*)data))++;
 }
 
+static
+GBinderBuffer*
+test_buffer_from_bytes(
+    GBinderDriver* driver,
+    const GByteArray* bytes)
+{
+    /* Prevent double free */
+    test_binder_set_destroy(gbinder_driver_fd(driver), bytes->data, NULL);
+    return gbinder_buffer_new(driver, bytes->data, bytes->len);
+}
+
 /*==========================================================================*
  * null
  *==========================================================================*/
@@ -68,6 +82,7 @@ test_null(
 
     g_assert(!gbinder_local_request_new(NULL, NULL));
     g_assert(!gbinder_local_request_ref(NULL));
+    g_assert(!gbinder_local_request_new_from_data(NULL, NULL));
     gbinder_local_request_unref(NULL);
     gbinder_local_request_init_writer(NULL, NULL);
     gbinder_local_request_init_writer(NULL, &writer);
@@ -437,6 +452,125 @@ test_remote_object(
 }
 
 /*==========================================================================*
+ * remote_request
+ *==========================================================================*/
+
+static
+void
+test_remote_request(
+    void)
+{
+    /* The size of the string gets aligned at 4-byte boundary */
+    static const char input[] = "test";
+    static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    const GBinderIo* io = gbinder_driver_io(driver);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GBinderLocalRequest* req2;
+    GBinderOutputData* data2;
+    const GByteArray* bytes;
+    const GByteArray* bytes2;
+    GBinderBuffer* buffer;
+    void* no_obj = NULL;
+
+    gbinder_local_request_append_string8(req, input);
+    bytes = gbinder_local_request_data(req)->bytes;
+
+    /* Copy flat structures (no binder objects) */
+    buffer = test_buffer_from_bytes(driver, bytes);
+    req2 = gbinder_local_request_new_from_data(buffer, NULL);
+    gbinder_buffer_free(buffer);
+
+    data2 = gbinder_local_request_data(req2);
+    bytes2 = data2->bytes;
+    g_assert(!gbinder_output_data_offsets(data2));
+    g_assert(!gbinder_output_data_buffers_size(data2));
+    g_assert(bytes2->len == sizeof(output));
+    g_assert(!memcmp(bytes2->data, output, bytes2->len));
+    gbinder_local_request_unref(req2);
+
+    /* Same thing but with non-NULL (albeit empty) array of objects */
+    buffer = test_buffer_from_bytes(driver, bytes);
+    req2 = gbinder_local_request_new_from_data(buffer, &no_obj);
+    gbinder_buffer_free(buffer);
+
+    data2 = gbinder_local_request_data(req2);
+    bytes2 = data2->bytes;
+    g_assert(!gbinder_output_data_offsets(data2));
+    g_assert(!gbinder_output_data_buffers_size(data2));
+    g_assert(bytes2->len == sizeof(output));
+    g_assert(!memcmp(bytes2->data, output, bytes2->len));
+    gbinder_local_request_unref(req2);
+
+    gbinder_local_request_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * remote_request_obj
+ *==========================================================================*/
+
+static
+void
+test_remote_request_obj_validate_data(
+    GBinderOutputData* data)
+{
+    const GByteArray* bytes = data->bytes;
+    GUtilIntArray* offsets = gbinder_output_data_offsets(data);
+
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert(offsets->count == 3);
+    g_assert(offsets->data[0] == 4);
+    g_assert(offsets->data[1] == 4 + BUFFER_OBJECT_SIZE_64);
+    g_assert(offsets->data[2] == 4 + 2*BUFFER_OBJECT_SIZE_64);
+    g_assert(bytes->len == 4 + 2*BUFFER_OBJECT_SIZE_64 + BINDER_OBJECT_SIZE_64);
+    /* HidlString + the contents (2 bytes) aligned at 8-byte boundary */
+    g_assert(gbinder_output_data_buffers_size(data) == (sizeof(HidlString)+8));
+}
+
+static
+void
+test_remote_request_obj(
+    void)
+{
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    const GBinderIo* io = gbinder_driver_io(driver);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GBinderLocalRequest* req2;
+    GBinderOutputData* data;
+    GUtilIntArray* offsets;
+    GBinderBuffer* buffer;
+    const GByteArray* bytes;
+    void** objects;
+    guint i;
+
+    gbinder_local_request_append_int32(req, 1);
+    gbinder_local_request_append_hidl_string(req, "2");
+    gbinder_local_request_append_local_object(req, NULL);
+
+    data = gbinder_local_request_data(req);
+    test_remote_request_obj_validate_data(data);
+    bytes = data->bytes;
+    offsets = gbinder_output_data_offsets(data);
+    objects = g_new0(void*, offsets->count + 1);
+    for (i = 0; i < offsets->count; i++) {
+        objects[i] = bytes->data + offsets->data[i];
+    }
+
+    buffer = test_buffer_from_bytes(driver, data->bytes);
+    req2 = gbinder_local_request_new_from_data(buffer, objects);
+    gbinder_buffer_free(buffer);
+    g_free(objects);
+
+    test_remote_request_obj_validate_data(gbinder_local_request_data(req2));
+
+    gbinder_local_request_unref(req);
+    gbinder_local_request_unref(req2);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -459,6 +593,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "hidl_string_vec", test_hidl_string_vec);
     g_test_add_func(TEST_PREFIX "local_object", test_local_object);
     g_test_add_func(TEST_PREFIX "remote_object", test_remote_object);
+    g_test_add_func(TEST_PREFIX "remote_request", test_remote_request);
+    g_test_add_func(TEST_PREFIX "remote_request_obj", test_remote_request_obj);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
