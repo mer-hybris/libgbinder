@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -36,12 +36,12 @@
 
 #include <gutil_macros.h>
 
-typedef struct gbinder_buffer_memory {
+struct gbinder_buffer_memory {
     gint refcount;
     void* buffer;
     gsize size;
     GBinderDriver* driver;
-} GBinderBufferMemory;
+};
 
 typedef struct gbinder_buffer_priv {
     GBinderBuffer pub;
@@ -81,7 +81,6 @@ gbinder_buffer_memory_free(
     g_slice_free(GBinderBufferMemory, self);
 }
 
-static
 GBinderBufferMemory*
 gbinder_buffer_memory_ref(
     GBinderBufferMemory* self)
@@ -93,7 +92,6 @@ gbinder_buffer_memory_ref(
     return self;
 }
 
-static
 void
 gbinder_buffer_memory_unref(
     GBinderBufferMemory* self)
@@ -155,8 +153,28 @@ gbinder_buffer_new_with_parent(
     gsize size)
 {
     return gbinder_buffer_alloc(parent ?
-        gbinder_buffer_memory_ref(gbinder_buffer_cast(parent)->memory) : NULL,
+        gbinder_buffer_memory_ref(gbinder_buffer_memory(parent)) : NULL,
         data, size);
+}
+
+gconstpointer
+gbinder_buffer_data(
+    GBinderBuffer* self,
+    gsize* size)
+{
+    GBinderBufferMemory* memory = gbinder_buffer_memory(self);
+
+    if (G_LIKELY(memory)) {
+        if (size) {
+            *size = memory->size;
+        }
+        return memory->buffer;
+    } else {
+        if (size) {
+            *size = 0;
+        }
+        return NULL;
+    }
 }
 
 GBinderDriver*
@@ -171,6 +189,22 @@ gbinder_buffer_driver(
         }
     }
     return NULL;
+}
+
+const GBinderIo*
+gbinder_buffer_io(
+    GBinderBuffer* buf)
+{
+    GBinderDriver* driver = gbinder_buffer_driver(buf);
+
+    return driver ? gbinder_driver_io(driver) : NULL;
+}
+
+GBinderBufferMemory*
+gbinder_buffer_memory(
+    GBinderBuffer* self)
+{
+    return G_LIKELY(self) ? gbinder_buffer_cast(self)->memory : NULL;
 }
 
 /*

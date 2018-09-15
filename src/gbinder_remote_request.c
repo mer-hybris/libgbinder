@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,7 @@
 #include "gbinder_remote_request_p.h"
 #include "gbinder_reader_p.h"
 #include "gbinder_rpc_protocol.h"
+#include "gbinder_local_request_p.h"
 #include "gbinder_object_registry.h"
 #include "gbinder_buffer.h"
 #include "gbinder_log.h"
@@ -66,6 +67,18 @@ gbinder_remote_request_new(
     self->protocol = protocol;
     data->reg = gbinder_object_registry_ref(reg);
     return self;
+}
+
+GBinderLocalRequest*
+gbinder_remote_request_copy_to_local(
+    GBinderRemoteRequest* self)
+{
+    if (G_LIKELY(self)) {
+        GBinderReaderData* d = &self->data;
+
+        return gbinder_local_request_new_from_data(d->buffer, d->objects);
+    }
+    return NULL;
 }
 
 static

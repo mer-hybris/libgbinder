@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -88,6 +88,21 @@ GBINDER_IO_FN(write_read)(
         GERR("binder_write_read: %s", strerror(errno));
     }
     return ret;
+}
+
+/* Returns size of the object's extra data */
+static
+gsize
+GBINDER_IO_FN(object_data_size)(
+    const void* obj)
+{
+    const struct binder_buffer_object* buf = obj;
+
+    if (buf && buf->hdr.type == BINDER_TYPE_PTR) {
+        return buf->length;
+    } else {
+        return 0;
+    }
 }
 
 /* Writes pointer to the buffer */
@@ -444,6 +459,8 @@ const GBinderIo GBINDER_IO_PREFIX = {
         .clear_death_notification_done = BR_CLEAR_DEATH_NOTIFICATION_DONE,
         .failed_reply = BR_FAILED_REPLY
     },
+
+    .object_data_size = GBINDER_IO_FN(object_data_size),
 
     /* Encoders */
     .encode_pointer = GBINDER_IO_FN(encode_pointer),

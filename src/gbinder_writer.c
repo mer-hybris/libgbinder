@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,6 +31,7 @@
  */
 
 #include "gbinder_writer_p.h"
+#include "gbinder_buffer_p.h"
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
@@ -50,6 +51,53 @@ GBINDER_INLINE_FUNC GBinderWriterPriv* gbinder_writer_cast(GBinderWriter* pub)
     { return (GBinderWriterPriv*)pub; }
 GBINDER_INLINE_FUNC GBinderWriterData* gbinder_writer_data(GBinderWriter* pub)
     { return G_LIKELY(pub) ? gbinder_writer_cast(pub)->data : NULL; }
+
+static
+void
+gbinder_writer_data_memory_cleanup(
+    gpointer memory)
+{
+    gbinder_buffer_memory_unref(memory);
+}
+
+void
+gbinder_writer_data_set_contents(
+    GBinderWriterData* data,
+    GBinderBuffer* buffer,
+    void** objects)
+{
+    gsize bufsize;
+    const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
+    const GBinderIo* io = gbinder_buffer_io(buffer);
+    GBinderBufferMemory* mem = gbinder_buffer_memory(buffer);
+
+    GASSERT(data->io == io);
+    g_byte_array_set_size(data->bytes, 0);
+    gutil_int_array_set_count(data->offsets, 0);
+    data->buffers_size = 0;
+
+    g_byte_array_append(data->bytes, bufdata, bufsize);
+    if (mem) {
+        data->cleanup = gbinder_cleanup_add(data->cleanup,
+            gbinder_writer_data_memory_cleanup,
+            gbinder_buffer_memory_ref(mem));
+    }
+    if (objects && *objects) {
+        if (!data->offsets) {
+            data->offsets = gutil_int_array_new();
+        }
+        while (*objects) {
+            const guint8* obj = *objects++;
+            gsize offset = obj - bufdata;
+            gsize objsize = io->object_data_size(obj);
+
+            GASSERT(offset > 0 && offset < bufsize);
+            gutil_int_array_append(data->offsets, (int)offset);
+            /* Size of each buffer has to be 8-byte aligned */
+            data->buffers_size += G_ALIGN8(objsize);
+        }
+    }
+}
 
 static
 void
