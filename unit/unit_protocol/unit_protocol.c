@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -74,20 +74,20 @@ static const TestHeaderData test_header_tests[] = {
 };
 
 /*==========================================================================*
- * default
+ * device
  *==========================================================================*/
 
 static
 void
-test_default(
+test_device(
     void)
 {
-    const GBinderRpcProtocol* p1 = gbinder_rpc_protocol_for_device(NULL);
-    const GBinderRpcProtocol* p2 = gbinder_rpc_protocol_for_device
-        (GBINDER_DEFAULT_BINDER);
-
-    g_assert(p1);
-    g_assert(p1 == p2);
+    g_assert(gbinder_rpc_protocol_for_device(NULL) ==
+        &gbinder_rpc_protocol_binder);
+    g_assert(gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER) ==
+        &gbinder_rpc_protocol_binder);
+    g_assert(gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_HWBINDER) ==
+        &gbinder_rpc_protocol_hwbinder);
 }
 
 /*==========================================================================*
@@ -140,7 +140,7 @@ test_read_header(
     gconstpointer test_data)
 {
     const TestHeaderData* test = test_data;
-    GBinderDriver* driver = gbinder_driver_new(test->dev);
+    GBinderDriver* driver = gbinder_driver_new(test->dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(test->dev), 0, 0);
 
@@ -162,7 +162,7 @@ int main(int argc, char* argv[])
     guint i;
 
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "default", test_default);
+    g_test_add_func(TEST_PREFIX "device", test_device);
     g_test_add_func(TEST_PREFIX "no_header", test_no_header);
 
     for (i = 0; i < G_N_ELEMENTS(test_header_tests); i++) {

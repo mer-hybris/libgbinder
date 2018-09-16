@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -981,7 +981,8 @@ gbinder_ipc_tx_proc(
 
 GBinderIpc*
 gbinder_ipc_new(
-    const char* dev)
+    const char* dev,
+    const GBinderRpcProtocol* protocol)
 {
     GBinderIpc* self = NULL;
 
@@ -994,7 +995,7 @@ gbinder_ipc_new(
     if (self) {
         gbinder_ipc_ref(self);
     } else {
-        GBinderDriver* driver = gbinder_driver_new(dev);
+        GBinderDriver* driver = gbinder_driver_new(dev, protocol);
 
         if (driver) {
             GBinderIpcPriv* priv;

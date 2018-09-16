@@ -46,7 +46,7 @@ void
 test_null(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(NULL, NULL, 0);
     GBinderBuffer* buf2;
     gsize size = 1;
@@ -86,7 +86,7 @@ test_parent(
     static const guint8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
     void* ptr = g_memdup(data, sizeof(data));
     gsize size = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* parent = gbinder_buffer_new(driver, ptr, sizeof(data));
     GBinderBuffer* buf = gbinder_buffer_new_with_parent
         (parent, ptr, sizeof(data));

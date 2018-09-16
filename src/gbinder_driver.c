@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -672,7 +672,8 @@ gbinder_driver_txstatus(
 
 GBinderDriver*
 gbinder_driver_new(
-    const char* dev)
+    const char* dev,
+    const GBinderRpcProtocol* protocol)
 {
     const int fd = gbinder_system_open(dev, O_RDWR | O_CLOEXEC);
     if (fd >= 0) {
@@ -711,8 +712,10 @@ gbinder_driver_new(
                         GERR("%s failed to set max threads (%u): %s", dev,
                             max_threads, strerror(errno));
                     }
-                    /* Choose the protocol based on the device name */
-                    self->protocol = gbinder_rpc_protocol_for_device(dev);
+                    /* Choose the protocol based on the device name
+                     * if none is explicitely specified */
+                    self->protocol = protocol ? protocol :
+                        gbinder_rpc_protocol_for_device(dev);
                     return self;
                 } else {
                     GERR("%s failed to mmap: %s", dev, strerror(errno));

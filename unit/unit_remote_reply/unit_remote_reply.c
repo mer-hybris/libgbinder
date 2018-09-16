@@ -82,7 +82,7 @@ void
 test_empty(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data
@@ -128,7 +128,7 @@ test_int32(
     };
     guint32 out1 = 0;
     gint32 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -159,7 +159,7 @@ test_int64(
     };
     guint64 out1 = 0;
     gint64 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -188,7 +188,7 @@ test_string8(
     static const guint8 reply_data [] = {
         'b', 'a', 'r', 0x00
     };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -216,7 +216,7 @@ test_string16(
         TEST_INT16_BYTES('b'), TEST_INT16_BYTES('a'),
         TEST_INT16_BYTES('r'), 0x00, 0x00
     };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
     char* str;
 
@@ -252,7 +252,7 @@ test_to_local(
         TEST_INT64_BYTES(0)                     /* cookie */
     };
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteReply* req = gbinder_remote_reply_new(NULL);
     GBinderLocalReply* req2;
     GBinderOutputData* data;

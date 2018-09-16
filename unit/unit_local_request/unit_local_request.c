@@ -463,7 +463,7 @@ test_remote_request(
     /* The size of the string gets aligned at 4-byte boundary */
     static const char input[] = "test";
     static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     const GBinderIo* io = gbinder_driver_io(driver);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderLocalRequest* req2;
@@ -534,7 +534,7 @@ void
 test_remote_request_obj(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     const GBinderIo* io = gbinder_driver_io(driver);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderLocalRequest* req2;

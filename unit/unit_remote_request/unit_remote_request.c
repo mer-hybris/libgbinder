@@ -125,7 +125,7 @@ test_int32(
     guint32 out1 = 0;
     gint32 out2 = 0;
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
 
@@ -159,7 +159,7 @@ test_int64(
     guint64 out1 = 0;
     gint64 out2 = 0;
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
 
@@ -191,7 +191,7 @@ test_string8(
         'b', 'a', 'r', 0x00
     };
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
 
@@ -222,7 +222,7 @@ test_string16(
         TEST_INT16_BYTES('r'), 0x00, 0x00
     };
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
     char* str;
@@ -260,7 +260,7 @@ test_to_local(
         TEST_INT64_BYTES(0)                     /* cookie */
     };
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderDriver* driver = gbinder_driver_new(dev);
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
     GBinderLocalRequest* req2;

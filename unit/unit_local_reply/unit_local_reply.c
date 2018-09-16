@@ -399,7 +399,7 @@ test_local_object(
     GBinderLocalReply* reply;
     GBinderOutputData* data;
     GUtilIntArray* offsets;
-    GBinderIpc* ipc = gbinder_ipc_new(NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(NULL, NULL);
     GBinderLocalObject* obj =
         gbinder_ipc_new_local_object(ipc, "foo", NULL, NULL);
 
@@ -465,7 +465,7 @@ test_remote_reply(
     /* The size of the string gets aligned at 4-byte boundary */
     static const char input[] = "test";
     static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     const GBinderIo* io = gbinder_driver_io(driver);
     GBinderLocalReply* req = gbinder_local_reply_new(io);
     GBinderLocalReply* req2;
