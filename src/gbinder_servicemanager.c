@@ -475,7 +475,7 @@ gbinder_servicemanager_dispose(
      * gbinder_servicemanager_finalize() will not be called
      * this time around.
      */
-    if (klass->table && object->ref_count == 0) {
+    if (klass->table && g_atomic_int_get(&object->ref_count) <= 1) {
         g_hash_table_remove(klass->table, self->dev);
         if (g_hash_table_size(klass->table) == 0) {
             g_hash_table_unref(klass->table);
