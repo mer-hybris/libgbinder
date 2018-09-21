@@ -1,5 +1,5 @@
 Name: libgbinder
-Version: 1.0.5
+Version: 1.0.6
 Release: 0
 Summary: Binder client library
 Group: Development/Libraries

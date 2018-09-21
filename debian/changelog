@@ -1,3 +1,9 @@
+libgbinder (1.0.6) unstable; urgency=low
+
+  * Fixed GBinderServiceManager lifecycle management
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 21 Sep 2018 21:15:28 +0300
+
 libgbinder (1.0.5) unstable; urgency=low
 
   * Added double and float support
