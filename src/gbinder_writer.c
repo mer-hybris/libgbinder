@@ -491,6 +491,54 @@ gbinder_writer_append_hidl_string(
 }
 
 void
+gbinder_writer_data_append_hidl_vec(
+    GBinderWriterData* data,
+    const void* base,
+    guint count,
+    guint elemsize)
+{
+    GBinderParent vec_parent;
+    HidlVec* vec = g_new0(HidlVec, 1);
+    const gsize total = count * elemsize;
+    void* buf = g_memdup(base, total);
+
+    /* Prepare parent descriptor for the string data */
+    vec_parent.index = gbinder_writer_data_prepare(data);
+    vec_parent.offset = HIDL_VEC_BUFFER_OFFSET;
+
+    /* Fill in the vector descriptor */
+    if (buf) {
+        vec->data.ptr = buf;
+        vec->count = count;
+        data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, buf);
+    }
+    vec->owns_buffer = TRUE;
+    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec);
+
+    /* Write the buffer object pointing to the vector descriptor */
+    gbinder_writer_data_write_buffer_object(data, vec, sizeof(*vec), NULL);
+
+    /* Not sure what's the right way to deal with NULL vectors... */
+    if (buf) {
+        gbinder_writer_data_write_buffer_object(data, buf, total, &vec_parent);
+    }
+}
+
+void
+gbinder_writer_append_hidl_vec(
+    GBinderWriter* self,
+    const void* base,
+    guint count,
+    guint elemsize)
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_hidl_vec(data, base, count, elemsize);
+    }
+}
+
+void
 gbinder_writer_data_append_hidl_string(
     GBinderWriterData* data,
     const char* str)
