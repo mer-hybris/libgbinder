@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,10 +31,13 @@
  */
 
 #include "test_common.h"
+#include "test_binder.h"
 
 #include "gbinder_local_object.h"
 #include "gbinder_local_reply_p.h"
 #include "gbinder_output_data.h"
+#include "gbinder_buffer_p.h"
+#include "gbinder_driver.h"
 #include "gbinder_writer.h"
 #include "gbinder_io.h"
 #include "gbinder_ipc.h"
@@ -56,6 +59,17 @@ test_int_inc(
     (*((int*)data))++;
 }
 
+static
+GBinderBuffer*
+test_buffer_from_bytes(
+    GBinderDriver* driver,
+    const GByteArray* bytes)
+{
+    /* Prevent double free */
+    test_binder_set_destroy(gbinder_driver_fd(driver), bytes->data, NULL);
+    return gbinder_buffer_new(driver, bytes->data, bytes->len);
+}
+
 /*==========================================================================*
  * null
  *==========================================================================*/
@@ -74,6 +88,7 @@ test_null(
     gbinder_local_reply_init_writer(NULL, NULL);
     gbinder_local_reply_init_writer(NULL, &writer);
     g_assert(!gbinder_local_reply_data(NULL));
+    g_assert(!gbinder_local_reply_new_from_data(NULL, NULL));
 
     gbinder_local_reply_cleanup(NULL, NULL, &count);
     gbinder_local_reply_cleanup(NULL, test_int_inc, &count);
@@ -384,7 +399,7 @@ test_local_object(
     GBinderLocalReply* reply;
     GBinderOutputData* data;
     GUtilIntArray* offsets;
-    GBinderIpc* ipc = gbinder_ipc_new(NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(NULL, NULL);
     GBinderLocalObject* obj =
         gbinder_ipc_new_local_object(ipc, "foo", NULL, NULL);
 
@@ -439,6 +454,47 @@ test_remote_object(
 }
 
 /*==========================================================================*
+ * remote_reply
+ *==========================================================================*/
+
+static
+void
+test_remote_reply(
+    void)
+{
+    /* The size of the string gets aligned at 4-byte boundary */
+    static const char input[] = "test";
+    static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
+    const GBinderIo* io = gbinder_driver_io(driver);
+    GBinderLocalReply* req = gbinder_local_reply_new(io);
+    GBinderLocalReply* req2;
+    GBinderOutputData* data2;
+    const GByteArray* bytes;
+    const GByteArray* bytes2;
+    GBinderBuffer* buffer;
+
+    gbinder_local_reply_append_string8(req, input);
+    bytes = gbinder_local_reply_data(req)->bytes;
+
+    /* Copy flat structures (no binder objects) */
+    buffer = test_buffer_from_bytes(driver, bytes);
+    req2 = gbinder_local_reply_new_from_data(buffer, NULL);
+    gbinder_buffer_free(buffer);
+
+    data2 = gbinder_local_reply_data(req2);
+    bytes2 = data2->bytes;
+    g_assert(!gbinder_output_data_offsets(data2));
+    g_assert(!gbinder_output_data_buffers_size(data2));
+    g_assert(bytes2->len == sizeof(output));
+    g_assert(!memcmp(bytes2->data, output, bytes2->len));
+
+    gbinder_local_reply_unref(req2);
+    gbinder_local_reply_unref(req);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -460,6 +516,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "hidl_string_vec", test_hidl_string_vec);
     g_test_add_func(TEST_PREFIX "local_object", test_local_object);
     g_test_add_func(TEST_PREFIX "remote_object", test_remote_object);
+    g_test_add_func(TEST_PREFIX "remote_reply", test_remote_reply);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -35,9 +35,16 @@
 #include "gbinder_buffer_p.h"
 #include "gbinder_driver.h"
 #include "gbinder_reader.h"
+#include "gbinder_local_reply_p.h"
 #include "gbinder_remote_reply_p.h"
+#include "gbinder_output_data.h"
+
+#include <gutil_intarray.h>
 
 static TestOpt test_opt;
+
+#define BINDER_TYPE_BINDER GBINDER_FOURCC('s', 'b', '*', 0x85)
+#define BINDER_OBJECT_SIZE_64 (GBINDER_MAX_BINDER_OBJECT_SIZE)
 
 /*==========================================================================*
  * null
@@ -56,6 +63,7 @@ test_null(
     gbinder_remote_reply_init_reader(NULL, &reader);
     g_assert(gbinder_reader_at_end(&reader));
     g_assert(gbinder_remote_reply_is_empty(NULL));
+    g_assert(!gbinder_remote_reply_copy_to_local(NULL));
     g_assert(!gbinder_remote_reply_read_int32(NULL, NULL));
     g_assert(!gbinder_remote_reply_read_uint32(NULL, NULL));
     g_assert(!gbinder_remote_reply_read_int64(NULL, NULL));
@@ -74,7 +82,7 @@ void
 test_empty(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data
@@ -120,7 +128,7 @@ test_int32(
     };
     guint32 out1 = 0;
     gint32 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -151,7 +159,7 @@ test_int64(
     };
     guint64 out1 = 0;
     gint64 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -180,7 +188,7 @@ test_string8(
     static const guint8 reply_data [] = {
         'b', 'a', 'r', 0x00
     };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
@@ -208,7 +216,7 @@ test_string16(
         TEST_INT16_BYTES('b'), TEST_INT16_BYTES('a'),
         TEST_INT16_BYTES('r'), 0x00, 0x00
     };
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
     char* str;
 
@@ -222,6 +230,55 @@ test_string16(
     g_free(str);
 
     gbinder_remote_reply_unref(reply);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * to_local
+ *==========================================================================*/
+
+static
+void
+test_to_local(
+    void)
+{
+    static const guint8 reply_data [] = {
+        /* 32-bit integer */
+        TEST_INT32_BYTES(42),
+        /* 64-bit NULL flat_binder_object */
+        TEST_INT32_BYTES(BINDER_TYPE_BINDER),   /* hdr.type */
+        TEST_INT32_BYTES(0x17f),                /* flags */
+        TEST_INT64_BYTES(0),                    /* handle */
+        TEST_INT64_BYTES(0)                     /* cookie */
+    };
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderDriver* driver = gbinder_driver_new(dev, NULL);
+    GBinderRemoteReply* req = gbinder_remote_reply_new(NULL);
+    GBinderLocalReply* req2;
+    GBinderOutputData* data;
+    const GByteArray* bytes;
+    GUtilIntArray* offsets;
+    guint8* req_data = g_memdup(reply_data, sizeof(reply_data));
+    void** objects = g_new0(void*, 2);
+
+    /* Skip the 32-bit integer */
+    objects[0] = req_data + 4;
+    gbinder_remote_reply_set_data(req, gbinder_buffer_new(driver, req_data,
+        sizeof(reply_data)), objects);
+
+    /* Convert to GBinderLocalReply */
+    req2 = gbinder_remote_reply_copy_to_local(req);
+    data = gbinder_local_reply_data(req2);
+    offsets = gbinder_output_data_offsets(data);
+    bytes = data->bytes;
+    g_assert(offsets);
+    g_assert(offsets->count == 1);
+    g_assert(offsets->data[0] == 4);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(bytes->len == sizeof(reply_data));
+
+    gbinder_remote_reply_unref(req);
+    gbinder_local_reply_unref(req2);
     gbinder_driver_unref(driver);
 }
 
@@ -241,6 +298,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "int64", test_int64);
     g_test_add_func(TEST_PREFIX "string8", test_string8);
     g_test_add_func(TEST_PREFIX "string16", test_string16);
+    g_test_add_func(TEST_PREFIX "to_local", test_to_local);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

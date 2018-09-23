@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -56,8 +56,8 @@ test_basic(
     GBinderDriver* driver;
     const char* dev = GBINDER_DEFAULT_BINDER;
 
-    g_assert(!gbinder_driver_new(""));
-    driver = gbinder_driver_new(dev);
+    g_assert(!gbinder_driver_new("", NULL));
+    driver = gbinder_driver_new(dev, NULL);
     g_assert(driver);
     g_assert(!g_strcmp0(dev, gbinder_driver_dev(driver)));
     g_assert(gbinder_driver_ref(driver) == driver);
@@ -86,7 +86,7 @@ void
 test_noop(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     const int fd = gbinder_driver_fd(driver);
 
     g_assert(driver);
@@ -116,7 +116,7 @@ test_local_request(
         0x00, 0x00, 0x00, 0x00
     };
 
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderLocalRequest* req = gbinder_driver_local_request_new(driver, iface);
     GBinderOutputData* data = gbinder_local_request_data(req);
 

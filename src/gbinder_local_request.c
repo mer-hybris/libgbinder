@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,8 @@
 #include "gbinder_local_request_p.h"
 #include "gbinder_output_data.h"
 #include "gbinder_writer_p.h"
+#include "gbinder_buffer_p.h"
+#include "gbinder_io.h"
 #include "gbinder_log.h"
 
 #include <gutil_intarray.h>
@@ -42,6 +44,7 @@ struct gbinder_local_request {
     gint refcount;
     GBinderWriterData data;
     GBinderOutputData out;
+    GBinderBufferMemory* memory;
 };
 
 GBINDER_INLINE_FUNC
@@ -101,6 +104,20 @@ gbinder_local_request_new(
     return NULL;
 }
 
+GBinderLocalRequest*
+gbinder_local_request_new_from_data(
+    GBinderBuffer* buffer,
+    void** objects)
+{
+    GBinderLocalRequest* self = gbinder_local_request_new
+        (gbinder_buffer_io(buffer), NULL);
+
+    if (self) {
+        gbinder_writer_data_set_contents(&self->data, buffer, objects);
+    }
+    return self;
+}
+
 static
 void
 gbinder_local_request_free(
@@ -111,6 +128,7 @@ gbinder_local_request_free(
     g_byte_array_free(data->bytes, TRUE);
     gutil_int_array_free(data->offsets, TRUE);
     gbinder_cleanup_free(data->cleanup);
+    gbinder_buffer_memory_unref(self->memory);
     g_slice_free(GBinderLocalRequest, self);
 }
 

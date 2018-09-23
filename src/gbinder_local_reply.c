@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,7 @@
 #include "gbinder_local_reply_p.h"
 #include "gbinder_output_data.h"
 #include "gbinder_writer_p.h"
+#include "gbinder_buffer_p.h"
 #include "gbinder_log.h"
 
 #include <gutil_intarray.h>
@@ -90,6 +91,20 @@ gbinder_local_reply_new(
         return self;
     }
     return NULL;
+}
+
+GBinderLocalReply*
+gbinder_local_reply_new_from_data(
+    GBinderBuffer* buffer,
+    void** objects)
+{
+    const GBinderIo* io = gbinder_buffer_io(buffer);
+    GBinderLocalReply* self = gbinder_local_reply_new(io);
+
+    if (self) {
+        gbinder_writer_data_set_contents(&self->data, buffer, objects);
+    }
+    return self;
 }
 
 static

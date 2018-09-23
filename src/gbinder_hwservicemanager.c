@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,6 +31,7 @@
  */
 
 #include "gbinder_servicemanager_p.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_log.h"
 
 #include <gbinder_client.h>
@@ -184,6 +185,7 @@ gbinder_hwservicemanager_class_init(
     klass->handle = HWSERVICEMANAGER_HANDLE;
     klass->iface = HWSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
+    klass->rpc_protocol = &gbinder_rpc_protocol_hwbinder;
 
     klass->list = gbinder_hwservicemanager_list;
     klass->get_service = gbinder_hwservicemanager_get_service;

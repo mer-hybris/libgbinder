@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -61,6 +61,11 @@ gbinder_remote_request_sender_pid(
 uid_t
 gbinder_remote_request_sender_euid(
     GBinderRemoteRequest* req); /* since 1.0.2 */
+
+GBinderLocalRequest*
+gbinder_remote_request_copy_to_local(
+    GBinderRemoteRequest* req) /* since 1.0.6 */
+    G_GNUC_WARN_UNUSED_RESULT;
 
 /* Convenience function to decode requests with just one data item */
 

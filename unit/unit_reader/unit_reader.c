@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -97,7 +97,7 @@ test_byte(
 {
     const guint8 in = 42;
     guint8 out = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -131,7 +131,7 @@ test_bool(
     const guint8 in_true[4] = { 0x01, 0xff, 0xff, 0xff };
     const guint8 in_false[4] = { 0x00, 0xff, 0xff, 0xff };
     gboolean out = FALSE;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -180,7 +180,7 @@ test_int32(
     const guint32 in = 42;
     guint32 out1 = 0;
     gint32 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -219,7 +219,7 @@ test_int64(
     const guint64 in = 42;
     guint64 out1 = 0;
     gint64 out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -258,7 +258,7 @@ test_float(
     const gfloat in = 42;
     gfloat out1 = 0;
     gfloat out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -297,7 +297,7 @@ test_double(
     const gdouble in = 42;
     gdouble out1 = 0;
     gdouble out2 = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
 
@@ -361,7 +361,7 @@ test_string8(
     gconstpointer test_data)
 {
     const TestStringData* test = test_data;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
     const char* str;
@@ -425,7 +425,7 @@ void
 test_string16_null(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
     char dummy;
@@ -464,7 +464,7 @@ test_string16(
     gconstpointer test_data)
 {
     const TestStringData* test = test_data;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER);
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
     const gboolean valid = (test->out != NULL);
@@ -547,7 +547,7 @@ test_hidl_string_err(
     gconstpointer test_data)
 {
     const TestHidlStringErr* test = test_data;
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(test->in, test->in_size), test->in_size);
     GBinderReaderData data;
@@ -589,7 +589,7 @@ test_object(
         TEST_INT32_BYTES(BINDER_TYPE_HANDLE), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(1 /* handle*/), TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input));
     GBinderRemoteObject* obj = NULL;
@@ -647,7 +647,7 @@ test_object_invalid(
         TEST_INT32_BYTES(42 /* invalid type */), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(1 /* handle*/), TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input));
     GBinderRemoteObject* obj = NULL;
@@ -681,7 +681,7 @@ test_vec(
     void)
 {
     /* Using 64-bit I/O */
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderReaderData data;
     GBinderReader reader;
     BinderObject64 obj;
