@@ -1,3 +1,11 @@
+libgbinder (1.0.7) unstable; urgency=low
+
+  * Added gbinder_remote_request_copy_to_local()
+  * Added gbinder_remote_reply_copy_to_local()
+  * Make sure RPC protocol matches servicemanager type
+
+ -- Slava Monich <slava.monich@jolla.com>  Sun, 23 Sep 2018 22:47:16 +0300
+
 libgbinder (1.0.6) unstable; urgency=low
 
   * Fixed GBinderServiceManager lifecycle management
