@@ -1,3 +1,10 @@
+libgbinder (1.0.8) unstable; urgency=low
+
+  * Added gbinder_writer_append_hidl_vec()
+  * Added Added gbinder_reader_read_hidl_vec()
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 25 Sep 2018 01:08:54 +0300
+
 libgbinder (1.0.7) unstable; urgency=low
 
   * Added gbinder_remote_request_copy_to_local()
