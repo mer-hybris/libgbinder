@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -303,6 +303,46 @@ gbinder_reader_skip_buffer(
     GBinderReader* reader)
 {
     return gbinder_reader_read_buffer_impl(reader, NULL);
+}
+
+/* Doesn't copy the data */
+const void*
+gbinder_reader_read_hidl_vec(
+    GBinderReader* reader,
+    gsize* count,
+    gsize* elemsize)
+{
+    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
+    gsize out_count = 0, out_elemsize = 0;
+    const void* out = NULL;
+
+    if (buf && buf->size == sizeof(HidlVec)) {
+        const HidlVec* vec = buf->data;
+        const void* next = vec->data.ptr;
+
+        if (next) {
+            GBinderBuffer* vbuf = gbinder_reader_read_buffer(reader);
+
+            if (vbuf && vbuf->data == next && ((!vec->count && !vbuf->size) ||
+                (vec->count && vbuf->size && !(vbuf->size % vec->count)))) {
+                out_elemsize = vec->count ? (vbuf->size / vec->count) : 0;
+                out_count = vec->count;
+                out = vbuf->data;
+            }
+            gbinder_buffer_free(vbuf);
+        } else if (!vec->count) {
+            /* Any non-NULL pointer just to indicate success */
+            out = vec;
+        }
+    }
+    gbinder_buffer_free(buf);
+    if (elemsize) {
+        *elemsize = out_elemsize;
+    }
+    if (count) {
+        *count = out_count;
+    }
+    return out;
 }
 
 char*

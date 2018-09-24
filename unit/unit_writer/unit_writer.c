@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -78,6 +78,7 @@ test_null(
     gbinder_writer_append_bool(&writer, FALSE);
     gbinder_writer_append_bytes(NULL, NULL, 0);
     gbinder_writer_append_bytes(&writer, NULL, 0);
+    gbinder_writer_append_hidl_vec(NULL, NULL, 0, 0);
     gbinder_writer_append_hidl_string(NULL, NULL);
     gbinder_writer_append_hidl_string(&writer, NULL);
     gbinder_writer_append_hidl_string_vec(NULL, NULL, 0);
@@ -336,6 +337,67 @@ test_string16(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == test->output_len);
     g_assert(!memcmp(data->bytes->data, test->output, test->output_len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * hidl_vec
+ *==========================================================================*/
+
+typedef struct test_hidl_vec_data {
+    const char* name;
+    const GBinderIo* io;
+    const void* data;
+    const gsize count;
+    const gsize elemsize;
+    const guint* offsets;
+    guint offsets_count;
+    guint buffers_size;
+} TestHidlVecData;
+
+static guint test_hidl_vec_offsets_0[] =
+    { 0 };
+static guint test_hidl_vec_offsets_32[] =
+    { 0, BUFFER_OBJECT_SIZE_32 };
+static guint test_hidl_vec_offsets_64[] =
+    { 0, BUFFER_OBJECT_SIZE_64 };
+
+static const TestHidlVecData test_hidl_vec_tests[] = {
+    { "32/null", &gbinder_io_32, NULL, 0, 0,
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(HidlVec) },
+    { "32/2x1", &gbinder_io_32, "xy", 2, 1,
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32),
+      sizeof(HidlVec) + 8 /* vec data aligned at 8 bytes boundary */ },
+    { "64/null", &gbinder_io_64, NULL, 0, 0,
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(HidlVec) },
+    { "64/2x2", &gbinder_io_64, "xxyy", 2, 2,
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64),
+      sizeof(HidlVec) + 8 /* vec data aligned at 8 bytes boundary */ }
+};
+
+static
+void
+test_hidl_vec(
+    gconstpointer test_data)
+{
+    const TestHidlVecData* test = test_data;
+    GBinderLocalRequest* req = gbinder_local_request_new(test->io, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    GUtilIntArray* offsets;
+    guint i;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_hidl_vec(&writer, test->data,
+        test->count, test->elemsize);
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert(offsets->count == test->offsets_count);
+    for (i = 0; i < offsets->count; i++) {
+        g_assert(offsets->data[i] == test->offsets[i]);
+    }
+    g_assert(gbinder_output_data_buffers_size(data) == test->buffers_size);
     gbinder_local_request_unref(req);
 }
 
@@ -646,6 +708,14 @@ int main(int argc, char* argv[])
         char* path = g_strconcat(TEST_PREFIX "string16/", test->name, NULL);
 
         g_test_add_data_func(path, test, test_string16);
+        g_free(path);
+    }
+
+    for (i = 0; i < G_N_ELEMENTS(test_hidl_vec_tests); i++) {
+        const TestHidlVecData* test = test_hidl_vec_tests + i;
+        char* path = g_strconcat(TEST_PREFIX "hidl_vec/", test->name, NULL);
+
+        g_test_add_data_func(path, test, test_hidl_vec);
         g_free(path);
     }
 

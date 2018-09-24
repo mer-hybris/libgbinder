@@ -111,6 +111,13 @@ gbinder_writer_data_append_buffer_object(
     const GBinderParent* parent);
 
 void
+gbinder_writer_data_append_hidl_vec(
+    GBinderWriterData* data,
+    const void* base,
+    guint count,
+    guint elemsize);
+
+void
 gbinder_writer_data_append_hidl_string(
     GBinderWriterData* data,
     const char* str);
