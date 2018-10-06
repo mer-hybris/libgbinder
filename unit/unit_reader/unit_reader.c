@@ -86,8 +86,11 @@ test_empty(
     g_assert(!gbinder_reader_read_object(&reader));
     g_assert(!gbinder_reader_read_nullable_object(&reader, NULL));
     g_assert(!gbinder_reader_read_buffer(&reader));
+    g_assert(!gbinder_reader_read_hidl_struct1(&reader, 1));
     g_assert(!gbinder_reader_read_hidl_vec(&reader, NULL, NULL));
     g_assert(!gbinder_reader_read_hidl_vec(&reader, &count, &elemsize));
+    g_assert(!gbinder_reader_read_hidl_vec1(&reader, NULL, 1));
+    g_assert(!gbinder_reader_read_hidl_vec1(&reader, &count, 1));
     g_assert(!count);
     g_assert(!elemsize);
     g_assert(!gbinder_reader_read_hidl_string(&reader));
@@ -516,6 +519,71 @@ test_string16(
 }
 
 /*==========================================================================*
+ * hidl_struct
+ *==========================================================================*/
+typedef struct test_hidl_struct {
+    const char* name;
+    const void* in;
+    guint in_size;
+    guint struct_size;
+    const void* data;
+} TestHidlStruct;
+
+typedef struct test_hidl_struct_type {
+    guint32 x;
+} TestHidlStructType;
+
+static const TestHidlStructType test_hidl_struct_data = { 0 };
+static const BinderObject64 test_hidl_struct_ok_buf [] = {
+    {
+        BINDER_TYPE_PTR, 0,
+        { &test_hidl_struct_data },
+        sizeof(test_hidl_struct_data), 0, 0
+    }
+};
+static const BinderObject64 test_hidl_struct_big_buf [] = {
+    {
+        BINDER_TYPE_PTR, 0,
+        { &test_hidl_struct_data },
+        2 * sizeof(test_hidl_struct_data), 0, 0
+    }
+};
+
+static const TestHidlStruct test_hidl_struct_tests[] = {
+    { "ok", TEST_ARRAY_AND_SIZE(test_hidl_struct_ok_buf),
+      sizeof(TestHidlStructType), &test_hidl_struct_data },
+    { "badsize",  TEST_ARRAY_AND_SIZE(test_hidl_struct_big_buf),
+      sizeof(TestHidlStructType), NULL }
+};
+
+static
+void
+test_hidl_struct(
+    gconstpointer test_data)
+{
+    const TestHidlStruct* test = test_data;
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(test->in, test->in_size), test->in_size);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new0(void*, 2);
+    data.objects[0] = buf->data;
+
+    gbinder_reader_init(&reader, &data, 0, test->in_size);
+    g_assert(gbinder_reader_read_hidl_struct1(&reader, test->struct_size) ==
+        test->data);
+
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
  * hidl_vec
  *==========================================================================*/
 
@@ -543,9 +611,10 @@ static const BinderObject64 test_hidl_vec_2bytes_buf [] = {
         { &test_hidl_vec_2bytes },
         sizeof(HidlVec), 0, 0
     },{
-        BINDER_TYPE_PTR, 0,
+        BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_2bytes_data },
-        sizeof(test_hidl_vec_2bytes_data), 0, 0
+        sizeof(test_hidl_vec_2bytes_data), 0,
+        HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -560,7 +629,7 @@ static const BinderObject64 test_hidl_vec_empty_buf [] = {
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_2bytes_data },
-        0, 0, 0
+        0, 0, HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -607,7 +676,8 @@ static const BinderObject64 test_hidl_vec_badsize_buf [] = {
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
-        sizeof(test_hidl_vec_badsize_data), 0, 0
+        sizeof(test_hidl_vec_badsize_data), 0,
+        HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -625,7 +695,8 @@ static const BinderObject64 test_hidl_vec_badbuf_buf [] = {
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
-        sizeof(test_hidl_vec_badsize_data), 0, 0
+        sizeof(test_hidl_vec_badsize_data), 0,
+        HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -640,8 +711,8 @@ static const BinderObject64 test_hidl_vec_badcount1_buf [] = {
         sizeof(HidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
-        { test_hidl_vec_badsize_data },
-        0, 0, 0
+        { test_hidl_vec_badsize_data }, 0, 0,
+        HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -657,7 +728,8 @@ static const BinderObject64 test_hidl_vec_badcount2_buf [] = {
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
-        sizeof(test_hidl_vec_badsize_data), 0, 0
+        sizeof(test_hidl_vec_badsize_data), 0,
+        HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -719,6 +791,28 @@ test_hidl_vec(
     g_assert(gbinder_reader_read_hidl_vec(&reader, &n, &elem) == test->data);
     g_assert(n == test->count);
     g_assert(elem == test->elemsize);
+
+    if (test->data) {
+        n = 42;
+        gbinder_reader_init(&reader, &data, 0, test->in_size);
+        g_assert(gbinder_reader_read_hidl_vec1(&reader, &n, test->elemsize) ==
+            test->data);
+        g_assert(n == test->count);
+
+        /* Test invalid expected size */
+        gbinder_reader_init(&reader, &data, 0, test->in_size);
+        if (test->count) {
+            g_assert(!gbinder_reader_read_hidl_vec1(&reader, NULL,
+                test->elemsize + 1));
+        } else {
+            /* If total size is zero, we can't really check the element size */
+            g_assert(gbinder_reader_read_hidl_vec1(&reader, NULL,
+                test->elemsize + 1) == test->data);
+        }
+    } else {
+        gbinder_reader_init(&reader, &data, 0, test->in_size);
+        g_assert(!gbinder_reader_read_hidl_vec1(&reader, &n, test->elemsize));
+    }
 
     g_free(data.objects);
     gbinder_buffer_free(buf);
@@ -978,6 +1072,15 @@ int main(int argc, char* argv[])
         char* path = g_strconcat(TEST_PREFIX "/string16/", test->name, NULL);
 
         g_test_add_data_func(path, test, test_string16);
+        g_free(path);
+    }
+
+    for (i = 0; i < G_N_ELEMENTS(test_hidl_struct_tests); i++) {
+        const TestHidlStruct* test = test_hidl_struct_tests + i;
+        char* path = g_strconcat(TEST_PREFIX "/hidl_struct/", test->name,
+            NULL);
+
+        g_test_add_data_func(path, test, test_hidl_struct);
         g_free(path);
     }
 
