@@ -271,6 +271,7 @@ gbinder_local_object_handle_release_proc(
     self->strong_refs--;
     g_signal_emit(self, gbinder_local_object_signals
         [SIGNAL_STRONG_REFS_CHANGED], 0);
+    gbinder_local_object_unref(self);
     return G_SOURCE_REMOVE;
 }
 
@@ -440,6 +441,7 @@ void
 gbinder_local_object_handle_acquire(
     GBinderLocalObject* self)
 {
+    gbinder_local_object_ref(self);
     gbinder_local_object_handle_later(self,
         gbinder_local_object_handle_acquire_proc);
 }
@@ -487,6 +489,7 @@ gbinder_local_object_finalize(
     GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(local);
     GBinderLocalObjectPriv* priv = self->priv;
 
+    GASSERT(!self->strong_refs);
     gbinder_ipc_unref(self->ipc);
     g_free(priv->iface);
     G_OBJECT_CLASS(gbinder_local_object_parent_class)->finalize(local);
