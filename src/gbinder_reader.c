@@ -305,6 +305,23 @@ gbinder_reader_skip_buffer(
     return gbinder_reader_read_buffer_impl(reader, NULL);
 }
 
+/* Helper for gbinder_reader_read_hidl_struct() macro */
+const void*
+gbinder_reader_read_hidl_struct1(
+    GBinderReader* reader,
+    gsize size) /* since 1.0.9 */
+{
+    const void* result = NULL;
+    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
+
+    /* Check the size */
+    if (buf && buf->size == size) {
+        result = buf->data;
+    }
+    gbinder_buffer_free(buf);
+    return result;
+}
+
 /* Doesn't copy the data */
 const void*
 gbinder_reader_read_hidl_vec(
@@ -343,6 +360,20 @@ gbinder_reader_read_hidl_vec(
         *count = out_count;
     }
     return out;
+}
+
+/* Helper for gbinder_reader_read_hidl_struct_vec() macro */
+const void*
+gbinder_reader_read_hidl_vec1(
+    GBinderReader* reader,
+    gsize* count,
+    guint expected_elem_size) /* since 1.0.9 */
+{
+    gsize actual;
+    const void* data = gbinder_reader_read_hidl_vec(reader, count, &actual);
+
+    /* Actual size will be zero for an empty array */
+    return (data && (actual == expected_elem_size || !actual)) ? data : NULL;
 }
 
 char*

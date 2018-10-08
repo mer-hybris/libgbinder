@@ -114,10 +114,29 @@ gbinder_reader_read_buffer(
     G_GNUC_WARN_UNUSED_RESULT;
 
 const void*
+gbinder_reader_read_hidl_struct1(
+    GBinderReader* reader,
+    gsize size); /* since 1.0.9 */
+
+#define gbinder_reader_read_hidl_struct(reader,type) \
+    ((const type*)gbinder_reader_read_hidl_struct1(reader, sizeof(type)))
+
+const void*
 gbinder_reader_read_hidl_vec(
     GBinderReader* reader,
     gsize* count,
     gsize* elemsize);
+
+const void*
+gbinder_reader_read_hidl_vec1(
+    GBinderReader* reader,
+    gsize* count,
+    guint expected_elemsize); /* since 1.0.9 */
+
+#define gbinder_reader_read_hidl_type_vec(reader,type,count) \
+    ((const type*)gbinder_reader_read_hidl_vec1(reader, count, sizeof(type)))
+#define gbinder_reader_read_hidl_byte_vec(reader,count) /* vec<uint8_t> */ \
+    gbinder_reader_read_hidl_type_vec(reader,guint8,count)
 
 char*
 gbinder_reader_read_hidl_string(
