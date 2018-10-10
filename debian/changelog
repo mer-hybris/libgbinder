@@ -1,3 +1,10 @@
+libgbinder (1.0.10) unstable; urgency=low
+
+  * Fixed dependencies for unit tests
+  * Plugged memory leak in unit_reader
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 10 Oct 2018 14:44:44 +0300
+
 libgbinder (1.0.9) unstable; urgency=low
 
   * Respect strong refs to GBinderLocalObject
