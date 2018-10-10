@@ -579,6 +579,7 @@ test_hidl_struct(
     g_assert(gbinder_reader_read_hidl_struct1(&reader, test->struct_size) ==
         test->data);
 
+    g_free(data.objects);
     gbinder_buffer_free(buf);
     gbinder_ipc_unref(ipc);
 }
