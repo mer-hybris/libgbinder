@@ -1,1 +1,7 @@
 GLib-style interface to binder (Android IPC mechanism)
+
+Provides:
+
+1. Integration with GLib event loop
+2. Detection of 32 vs 64 bit kernel at runtime
+3. Asynchronous transactions that don't block the event thread
