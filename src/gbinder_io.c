@@ -128,7 +128,7 @@ GBINDER_IO_FN(encode_local_object)(
     struct flat_binder_object* dest = out;
 
     memset(dest, 0, sizeof(*dest));
-    dest->hdr.type = BINDER_TYPE_BINDER;
+    dest->hdr.type = obj ? BINDER_TYPE_BINDER : BINDER_TYPE_WEAK_HANDLE;
     dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
     dest->binder = (uintptr_t)obj;
     return sizeof(*dest);
