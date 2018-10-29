@@ -91,6 +91,8 @@ test_null(
     gbinder_writer_append_local_object(&writer, NULL);
     gbinder_writer_append_remote_object(NULL, NULL);
     gbinder_writer_append_remote_object(&writer, NULL);
+    gbinder_writer_append_byte_array(NULL, NULL, 0);
+    gbinder_writer_append_byte_array(&writer, NULL, 0);
 
     g_assert(!gbinder_output_data_offsets(NULL));
     g_assert(!gbinder_output_data_buffers_size(NULL));
@@ -684,6 +686,58 @@ test_remote_object(
 }
 
 /*==========================================================================*
+ * byte_array
+ *==========================================================================*/
+
+static
+void
+test_byte_array(
+    void)
+{
+    GBinderLocalRequest* req;
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    const char in_data[] = "abcd1234";
+    gint32 in_len = sizeof(in_data) - 1;
+    gint32 null_len = -1;
+
+    /* test for NULL byte array with non-zero len */
+    req = gbinder_local_request_new(&gbinder_io_64, NULL);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_byte_array(&writer, NULL, 42);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(gint32));
+    g_assert(!memcmp(data->bytes->data, &null_len, data->bytes->len));
+    gbinder_local_request_unref(req);
+
+    /* test for valid array with zero len */
+    req = gbinder_local_request_new(&gbinder_io_64, NULL);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_byte_array(&writer, in_data, 0);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(gint32));
+    g_assert(!memcmp(data->bytes->data, &null_len, data->bytes->len));
+    gbinder_local_request_unref(req);
+
+    /* test for valid array with correct len */
+    req = gbinder_local_request_new(&gbinder_io_64, NULL);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_byte_array(&writer, in_data, in_len);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(in_len) + in_len);
+    g_assert(!memcmp(data->bytes->data, &in_len, sizeof(in_len)));
+    g_assert(!memcmp(data->bytes->data + sizeof(in_len), in_data, in_len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -741,6 +795,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "parent", test_parent);
     g_test_add_func(TEST_PREFIX "local_object", test_local_object);
     g_test_add_func(TEST_PREFIX "remote_object", test_remote_object);
+    g_test_add_func(TEST_PREFIX "byte_array", test_byte_array);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

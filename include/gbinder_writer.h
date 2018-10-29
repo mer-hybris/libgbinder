@@ -149,6 +149,12 @@ gbinder_writer_append_remote_object(
     GBinderWriter* writer,
     GBinderRemoteObject* obj);
 
+void
+gbinder_writer_append_byte_array(
+    GBinderWriter* self,
+    const void* byte_array,
+    gint32 len); /* since 1.0.12 */
+
 G_END_DECLS
 
 #endif /* GBINDER_WRITER_H */

@@ -70,6 +70,7 @@ test_empty(
 {
     GBinderReader reader;
     gsize count = 1, elemsize = 1;
+    gsize len;
 
     gbinder_reader_init(&reader, NULL, 0, 0);
     g_assert(gbinder_reader_at_end(&reader));
@@ -99,6 +100,7 @@ test_empty(
     g_assert(!gbinder_reader_read_string8(&reader));
     g_assert(!gbinder_reader_read_string16(&reader));
     g_assert(!gbinder_reader_skip_string16(&reader));
+    g_assert(!gbinder_reader_read_byte_array(&reader, &len));
 }
 
 /*==========================================================================*
@@ -1041,6 +1043,96 @@ test_vec(
 }
 
 /*==========================================================================*
+ * byte_array
+ *==========================================================================*/
+
+static
+void
+test_byte_array(
+    void)
+{
+    const char in_data[] = "1234abcd";
+    gint32 in_len = sizeof(in_data) - 1;
+
+    const void* out_data = NULL;
+    gsize out_len = 0;
+
+    void* tmp;
+    gsize tmp_len = sizeof(in_len) + in_len;
+
+    gint32 null_len = -1;
+
+    GBinderDriver* driver;
+    GBinderReader reader;
+    GBinderReaderData data;
+
+    /* test for failed read (wrong len part of byte array) */
+    g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
+    tmp = g_malloc0(1);
+
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, tmp, 1);
+    gbinder_reader_init(&reader, &data, 0, 1);
+
+    g_assert(!gbinder_reader_read_byte_array(&reader, &out_len));
+    g_assert(!gbinder_reader_at_end(&reader));
+    g_assert(out_len == 0);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+
+    /* test for failed read (wrong data part of byte array) */
+    g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
+    tmp = g_malloc0(in_len - 1);
+    memcpy(tmp, &in_len, sizeof(in_len));
+
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, tmp, in_len - 1);
+    gbinder_reader_init(&reader, &data, 0, in_len - 1);
+
+    g_assert(!gbinder_reader_read_byte_array(&reader, &out_len));
+    g_assert(!gbinder_reader_at_end(&reader));
+    g_assert(out_len == 0);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+
+    /* test for empty (len 0) byte array */
+    g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
+    tmp = g_malloc0(sizeof(null_len));
+    memcpy(tmp, &null_len, sizeof(null_len));
+
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, tmp, sizeof(null_len));
+    gbinder_reader_init(&reader, &data, 0, sizeof(null_len));
+
+    g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(out_len == 0);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+
+    /* test for data */
+    g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
+    tmp = g_malloc0(tmp_len);
+    memcpy(tmp, &in_len, sizeof(in_len));
+    memcpy(tmp + sizeof(in_len), in_data, in_len);
+
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len);
+    gbinder_reader_init(&reader, &data, 0, tmp_len);
+
+    g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert((gsize)in_len == out_len);
+    g_assert(memcmp(in_data, out_data, in_len) == 0);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1107,6 +1199,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "/object/object/invalid", test_object_invalid);
     g_test_add_func(TEST_PREFIX "/object/object/no_reg", test_object_no_reg);
     g_test_add_func(TEST_PREFIX "/vec", test_vec);
+    g_test_add_func(TEST_PREFIX "/byte_array", test_byte_array);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

@@ -555,6 +555,34 @@ gbinder_reader_skip_string16(
     return FALSE;
 }
 
+const void*
+gbinder_reader_read_byte_array(
+    GBinderReader* reader,
+    gsize* len) /* since 1.0.12 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const void* data = NULL;
+    const gint32* ptr;
+    *len = 0;
+
+    if (gbinder_reader_can_read(p, sizeof(*ptr))) {
+        ptr = (void*)p->ptr;
+
+        if (*ptr <= 0) {
+            p->ptr += sizeof(*ptr);
+            /* Any non-NULL pointer just to indicate success */
+            data = p->start;
+        } else if (gbinder_reader_can_read(p, sizeof(*ptr) + *ptr)) {
+            *len = (gsize)*ptr;
+            p->ptr += sizeof(*ptr);
+            data = p->ptr;
+            p->ptr += *len;
+        }
+    }
+
+    return data;
+}
+
 gsize
 gbinder_reader_bytes_read(
     GBinderReader* reader)

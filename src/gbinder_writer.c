@@ -698,6 +698,35 @@ gbinder_writer_append_remote_object(
 }
 
 void
+gbinder_writer_append_byte_array(
+    GBinderWriter* self,
+    const void* byte_array,
+    gint32 len) /* since 1.0.12 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    GASSERT(len >= 0);
+
+    if (G_LIKELY(data)) {
+        void* ptr;
+
+        if (!byte_array)
+            len = 0;
+
+        g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(len) + len);
+        ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(len) - len));
+
+        if (len > 0) {
+            *((gint32*)ptr) = len;
+            ptr += sizeof(len);
+            memcpy(ptr, byte_array, len);
+        } else {
+            *((gint32*)ptr) = -1;
+        }
+    }
+}
+
+void
 gbinder_writer_data_append_remote_object(
     GBinderWriterData* data,
     GBinderRemoteObject* obj)
