@@ -567,7 +567,6 @@ gbinder_reader_read_byte_array(
 
     if (gbinder_reader_can_read(p, sizeof(*ptr))) {
         ptr = (void*)p->ptr;
-
         if (*ptr <= 0) {
             p->ptr += sizeof(*ptr);
             /* Any non-NULL pointer just to indicate success */
@@ -579,7 +578,6 @@ gbinder_reader_read_byte_array(
             p->ptr += *len;
         }
     }
-
     return data;
 }
 

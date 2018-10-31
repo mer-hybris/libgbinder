@@ -119,16 +119,16 @@ gbinder_writer_data_write_buffer_object(
     gsize size,
     const GBinderParent* parent)
 {
-    GByteArray* dest = data->bytes;
-    const guint offset = dest->len;
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
     guint n;
 
     /* Preallocate enough space */
-    g_byte_array_set_size(dest, offset + GBINDER_MAX_BUFFER_OBJECT_SIZE);
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BUFFER_OBJECT_SIZE);
     /* Write the object */
-    n = data->io->encode_buffer_object(dest->data + offset, ptr, size, parent);
+    n = data->io->encode_buffer_object(buf->data + offset, ptr, size, parent);
     /* Fix the data size */
-    g_byte_array_set_size(dest, offset + n);
+    g_byte_array_set_size(buf, offset + n);
     /* Record the offset */
     gbinder_writer_data_record_offset(data, offset);
     /* The driver seems to require each buffer to be 8-byte aligned */
@@ -186,10 +186,11 @@ gbinder_writer_data_append_int32(
     GBinderWriterData* data,
     guint32 value)
 {
+    GByteArray* buf = data->bytes;
     guint32* ptr;
 
-    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
-    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    g_byte_array_set_size(buf, buf->len + sizeof(*ptr));
+    ptr = (void*)(buf->data + (buf->len - sizeof(*ptr)));
     *ptr = value;
 }
 
@@ -210,10 +211,11 @@ gbinder_writer_data_append_int64(
     GBinderWriterData* data,
     guint64 value)
 {
+    GByteArray* buf = data->bytes;
     guint64* ptr;
 
-    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
-    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    g_byte_array_set_size(buf, buf->len + sizeof(*ptr));
+    ptr = (void*)(buf->data + (buf->len - sizeof(*ptr)));
     *ptr = value;
 }
 
@@ -234,10 +236,11 @@ gbinder_writer_data_append_float(
     GBinderWriterData* data,
     gfloat value)
 {
+    GByteArray* buf = data->bytes;
     gfloat* ptr;
 
-    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
-    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    g_byte_array_set_size(buf, buf->len + sizeof(*ptr));
+    ptr = (void*)(buf->data + (buf->len - sizeof(*ptr)));
     *ptr = value;
 }
 
@@ -258,10 +261,11 @@ gbinder_writer_data_append_double(
     GBinderWriterData* data,
     gdouble value)
 {
+    GByteArray* buf = data->bytes;
     gdouble* ptr;
 
-    g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(*ptr));
-    ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(*ptr)));
+    g_byte_array_set_size(buf, buf->len + sizeof(*ptr));
+    ptr = (void*)(buf->data + (buf->len - sizeof(*ptr)));
     *ptr = value;
 }
 
@@ -301,15 +305,16 @@ gbinder_writer_data_append_string8_len(
     gsize len)
 {
     if (G_LIKELY(str)) {
-        const gsize old_size = data->bytes->len;
+        GByteArray* buf = data->bytes;
+        const gsize old_size = buf->len;
         gsize padded_len = G_ALIGN4(len + 1);
         guint32* dest;
 
         /* Preallocate space */
-        g_byte_array_set_size(data->bytes, old_size + padded_len);
+        g_byte_array_set_size(buf, old_size + padded_len);
 
         /* Zero the last word */
-        dest = (guint32*)(data->bytes->data + old_size);
+        dest = (guint32*)(buf->data + old_size);
         dest[padded_len/4 - 1] = 0;
 
         /* Copy the data */
@@ -352,7 +357,8 @@ gbinder_writer_data_append_string16_len(
     const char* utf8,
     gssize num_bytes)
 {
-    const gsize old_size = data->bytes->len;
+    GByteArray* buf = data->bytes;
+    const gsize old_size = buf->len;
 
     if (utf8) {
         const char* end = utf8;
@@ -370,8 +376,8 @@ gbinder_writer_data_append_string16_len(
         gunichar2* utf16_ptr;
 
         /* Preallocate space */
-        g_byte_array_set_size(data->bytes, old_size + padded_len + 4);
-        len_ptr = (guint32*)(data->bytes->data + old_size);
+        g_byte_array_set_size(buf, old_size + padded_len + 4);
+        len_ptr = (guint32*)(buf->data + old_size);
         utf16_ptr = (gunichar2*)(len_ptr + 1);
 
         /* TODO: this could be optimized for ASCII strings, i.e. if
@@ -398,13 +404,13 @@ gbinder_writer_data_append_string16_len(
         }
 
         /* Correct the packet size if necessaary */
-        g_byte_array_set_size(data->bytes, old_size + padded_len + 4);
+        g_byte_array_set_size(buf, old_size + padded_len + 4);
     } else if (utf8) {
         /* Empty string */
         guint16* ptr16;
 
-        g_byte_array_set_size(data->bytes, old_size + 8);
-        ptr16 = (guint16*)(data->bytes->data + old_size);
+        g_byte_array_set_size(buf, old_size + 8);
+        ptr16 = (guint16*)(buf->data + old_size);
         ptr16[0] = ptr16[1] = ptr16[2] = 0; ptr16[3] = 0xffff;
     } else {
         /* NULL string */
@@ -671,16 +677,16 @@ gbinder_writer_data_append_local_object(
     GBinderWriterData* data,
     GBinderLocalObject* obj)
 {
-    GByteArray* dest = data->bytes;
-    const guint offset = dest->len;
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
     guint n;
 
     /* Preallocate enough space */
-    g_byte_array_set_size(dest, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
     /* Write the object */
-    n = data->io->encode_local_object(dest->data + offset, obj);
+    n = data->io->encode_local_object(buf->data + offset, obj);
     /* Fix the data size */
-    g_byte_array_set_size(dest, offset + n);
+    g_byte_array_set_size(buf, offset + n);
     /* Record the offset */
     gbinder_writer_data_record_offset(data, offset);
 }
@@ -706,15 +712,16 @@ gbinder_writer_append_byte_array(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     GASSERT(len >= 0);
-
     if (G_LIKELY(data)) {
+        GByteArray* buf = data->bytes;
         void* ptr;
 
-        if (!byte_array)
+        if (!byte_array) {
             len = 0;
+        }
 
-        g_byte_array_set_size(data->bytes, data->bytes->len + sizeof(len) + len);
-        ptr = (void*)(data->bytes->data + (data->bytes->len - sizeof(len) - len));
+        g_byte_array_set_size(buf, buf->len + sizeof(len) + len);
+        ptr = buf->data + (buf->len - sizeof(len) - len);
 
         if (len > 0) {
             *((gint32*)ptr) = len;
@@ -731,16 +738,16 @@ gbinder_writer_data_append_remote_object(
     GBinderWriterData* data,
     GBinderRemoteObject* obj)
 {
-    GByteArray* dest = data->bytes;
-    const guint offset = dest->len;
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
     guint n;
 
     /* Preallocate enough space */
-    g_byte_array_set_size(dest, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
     /* Write the object */
-    n = data->io->encode_remote_object(dest->data + offset, obj);
+    n = data->io->encode_remote_object(buf->data + offset, obj);
     /* Fix the data size */
-    g_byte_array_set_size(dest, offset + n);
+    g_byte_array_set_size(buf, offset + n);
     /* Record the offset */
     gbinder_writer_data_record_offset(data, offset);
 }

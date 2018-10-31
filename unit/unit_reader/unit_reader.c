@@ -1053,13 +1053,10 @@ test_byte_array(
 {
     const char in_data[] = "1234abcd";
     gint32 in_len = sizeof(in_data) - 1;
-
     const void* out_data = NULL;
     gsize out_len = 0;
-
     void* tmp;
     gsize tmp_len = sizeof(in_len) + in_len;
-
     gint32 null_len = -1;
 
     GBinderDriver* driver;
