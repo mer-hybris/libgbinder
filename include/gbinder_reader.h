@@ -169,6 +169,11 @@ gboolean
 gbinder_reader_skip_string16(
     GBinderReader* reader);
 
+const void*
+gbinder_reader_read_byte_array(
+    GBinderReader* reader,
+    gsize* len); /* since 1.0.12 */
+
 gsize
 gbinder_reader_bytes_read(
     GBinderReader* reader);
