@@ -1,3 +1,9 @@
+libgbinder (1.0.12) unstable; urgency=low
+
+  * Add byte array reader and writer
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 31 Oct 2018 17:04:38 +0300
+
 libgbinder (1.0.11) unstable; urgency=low
 
   * Use BINDER_TYPE_WEAK_HANDLE for NULL objects
