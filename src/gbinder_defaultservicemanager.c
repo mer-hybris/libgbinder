@@ -152,6 +152,17 @@ gbinder_defaultservicemanager_add_service(
 }
 
 static
+GBINDER_SERVICEMANAGER_NAME_CHECK
+gbinder_defaultservicemanager_check_name(
+    GBinderServiceManager* self,
+    const char* name)
+{
+    /* Old servicemanager doesn't support notifications, those would
+     * have to be emulated with polling. Is it necessary though? */
+    return GBINDER_SERVICEMANAGER_NAME_INVALID;
+}
+
+static
 void
 gbinder_defaultservicemanager_init(
     GBinderDefaultServiceManager* self)
@@ -171,6 +182,8 @@ gbinder_defaultservicemanager_class_init(
     klass->list = gbinder_defaultservicemanager_list;
     klass->get_service = gbinder_defaultservicemanager_get_service;
     klass->add_service = gbinder_defaultservicemanager_add_service;
+    klass->check_name = gbinder_defaultservicemanager_check_name;
+    /* No need for other watch callbacks */
 }
 
 /*
