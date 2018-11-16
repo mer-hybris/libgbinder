@@ -39,12 +39,21 @@
 
 #include <glib-object.h>
 
+typedef struct gbinder_servicemanager_priv GBinderServiceManagerPriv;
+
 typedef struct gbinder_servicemanager {
     GObject parent;
+    GBinderServiceManagerPriv* priv;
     const char* dev;
     GBinderClient* client;
     GUtilIdlePool* pool;
 } GBinderServiceManager;
+
+typedef enum gbinder_servicemanager_name_check {
+    GBINDER_SERVICEMANAGER_NAME_OK,
+    GBINDER_SERVICEMANAGER_NAME_NORMALIZE,
+    GBINDER_SERVICEMANAGER_NAME_INVALID,
+} GBINDER_SERVICEMANAGER_NAME_CHECK;
 
 typedef struct gbinder_servicemanager_class {
     GObjectClass parent;
@@ -63,6 +72,15 @@ typedef struct gbinder_servicemanager_class {
     int (*add_service)
         (GBinderServiceManager* self, const char* name,
             GBinderLocalObject* obj);
+
+    /* Checking/normalizing watch names */
+    GBINDER_SERVICEMANAGER_NAME_CHECK (*check_name)
+        (GBinderServiceManager* self, const char* name);
+    char* (*normalize_name)(GBinderServiceManager* self, const char* name);
+
+    /* If watch() returns FALSE, unwatch() is not called */
+    gboolean (*watch)(GBinderServiceManager* self, const char* name);
+    void (*unwatch)(GBinderServiceManager* self, const char* name);
 } GBinderServiceManagerClass;
 
 GType gbinder_servicemanager_get_type(void);
@@ -72,6 +90,11 @@ GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
     GType type,
     const char* dev);
+
+void
+gbinder_servicemanager_service_registered(
+    GBinderServiceManager* self,
+    const char* name);
 
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */
 

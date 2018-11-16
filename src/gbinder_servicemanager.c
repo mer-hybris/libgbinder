@@ -44,6 +44,17 @@
 
 #include <errno.h>
 
+typedef struct gbinder_servicemanager_watch {
+    char* name;
+    char* detail;
+    GQuark quark;
+    gboolean watched;
+} GBinderServiceManagerWatch;
+
+struct gbinder_servicemanager_priv {
+    GHashTable* watch_table;
+};
+
 G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
     G_TYPE_OBJECT)
 
@@ -59,6 +70,16 @@ G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
     GBinderServiceManagerClass)
 #define GBINDER_IS_SERVICEMANAGER_TYPE(klass) \
     G_TYPE_CHECK_CLASS_TYPE(klass, GBINDER_TYPE_SERVICEMANAGER)
+
+enum gbinder_servicemanager_signal {
+    SIGNAL_REGISTRATION,
+    SIGNAL_COUNT
+};
+
+static const char SIGNAL_REGISTRATION_NAME[] = "servicemanager-registration";
+#define DETAIL_LEN 32
+
+static guint gbinder_servicemanager_signals[SIGNAL_COUNT] = { 0 };
 
 /*==========================================================================*
  * Implementation
@@ -81,53 +102,29 @@ gbinder_servicemanager_class_ref(
     return NULL;
 }
 
-GBinderServiceManager*
-gbinder_servicemanager_new_with_type(
-    GType type,
-    const char* dev)
+static
+GBinderServiceManagerWatch*
+gbinder_servicemanager_watch_new(
+    const char* name)
 {
-    GBinderServiceManager* self = NULL;
-    GBinderServiceManagerClass* klass = gbinder_servicemanager_class_ref(type);
+    GBinderServiceManagerWatch* watch = g_new0(GBinderServiceManagerWatch, 1);
 
-    if (klass) {
-        GBinderIpc* ipc;
+    watch->name = g_strdup(name);
+    watch->detail = g_compute_checksum_for_string(G_CHECKSUM_MD5, name, -1);
+    watch->quark = g_quark_from_string(watch->detail);
+    return watch;
+}
 
-        if (!dev) dev = klass->default_device;
-        ipc = gbinder_ipc_new(dev, klass->rpc_protocol);
-        if (ipc) {
-            GBinderRemoteObject* object = gbinder_ipc_get_remote_object
-                (ipc, klass->handle);
+static
+void
+gbinder_servicemanager_watch_free(
+    gpointer data)
+{
+    GBinderServiceManagerWatch* watch = data;
 
-            if (object) {
-                /* Lock */
-                g_mutex_lock(&klass->mutex);
-                if (klass->table) {
-                    self = g_hash_table_lookup(klass->table, dev);
-                }
-                if (self) {
-                    gbinder_servicemanager_ref(self);
-                } else {
-                    char* key = g_strdup(dev); /* Owned by the hashtable */
-
-                    GVERBOSE_("%s", dev);
-                    self = g_object_new(type, NULL);
-                    self->client = gbinder_client_new(object, klass->iface);
-                    self->dev = gbinder_remote_object_dev(object);
-                    if (!klass->table) {
-                        klass->table = g_hash_table_new_full(g_str_hash,
-                            g_str_equal, g_free, NULL);
-                    }
-                    g_hash_table_replace(klass->table, key, self);
-                }
-                g_mutex_unlock(&klass->mutex);
-                /* Unlock */
-                gbinder_remote_object_unref(object);
-            }
-            gbinder_ipc_unref(ipc);
-        }
-        g_type_class_unref(klass);
-    }
-    return self;
+    g_free(watch->name);
+    g_free(watch->detail);
+    g_free(watch);
 }
 
 typedef struct gbinder_servicemanager_list_tx_data {
@@ -254,6 +251,89 @@ gbinder_servicemanager_add_service_tx_free(
     gbinder_local_object_unref(data->obj);
     g_free(data->name);
     g_slice_free(GBinderServiceManagerAddServiceTxData, data);
+}
+
+/*==========================================================================*
+ * Internal interface
+ *==========================================================================*/
+
+GBinderServiceManager*
+gbinder_servicemanager_new_with_type(
+    GType type,
+    const char* dev)
+{
+    GBinderServiceManager* self = NULL;
+    GBinderServiceManagerClass* klass = gbinder_servicemanager_class_ref(type);
+
+    if (klass) {
+        GBinderIpc* ipc;
+
+        if (!dev) dev = klass->default_device;
+        ipc = gbinder_ipc_new(dev, klass->rpc_protocol);
+        if (ipc) {
+            GBinderRemoteObject* object = gbinder_ipc_get_remote_object
+                (ipc, klass->handle);
+
+            if (object) {
+                /* Lock */
+                g_mutex_lock(&klass->mutex);
+                if (klass->table) {
+                    self = g_hash_table_lookup(klass->table, dev);
+                }
+                if (self) {
+                    gbinder_servicemanager_ref(self);
+                } else {
+                    char* key = g_strdup(dev); /* Owned by the hashtable */
+
+                    GVERBOSE_("%s", dev);
+                    self = g_object_new(type, NULL);
+                    self->client = gbinder_client_new(object, klass->iface);
+                    self->dev = gbinder_remote_object_dev(object);
+                    if (!klass->table) {
+                        klass->table = g_hash_table_new_full(g_str_hash,
+                            g_str_equal, g_free, NULL);
+                    }
+                    g_hash_table_replace(klass->table, key, self);
+                }
+                g_mutex_unlock(&klass->mutex);
+                /* Unlock */
+                gbinder_remote_object_unref(object);
+            }
+            gbinder_ipc_unref(ipc);
+        }
+        g_type_class_unref(klass);
+    }
+    return self;
+}
+
+void
+gbinder_servicemanager_service_registered(
+    GBinderServiceManager* self,
+    const char* name)
+{
+    GBinderServiceManagerClass* klass = GBINDER_SERVICEMANAGER_GET_CLASS(self);
+    GBinderServiceManagerPriv* priv = self->priv;
+    GBinderServiceManagerWatch* watch = NULL;
+    const char* normalized_name;
+    char* tmp_name = NULL;
+
+    switch (klass->check_name(self, name)) {
+    case GBINDER_SERVICEMANAGER_NAME_OK:
+        normalized_name = name;
+        break;
+    case GBINDER_SERVICEMANAGER_NAME_NORMALIZE:
+        normalized_name = tmp_name = klass->normalize_name(self, name);
+        break;
+    default:
+        normalized_name = NULL;
+        break;
+    }
+    if (normalized_name) {
+        watch = g_hash_table_lookup(priv->watch_table, normalized_name);
+    }
+    g_free(tmp_name);
+    g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
+        watch ? watch->quark : 0, name);
 }
 
 /*==========================================================================*
@@ -433,6 +513,88 @@ gbinder_servicemanager_cancel(
     }
 }
 
+gulong
+gbinder_servicemanager_add_registration_handler(
+    GBinderServiceManager* self,
+    const char* name,
+    GBinderServiceManagerRegistrationFunc func,
+    void* data) /* Since 1.0.13 */
+{
+    gulong id = 0;
+
+    if (G_LIKELY(self) && G_LIKELY(func)) {
+        char* tmp_name = NULL;
+        GBinderServiceManagerClass* klass =
+            GBINDER_SERVICEMANAGER_GET_CLASS(self);
+
+        switch (klass->check_name(self, name)) {
+        case GBINDER_SERVICEMANAGER_NAME_OK:
+            break;
+        case GBINDER_SERVICEMANAGER_NAME_NORMALIZE:
+            name = tmp_name = klass->normalize_name(self, name);
+            break;
+        default:
+            name = NULL;
+            break;
+        }
+        if (name) {
+            GBinderServiceManagerPriv* priv = self->priv;
+            GBinderServiceManagerWatch* watch = NULL;
+
+            watch = g_hash_table_lookup(priv->watch_table, name);
+            if (!watch) {
+                watch = gbinder_servicemanager_watch_new(name);
+                g_hash_table_insert(priv->watch_table, watch->name, watch);
+            }
+            if (!watch->watched) {
+                watch->watched = klass->watch(self, name);
+                if (watch->watched) {
+                    GDEBUG("Watching %s", watch->name);
+                } else {
+                    GWARN("Failed to watch %s", watch->name);
+                }
+            }
+
+            id = g_signal_connect_closure_by_id(self,
+                gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
+                watch->quark, g_cclosure_new(G_CALLBACK(func), data, NULL),
+                FALSE);
+        }
+        g_free(tmp_name);
+    }
+    return id;
+}
+
+void
+gbinder_servicemanager_remove_handler(
+    GBinderServiceManager* self,
+    gulong id) /* Since 1.0.13 */
+{
+    if (G_LIKELY(self) && G_LIKELY(id)) {
+        GBinderServiceManagerClass* klass =
+            GBINDER_SERVICEMANAGER_GET_CLASS(self);
+        GBinderServiceManagerPriv* priv = self->priv;
+        GHashTableIter it;
+        gpointer value;
+
+        g_signal_handler_disconnect(self, id);
+        g_hash_table_iter_init(&it, priv->watch_table);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            GBinderServiceManagerWatch* watch = value;
+
+            if (watch->watched && !g_signal_has_handler_pending(self,
+                gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
+                watch->quark, TRUE)) {
+                /* This must be the one we have just removed */
+                GDEBUG("Unwatching %s", watch->name);
+                watch->watched = FALSE;
+                klass->unwatch(self, watch->name);
+                break;
+            }
+        }
+    }
+}
+
 /*==========================================================================*
  * Internals
  *==========================================================================*/
@@ -442,6 +604,12 @@ void
 gbinder_servicemanager_init(
     GBinderServiceManager* self)
 {
+    GBinderServiceManagerPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
+        GBINDER_TYPE_SERVICEMANAGER, GBinderServiceManagerPriv);
+
+    self->priv = priv;
+    priv->watch_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+        NULL, gbinder_servicemanager_watch_free);
 }
 
 static
@@ -450,8 +618,7 @@ gbinder_servicemanager_dispose(
     GObject* object)
 {
     GBinderServiceManager* self = GBINDER_SERVICEMANAGER(object);
-    GBinderServiceManagerClass* klass =
-        GBINDER_SERVICEMANAGER_GET_CLASS(self);
+    GBinderServiceManagerClass* klass = GBINDER_SERVICEMANAGER_GET_CLASS(self);
 
     GVERBOSE_("%s", self->dev);
     /* Lock */
@@ -493,9 +660,10 @@ gbinder_servicemanager_finalize(
     GObject* object)
 {
     GBinderServiceManager* self = GBINDER_SERVICEMANAGER(object);
+    GBinderServiceManagerPriv* priv = self->priv;
 
-    gutil_idle_pool_drain(self->pool);
-    gutil_idle_pool_unref(self->pool);
+    g_hash_table_destroy(priv->watch_table);
+    gutil_idle_pool_destroy(self->pool);
     gbinder_client_unref(self->client);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
@@ -508,8 +676,13 @@ gbinder_servicemanager_class_init(
     GObjectClass* object_class = G_OBJECT_CLASS(klass);
 
     g_mutex_init(&klass->mutex);
+    g_type_class_add_private(klass, sizeof(GBinderServiceManagerPriv));
     object_class->dispose = gbinder_servicemanager_dispose;
     object_class->finalize = gbinder_servicemanager_finalize;
+    gbinder_servicemanager_signals[SIGNAL_REGISTRATION] =
+        g_signal_new(SIGNAL_REGISTRATION_NAME, G_OBJECT_CLASS_TYPE(klass),
+            G_SIGNAL_RUN_FIRST | G_SIGNAL_DETAILED, 0, NULL, NULL, NULL,
+            G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 /*

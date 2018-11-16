@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived from
+ *      this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -54,10 +54,15 @@ typedef struct app_options {
 
 typedef struct app {
     const AppOptions* opt;
+    char* fqname;
     GMainLoop* loop;
     GBinderServiceManager* sm;
     GBinderLocalObject* local;
+    GBinderRemoteObject* remote;
+    gulong wait_id;
+    gulong death_id;
     GBinderClient* client;
+    GThread* thread;
     int ret;
 } App;
 
@@ -172,45 +177,79 @@ app_input_thread(
 }
 
 static
+gboolean
+app_connect_remote(
+    App* app)
+{
+    app->remote = gbinder_servicemanager_get_service_sync(app->sm,
+        app->fqname, NULL); /* autoreleased pointer */
+
+    if (app->remote) {
+        const AppOptions* opt = app->opt;
+
+        GINFO("Connected to %s", app->fqname);
+        gbinder_remote_object_ref(app->remote);
+        app->client = gbinder_client_new(app->remote, opt->iface);
+        app->death_id = gbinder_remote_object_add_death_handler(app->remote,
+            app_remote_died, app);
+        app->thread = g_thread_new("input", app_input_thread, app);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static
+void
+app_registration_handler(
+    GBinderServiceManager* sm,
+    const char* name,
+    void* user_data)
+{
+    App* app = user_data;
+
+    GDEBUG("\"%s\" appeared", name);
+    if (!strcmp(name, app->fqname) && app_connect_remote(app)) {
+        gbinder_servicemanager_remove_handler(app->sm, app->wait_id);
+        app->wait_id = 0;
+    }
+}
+
+static
 void
 app_run(
    App* app)
 {
     const AppOptions* opt = app->opt;
-    char* fqname = opt->fqname ? g_strdup(opt->fqname) :
+    guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, app);
+    guint sigint = g_unix_signal_add(SIGINT, app_signal, app);
+
+    app->fqname = opt->fqname ? g_strdup(opt->fqname) :
         strchr(opt->name, '/') ? g_strdup(opt->name) :
         g_strconcat(opt->iface, "/", opt->name, NULL);
-    int status = 0;
-    GBinderRemoteObject* remote = gbinder_remote_object_ref
-        (gbinder_servicemanager_get_service_sync(app->sm, fqname, &status));
-    if (remote) {
-        guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, app);
-        guint sigint = g_unix_signal_add(SIGINT, app_signal, app);
-        gulong death_id = gbinder_remote_object_add_death_handler
-            (remote, app_remote_died, app);
-        GThread* thread = g_thread_new("input", app_input_thread, app);
 
-        GINFO("Connected to %s\n", fqname);
-
-        app->client = gbinder_client_new(remote, opt->iface);
-        app->ret = RET_OK;
-        app->loop = g_main_loop_new(NULL, TRUE);
-        g_main_loop_run(app->loop);
-
-        g_source_remove(sigtrm);
-        g_source_remove(sigint);
-        g_main_loop_unref(app->loop);
-
-        gbinder_remote_object_remove_handler(remote, death_id);
-        gbinder_remote_object_unref(remote);
-
-        /* Not the cleanest exit, just dropping the thread... */
-        g_thread_unref(thread);
-        app->loop = NULL;
-    } else {
-        GERR("No such service: %s (%d)", fqname, status);
+    if (!app_connect_remote(app)) {
+        GINFO("Waiting for %s", app->fqname);
+        app->wait_id = gbinder_servicemanager_add_registration_handler(app->sm,
+            app->fqname, app_registration_handler, app);
     }
-    g_free(fqname);
+
+    app->loop = g_main_loop_new(NULL, TRUE);
+    app->ret = RET_OK;
+    g_main_loop_run(app->loop);
+
+    g_source_remove(sigtrm);
+    g_source_remove(sigint);
+    g_main_loop_unref(app->loop);
+
+    if (app->thread) {
+        /* Not the cleanest of exits, just dropping the thread... */
+        g_thread_unref(app->thread);
+    }
+    gbinder_remote_object_remove_handler(app->remote, app->death_id);
+    gbinder_remote_object_unref(app->remote);
+    gbinder_local_object_drop(app->local);
+    gbinder_client_unref(app->client);
+    g_free(app->fqname);
 }
 
 static
@@ -311,8 +350,6 @@ int main(int argc, char* argv[])
             app.local = gbinder_servicemanager_new_local_object(app.sm,
                 NULL, NULL, NULL);
             app_run(&app);
-            gbinder_local_object_unref(app.local);
-            gbinder_client_unref(app.client);
             gbinder_servicemanager_unref(app.sm);
         }
     }
