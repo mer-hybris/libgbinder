@@ -88,6 +88,7 @@ static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define GBINDER_IPC_MAX_TX_THREADS (15)
 #define GBINDER_IPC_MAX_LOOPERS (15)
+#define GBINDER_IPC_LOOPER_START_TIMEOUT_SEC (2)
 
 /*
  * When looper receives the transaction:
@@ -134,6 +135,9 @@ struct gbinder_ipc_looper {
     GBinderDriver* driver;
     GBinderIpc* ipc; /* Not a reference! */
     GThread* thread;
+    GMutex mutex;
+    GCond start_cond;
+    gboolean started;
     int pipefd[2];
     int txfd[2];
 };
@@ -344,6 +348,8 @@ gbinder_ipc_looper_free(
         close(looper->txfd[1]);
     }
     gbinder_driver_unref(looper->driver);
+    g_cond_clear(&looper->start_cond);
+    g_mutex_clear(&looper->mutex);
     g_slice_free(GBinderIpcLooper, looper);
 }
 
@@ -381,6 +387,11 @@ gbinder_ipc_looper_thread(
         int result;
 
         GDEBUG("Looper %s running", gbinder_driver_dev(driver));
+        g_mutex_lock(&looper->mutex);
+        looper->started = TRUE;
+        g_cond_broadcast(&looper->start_cond);
+        g_mutex_unlock(&looper->mutex);
+
         memset(&pipefd, 0, sizeof(pipefd));
         pipefd.fd = looper->pipefd[0]; /* read end of the pipe */
         pipefd.events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
@@ -436,6 +447,11 @@ gbinder_ipc_looper_thread(
         } else {
             GDEBUG("Looper %s is abandoned", gbinder_driver_dev(driver));
         }
+    } else {
+        g_mutex_lock(&looper->mutex);
+        looper->started = TRUE;
+        g_cond_broadcast(&looper->start_cond);
+        g_mutex_unlock(&looper->mutex);
     }
 
     gbinder_ipc_looper_unref(looper);
@@ -460,6 +476,8 @@ gbinder_ipc_looper_new(
         memcpy(looper->pipefd, fd, sizeof(fd));
         looper->txfd[0] = looper->txfd[1] = -1;
         g_atomic_int_set(&looper->refcount, 1);
+        g_cond_init(&looper->start_cond);
+        g_mutex_init(&looper->mutex);
         looper->handler.f = &handler_functions;
         looper->ipc = ipc;
         looper->driver = gbinder_driver_ref(ipc->driver);
@@ -488,6 +506,7 @@ gbinder_ipc_looper_check(
         GBinderIpcPriv* priv = self->priv;
 
         if (!priv->looper) {
+            GBinderIpcLooper* looper;
             /* Lock */
             g_mutex_lock(&priv->looper_mutex);
             if (!priv->looper) {
@@ -496,6 +515,23 @@ gbinder_ipc_looper_check(
             }
             g_mutex_unlock(&priv->looper_mutex);
             /* Unlock */
+
+            /* We are not ready to accept incoming transactions until
+             * looper has started. We may need to wait a bit. */
+            looper = priv->looper;
+            if (!looper->started) {
+                /* Lock */
+                g_mutex_lock(&looper->mutex);
+                if (!looper->started) {
+                    g_cond_wait_until(&looper->start_cond, &looper->mutex,
+                        g_get_monotonic_time() +
+                        GBINDER_IPC_LOOPER_START_TIMEOUT_SEC *
+                        G_TIME_SPAN_SECOND);
+                    GASSERT(looper->started);
+                }
+                g_mutex_unlock(&looper->mutex);
+                /* Unlock */
+            }
         }
     }
 }
