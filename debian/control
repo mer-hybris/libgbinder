@@ -2,13 +2,13 @@ Source: libgbinder
 Section: libs
 Priority: optional
 Maintainer: Slava Monich <slava.monich@jolla.com>
-Build-Depends: debhelper (>= 7), libglib2.0-dev (>= 2.0), libglibutil (>= 1.0.29)
+Build-Depends: debhelper (>= 7), libglib2.0-dev (>= 2.0), libglibutil (>= 1.0.34)
 Standards-Version: 3.8.4
 
 Package: libgbinder
 Section: libs
 Architecture: any
-Depends: libglibutil (>= 1.0.29), ${shlibs:Depends}, ${misc:Depends}
+Depends: libglibutil (>= 1.0.34), ${shlibs:Depends}, ${misc:Depends}
 Description: Binder client library
 
 Package: libgbinder-dev

@@ -1,3 +1,10 @@
+libgbinder (1.0.13) unstable; urgency=low
+
+  * Support for service registration notifications
+  * Make sure looper is started before gbinder_ipc_looper_new() returns
+
+ -- Slava Monich <slava.monich@jolla.com>  Sat, 17 Nov 2018 01:52:28 +0200
+
 libgbinder (1.0.12) unstable; urgency=low
 
   * Add byte array reader and writer
