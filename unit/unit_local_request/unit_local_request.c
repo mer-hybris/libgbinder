@@ -167,8 +167,8 @@ void
 test_bool(
     void)
 {
-    static const guint8 output_true[] = { 0x01, 0xff, 0xff, 0xff };
-    static const guint8 output_false[] = { 0x00, 0xff, 0xff, 0xff };
+    static const guint8 output_true[] = { 0x01, 0x00, 0x00, 0x00 };
+    static const guint8 output_false[] = { 0x00, 0x00, 0x00, 0x00 };
     GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
     GBinderOutputData* data;
 
