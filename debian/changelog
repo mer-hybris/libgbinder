@@ -1,3 +1,9 @@
+libgbinder (1.0.14) unstable; urgency=low
+
+  * Changed bool padding from 0xff to 0x00
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 27 Nov 2018 17:20:18 +0200
+
 libgbinder (1.0.13) unstable; urgency=low
 
   * Support for service registration notifications
