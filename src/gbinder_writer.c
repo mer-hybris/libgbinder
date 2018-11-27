@@ -165,7 +165,7 @@ gbinder_writer_data_append_bool(
 
     /* Boolean values are padded to 4-byte boundary */
     padded[0] = (value != FALSE);
-    padded[1] = padded[2] = padded[3] = 0xff;
+    padded[1] = padded[2] = padded[3] = 0;
     g_byte_array_append(data->bytes, padded, sizeof(padded));
 }
 
