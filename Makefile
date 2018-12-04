@@ -62,6 +62,7 @@ SRC = \
   gbinder_remote_reply.c \
   gbinder_remote_request.c \
   gbinder_rpc_protocol.c \
+  gbinder_servicepoll.c \
   gbinder_writer.c
 
 SRC += \
