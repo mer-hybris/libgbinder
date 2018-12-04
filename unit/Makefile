@@ -14,6 +14,7 @@ all:
 	@$(MAKE) -C unit_remote_object $*
 	@$(MAKE) -C unit_remote_reply $*
 	@$(MAKE) -C unit_remote_request $*
+	@$(MAKE) -C unit_servicemanager $*
 	@$(MAKE) -C unit_writer $*
 
 clean: unitclean

@@ -16,6 +16,7 @@ unit_reader \
 unit_remote_object \
 unit_remote_reply \
 unit_remote_request \
+unit_servicemanager \
 unit_writer"
 
 function err() {
