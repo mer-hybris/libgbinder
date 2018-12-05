@@ -44,6 +44,7 @@ typedef struct gbinder_ipc GBinderIpc;
 typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;
 typedef struct gbinder_rpc_protocol GBinderRpcProtocol;
+typedef struct gbinder_servicepoll GBinderServicePoll;
 
 typedef struct hidl_vec {
     union {

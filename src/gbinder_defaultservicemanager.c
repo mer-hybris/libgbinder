@@ -32,6 +32,7 @@
 
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_rpc_protocol.h"
+#include "gbinder_servicepoll.h"
 #include "gbinder_log.h"
 
 #include <gbinder_client.h>
@@ -43,12 +44,30 @@
 #include <errno.h>
 #include <pthread.h>
 
-typedef GBinderServiceManager GBinderDefaultServiceManager;
+typedef struct gbinder_defaultservicemanager_watch {
+    GBinderServicePoll* poll;
+    char* name;
+    gulong handler_id;
+    guint notify_id;
+} GBinderDefaultServiceManagerWatch;
+
 typedef GBinderServiceManagerClass GBinderDefaultServiceManagerClass;
+typedef struct gbinder_defaultservicemanager {
+    GBinderServiceManager manager;
+    GBinderServicePoll* poll;
+    GHashTable* watch_table;
+} GBinderDefaultServiceManager;
 
 G_DEFINE_TYPE(GBinderDefaultServiceManager,
     gbinder_defaultservicemanager,
     GBINDER_TYPE_SERVICEMANAGER)
+
+#define PARENT_CLASS gbinder_defaultservicemanager_parent_class
+#define GBINDER_TYPE_DEFAULTSERVICEMANAGER \
+    gbinder_defaultservicemanager_get_type()
+#define GBINDER_DEFAULTSERVICEMANAGER(obj) \
+    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_DEFAULTSERVICEMANAGER, \
+    GBinderDefaultServiceManager)
 
 enum gbinder_defaultservicemanager_calls {
     GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
@@ -66,7 +85,76 @@ gbinder_defaultservicemanager_new(
     const char* dev)
 {
     return gbinder_servicemanager_new_with_type
-        (gbinder_defaultservicemanager_get_type(), dev);
+        (GBINDER_TYPE_DEFAULTSERVICEMANAGER, dev);
+}
+
+static
+void
+gbinder_defaultservicemanager_watch_proc(
+    GBinderServicePoll* poll,
+    const char* name_added,
+    void* user_data)
+{
+    GBinderDefaultServiceManagerWatch* watch = user_data;
+
+    if (!g_strcmp0(name_added, watch->name)) {
+        GBinderServiceManager* manager =
+            gbinder_servicepoll_manager(watch->poll);
+
+        if (watch->notify_id) {
+            g_source_remove(watch->notify_id);
+            watch->notify_id = 0;
+        }
+        gbinder_servicemanager_service_registered(manager, name_added);
+    }
+}
+
+static
+gboolean
+gbinder_defaultservicemanager_watch_notify(
+    gpointer user_data)
+{
+    GBinderDefaultServiceManagerWatch* watch = user_data;
+    GBinderServiceManager* manager = gbinder_servicepoll_manager(watch->poll);
+    char* name = g_strdup(watch->name);
+
+    GASSERT(watch->notify_id);
+    watch->notify_id = 0;
+    gbinder_servicemanager_service_registered(manager, name);
+    g_free(name);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+gbinder_defaultservicemanager_watch_free(
+    gpointer user_data)
+{
+    GBinderDefaultServiceManagerWatch* watch = user_data;
+
+    if (watch->notify_id) {
+        g_source_remove(watch->notify_id);
+    }
+    gbinder_servicepoll_remove_handler(watch->poll, watch->handler_id);
+    gbinder_servicepoll_unref(watch->poll);
+    g_free(watch->name);
+    g_slice_free(GBinderDefaultServiceManagerWatch, watch);
+}
+
+static
+GBinderDefaultServiceManagerWatch*
+gbinder_defaultservicemanager_watch_new(
+    GBinderDefaultServiceManager* manager,
+    const char* name)
+{
+    GBinderDefaultServiceManagerWatch* watch =
+        g_slice_new0(GBinderDefaultServiceManagerWatch);
+
+    watch->name = g_strdup(name);
+    watch->poll = gbinder_servicepoll_new(&manager->manager, &manager->poll);
+    watch->handler_id = gbinder_servicepoll_add_handler(watch->poll,
+        gbinder_defaultservicemanager_watch_proc, watch);
+    return watch;
 }
 
 static
@@ -157,9 +245,35 @@ gbinder_defaultservicemanager_check_name(
     GBinderServiceManager* self,
     const char* name)
 {
-    /* Old servicemanager doesn't support notifications, those would
-     * have to be emulated with polling. Is it necessary though? */
-    return GBINDER_SERVICEMANAGER_NAME_INVALID;
+    return GBINDER_SERVICEMANAGER_NAME_OK;
+}
+
+static
+gboolean
+gbinder_defaultservicemanager_watch(
+    GBinderServiceManager* manager,
+    const char* name)
+{
+    GBinderDefaultServiceManager* self = GBINDER_DEFAULTSERVICEMANAGER(manager);
+    GBinderDefaultServiceManagerWatch* watch =
+        gbinder_defaultservicemanager_watch_new(self, name);
+
+    g_hash_table_replace(self->watch_table, watch->name, watch);
+    if (gbinder_servicepoll_is_known_name(watch->poll, name)) {
+        watch->notify_id =
+            g_idle_add(gbinder_defaultservicemanager_watch_notify, watch);
+    }
+    return TRUE;
+}
+
+static
+void
+gbinder_defaultservicemanager_unwatch(
+    GBinderServiceManager* manager,
+    const char* name)
+{
+    g_hash_table_remove(GBINDER_DEFAULTSERVICEMANAGER(manager)->watch_table,
+        name);
 }
 
 static
@@ -167,6 +281,19 @@ void
 gbinder_defaultservicemanager_init(
     GBinderDefaultServiceManager* self)
 {
+    self->watch_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+        NULL, gbinder_defaultservicemanager_watch_free);
+}
+
+static
+void
+gbinder_defaultservicemanager_finalize(
+    GObject* object)
+{
+    GBinderDefaultServiceManager* self = GBINDER_DEFAULTSERVICEMANAGER(object);
+
+    g_hash_table_destroy(self->watch_table);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
@@ -183,7 +310,10 @@ gbinder_defaultservicemanager_class_init(
     klass->get_service = gbinder_defaultservicemanager_get_service;
     klass->add_service = gbinder_defaultservicemanager_add_service;
     klass->check_name = gbinder_defaultservicemanager_check_name;
-    /* No need for other watch callbacks */
+    /* normalize_name is not needed */
+    klass->watch = gbinder_defaultservicemanager_watch;
+    klass->unwatch = gbinder_defaultservicemanager_unwatch;
+    G_OBJECT_CLASS(klass)->finalize = gbinder_defaultservicemanager_finalize;
 }
 
 /*
