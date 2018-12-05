@@ -1,3 +1,10 @@
+libgbinder (1.0.15) unstable; urgency=low
+
+  * Implemented service polling for old servicemanager
+  * Added new tests and improved coverage for existing ones
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 05 Dec 2018 12:11:34 +0200
+
 libgbinder (1.0.14) unstable; urgency=low
 
   * Changed bool padding from 0xff to 0x00
