@@ -504,13 +504,13 @@ gbinder_writer_data_append_hidl_vec(
     guint elemsize)
 {
     GBinderParent vec_parent;
-    HidlVec* vec = g_new0(HidlVec, 1);
+    GBinderHidlVec* vec = g_new0(GBinderHidlVec, 1);
     const gsize total = count * elemsize;
     void* buf = g_memdup(base, total);
 
     /* Prepare parent descriptor for the string data */
     vec_parent.index = gbinder_writer_data_prepare(data);
-    vec_parent.offset = HIDL_VEC_BUFFER_OFFSET;
+    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
 
     /* Fill in the vector descriptor */
     if (buf) {
@@ -550,12 +550,12 @@ gbinder_writer_data_append_hidl_string(
     const char* str)
 {
     GBinderParent str_parent;
-    HidlString* hidl_string = g_new0(HidlString, 1);
+    GBinderHidlString* hidl_string = g_new0(GBinderHidlString, 1);
     const gsize len = str ? strlen(str) : 0;
 
     /* Prepare parent descriptor for the string data */
     str_parent.index = gbinder_writer_data_prepare(data);
-    str_parent.offset = HIDL_STRING_BUFFER_OFFSET;
+    str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
 
     /* Fill in the string descriptor and store it */
     hidl_string->data.str = str;
@@ -597,8 +597,8 @@ gbinder_writer_data_append_hidl_string_vec(
     gssize count)
 {
     GBinderParent vec_parent;
-    HidlVec* vec = g_new0(HidlVec, 1);
-    HidlString* strings = NULL;
+    GBinderHidlVec* vec = g_new0(GBinderHidlVec, 1);
+    GBinderHidlString* strings = NULL;
     int i;
 
     if (count < 0) {
@@ -608,11 +608,11 @@ gbinder_writer_data_append_hidl_string_vec(
 
     /* Prepare parent descriptor for the vector data */
     vec_parent.index = gbinder_writer_data_prepare(data);
-    vec_parent.offset = HIDL_VEC_BUFFER_OFFSET;
+    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
 
     /* Fill in the vector descriptor */
     if (count > 0) {
-        strings = g_new0(HidlString, count);
+        strings = g_new0(GBinderHidlString, count);
         vec->data.ptr = strings;
         data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, strings);
     }
@@ -623,7 +623,7 @@ gbinder_writer_data_append_hidl_string_vec(
     /* Fill in string descriptors */
     for (i = 0; i < count; i++) {
         const char* str = strv[i];
-        HidlString* hidl_str = strings + i;
+        GBinderHidlString* hidl_str = strings + i;
 
         if ((hidl_str->data.str = str) != NULL) {
             hidl_str->len = strlen(str);
@@ -638,7 +638,7 @@ gbinder_writer_data_append_hidl_string_vec(
 
         /* Prepare parent descriptor for the string data */
         str_parent.index = data->offsets->count;
-        str_parent.offset = HIDL_STRING_BUFFER_OFFSET;
+        str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
 
         /* Write the vector data (it's parent for the string data) */
         gbinder_writer_data_write_buffer_object(data, strings,
@@ -646,7 +646,7 @@ gbinder_writer_data_append_hidl_string_vec(
 
         /* Write the string data */
         for (i = 0; i < count; i++) {
-            HidlString* hidl_str = strings + i;
+            GBinderHidlString* hidl_str = strings + i;
 
             if (hidl_str->data.str) {
                 gbinder_writer_data_write_buffer_object(data,
@@ -655,7 +655,7 @@ gbinder_writer_data_append_hidl_string_vec(
                     (guint)hidl_str->len, (guint)str_parent.index,
                     (guint)data->buffers_size);
             }
-            str_parent.offset += sizeof(HidlString);
+            str_parent.offset += sizeof(GBinderHidlString);
         }
     }
 }

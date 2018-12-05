@@ -366,15 +366,15 @@ static guint test_hidl_vec_offsets_64[] =
 
 static const TestHidlVecData test_hidl_vec_tests[] = {
     { "32/null", &gbinder_io_32, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(HidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(GBinderHidlVec) },
     { "32/2x1", &gbinder_io_32, "xy", 2, 1,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32),
-      sizeof(HidlVec) + 8 /* vec data aligned at 8 bytes boundary */ },
+      sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ },
     { "64/null", &gbinder_io_64, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(HidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(GBinderHidlVec) },
     { "64/2x2", &gbinder_io_64, "xxyy", 2, 2,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64),
-      sizeof(HidlVec) + 8 /* vec data aligned at 8 bytes boundary */ }
+      sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ }
 };
 
 static
@@ -425,15 +425,17 @@ static guint test_hidl_string_offsets_64[] =
 
 static const TestHidlStringData test_hidl_string_tests[] = {
     { "32/null", &gbinder_io_32, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0), sizeof(HidlString) },
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0),
+      sizeof(GBinderHidlString) },
     { "32/xxx", &gbinder_io_32, "xxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
-      sizeof(HidlString) + 8 /* string data aligned at 8 bytes boundary */ },
+      sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "64/null", &gbinder_io_64, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0), sizeof(HidlString) },
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0),
+      sizeof(GBinderHidlString) },
     { "64/xxxxxxx", &gbinder_io_64, "xxxxxxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
-      sizeof(HidlString) + 8 /* string data aligned at 8 bytes boundary */ }
+      sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ }
 };
 
 static
@@ -481,8 +483,9 @@ test_hidl_string2(
     g_assert(offsets->data[0] == 0);
     g_assert(offsets->data[1] == BUFFER_OBJECT_SIZE_32);
     g_assert(offsets->data[2] == 2*BUFFER_OBJECT_SIZE_32);
-    /* 2 HidlStrings + "foo" aligned at 8 bytes boundary */
-    g_assert(gbinder_output_data_buffers_size(data) == 2*sizeof(HidlString)+8);
+    /* 2 GBinderHidlStrings + "foo" aligned at 8 bytes boundary */
+    g_assert(gbinder_output_data_buffers_size(data) ==
+        (2 * sizeof(GBinderHidlString) + 8));
 
     gbinder_local_request_unref(req);
 }
@@ -513,18 +516,18 @@ static guint test_hidl_string_vec_offsets_1_64[] =
 static const TestHidlStringVecData test_hidl_string_vec_tests[] = {
     { "32/null", &gbinder_io_32, NULL, -1,
       TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty),
-      sizeof(HidlVec) },
+      sizeof(GBinderHidlVec) },
     { "32/1", &gbinder_io_32,
       (const char**)TEST_ARRAY_AND_COUNT(test_hidl_string_vec_data_1),
       TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_1_32),
-      sizeof(HidlVec) + sizeof(HidlString) + 8 },
+      sizeof(GBinderHidlVec) + sizeof(GBinderHidlString) + 8 },
     { "64/null", &gbinder_io_64, NULL, -1,
       TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty),
-      sizeof(HidlVec) },
+      sizeof(GBinderHidlVec) },
     { "64/1", &gbinder_io_64,
       (const char**)TEST_ARRAY_AND_COUNT(test_hidl_string_vec_data_1),
       TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_1_64),
-      sizeof(HidlVec) + sizeof(HidlString) + 8 },
+      sizeof(GBinderHidlVec) + sizeof(GBinderHidlString) + 8 },
 };
 
 static

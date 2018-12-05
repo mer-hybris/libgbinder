@@ -603,7 +603,7 @@ typedef struct test_hidl_vec {
 
 static const guint test_hidl_vec_2offsets [] = { 0, BUFFER_OBJECT_SIZE_64 };
 static const guint8 test_hidl_vec_2bytes_data [] = { 0x01, 0x02 };
-static const HidlVec test_hidl_vec_2bytes = {
+static const GBinderHidlVec test_hidl_vec_2bytes = {
     .data.ptr = test_hidl_vec_2bytes_data,
     sizeof(test_hidl_vec_2bytes_data),
     TRUE
@@ -612,81 +612,81 @@ static const BinderObject64 test_hidl_vec_2bytes_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_2bytes },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_2bytes_data },
         sizeof(test_hidl_vec_2bytes_data), 0,
-        HIDL_VEC_BUFFER_OFFSET
+        GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
-static const HidlVec test_hidl_vec_empty = {
+static const GBinderHidlVec test_hidl_vec_empty = {
     .data.ptr = test_hidl_vec_2bytes_data, 0, TRUE
 };
 static const BinderObject64 test_hidl_vec_empty_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_empty },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_2bytes_data },
-        0, 0, HIDL_VEC_BUFFER_OFFSET
+        0, 0, GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
 static const guint test_hidl_vec_1offset [] = {0};
-static const HidlVec test_hidl_vec_null = {{0}, 0, TRUE};
+static const GBinderHidlVec test_hidl_vec_null = {{0}, 0, TRUE};
 static const BinderObject64 test_hidl_vec_null_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_null },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     }
 };
 
-/* Buffer smaller than HidlVec */
+/* Buffer smaller than GBinderHidlVec */
 static const BinderObject64 test_hidl_vec_short_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_empty },
-        sizeof(HidlVec) - 1, 0, 0
+        sizeof(GBinderHidlVec) - 1, 0, 0
     }
 };
 
 /* NULL buffer with size 1 */
 static const guint test_hidl_vec_badnull_offsets [] = {0};
-static const HidlVec test_hidl_vec_badnull = {{0}, 1, TRUE};
+static const GBinderHidlVec test_hidl_vec_badnull = {{0}, 1, TRUE};
 static const BinderObject64 test_hidl_vec_badnull_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_badnull },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     }
 };
 
 /* Buffer size not divisible by count */
 static const guint8 test_hidl_vec_badsize_data [] = { 0x01, 0x02, 0x03 };
-static const HidlVec test_hidl_vec_badsize = {
+static const GBinderHidlVec test_hidl_vec_badsize = {
     .data.ptr = test_hidl_vec_badsize_data, 2, TRUE
 };
 static const BinderObject64 test_hidl_vec_badsize_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_badsize },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
         sizeof(test_hidl_vec_badsize_data), 0,
-        HIDL_VEC_BUFFER_OFFSET
+        GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
 /* Bad buffer address */
 static const guint8 test_hidl_vec_badbuf_data [] = { 0x01, 0x02, 0x03 };
-static const HidlVec test_hidl_vec_badbuf = {
+static const GBinderHidlVec test_hidl_vec_badbuf = {
     .data.ptr = test_hidl_vec_badbuf_data,
     sizeof(test_hidl_vec_badbuf_data), TRUE
 };
@@ -694,45 +694,45 @@ static const BinderObject64 test_hidl_vec_badbuf_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_badbuf },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
         sizeof(test_hidl_vec_badsize_data), 0,
-        HIDL_VEC_BUFFER_OFFSET
+        GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
 /* Non-zero count and zero size */
-static const HidlVec test_hidl_vec_badcount1 = {
+static const GBinderHidlVec test_hidl_vec_badcount1 = {
     .data.ptr = test_hidl_vec_badsize_data, 1, TRUE
 };
 static const BinderObject64 test_hidl_vec_badcount1_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_badcount1 },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data }, 0, 0,
-        HIDL_VEC_BUFFER_OFFSET
+        GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
 /* Zero count0 and non-zero size */
-static const HidlVec test_hidl_vec_badcount2 = {
+static const GBinderHidlVec test_hidl_vec_badcount2 = {
     .data.ptr = test_hidl_vec_badsize_data, 0, TRUE
 };
 static const BinderObject64 test_hidl_vec_badcount2_buf [] = {
     {
         BINDER_TYPE_PTR, 0,
         { &test_hidl_vec_badcount2 },
-        sizeof(HidlVec), 0, 0
+        sizeof(GBinderHidlVec), 0, 0
     },{
         BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
         { test_hidl_vec_badsize_data },
         sizeof(test_hidl_vec_badsize_data), 0,
-        HIDL_VEC_BUFFER_OFFSET
+        GBINDER_HIDL_VEC_BUFFER_OFFSET
     }
 };
 
@@ -1004,7 +1004,7 @@ test_vec(
     GBinderReaderData data;
     GBinderReader reader;
     BinderObject64 obj;
-    HidlVec vec;
+    GBinderHidlVec vec;
     char** out;
 
     g_assert(ipc);

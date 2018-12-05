@@ -72,6 +72,30 @@ typedef struct gbinder_servicemanager GBinderServiceManager;
 typedef struct gbinder_writer GBinderWriter;
 typedef struct gbinder_parent GBinderParent;
 
+/* Basic HIDL types */
+
+typedef struct gbinder_hidl_vec {
+    union {
+        guint64 value;
+        const void* ptr;
+    } data;
+    guint32 count;
+    guint32 owns_buffer;
+} GBinderHidlVec;
+
+#define GBINDER_HIDL_VEC_BUFFER_OFFSET (0)
+
+typedef struct gbinder_hidl_string {
+    union {
+        guint64 value;
+        const char* str;
+    } data;
+    guint32 len;
+    guint32 owns_buffer;
+} GBinderHidlString;
+
+#define GBINDER_HIDL_STRING_BUFFER_OFFSET (0)
+
 /*
  * Each RPC call is identified by the interface name returned
  * by gbinder_remote_request_interface() the transaction code.

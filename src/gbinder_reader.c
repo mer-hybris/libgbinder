@@ -333,8 +333,8 @@ gbinder_reader_read_hidl_vec(
     gsize out_count = 0, out_elemsize = 0;
     const void* out = NULL;
 
-    if (buf && buf->size == sizeof(HidlVec)) {
-        const HidlVec* vec = buf->data;
+    if (buf && buf->size == sizeof(GBinderHidlVec)) {
+        const GBinderHidlVec* vec = buf->data;
         const void* next = vec->data.ptr;
 
         if (next) {
@@ -383,8 +383,8 @@ gbinder_reader_read_hidl_string(
     GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
     char* str = NULL;
 
-    if (buf && buf->size == sizeof(HidlString)) {
-        const HidlString* s = buf->data;
+    if (buf && buf->size == sizeof(GBinderHidlString)) {
+        const GBinderHidlString* s = buf->data;
         GBinderBuffer* sbuf = gbinder_reader_read_buffer(reader);
 
         if (sbuf && sbuf->size == s->len + 1 &&
@@ -405,8 +405,8 @@ gbinder_reader_read_hidl_string_vec(
     GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
 
     /* First buffer contains hidl_vector */
-    if (buf && buf->size == sizeof(HidlVec)) {
-        HidlVec* vec = buf->data;
+    if (buf && buf->size == sizeof(GBinderHidlVec)) {
+        GBinderHidlVec* vec = buf->data;
         const guint n = vec->count;
         const void* next = vec->data.ptr;
 
@@ -419,8 +419,9 @@ gbinder_reader_read_hidl_string_vec(
         } else {
             /* The second buffer (if any) contains n hidl_string's */
             buf = gbinder_reader_read_buffer(reader);
-            if (buf && buf->data == next && buf->size == sizeof(HidlString)*n) {
-                const HidlString* strings = buf->data;
+            if (buf && buf->data == next &&
+                buf->size == (sizeof(GBinderHidlString) * n)) {
+                const GBinderHidlString* strings = buf->data;
                 GBinderBuffer* sbuf;
                 GPtrArray* list = g_ptr_array_new();
                 guint i;
@@ -428,7 +429,7 @@ gbinder_reader_read_hidl_string_vec(
                 /* Now we expect n buffers containing the actual data */
                 for (i=0; i<n &&
                     (sbuf = gbinder_reader_read_buffer(reader)); i++) {
-                    const HidlString* s = strings + i;
+                    const GBinderHidlString* s = strings + i;
                     if (sbuf->size == s->len + 1 &&
                         sbuf->data == s->data.str &&
                         s->data.str[s->len] == 0) {

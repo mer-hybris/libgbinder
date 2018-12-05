@@ -375,7 +375,7 @@ test_hidl_string(
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
-    g_assert(gbinder_output_data_buffers_size(data) == sizeof(HidlString));
+    g_assert(gbinder_output_data_buffers_size(data)==sizeof(GBinderHidlString));
     g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
 }
@@ -398,7 +398,7 @@ test_hidl_string_vec(
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
-    g_assert(gbinder_output_data_buffers_size(data) == sizeof(HidlVec));
+    g_assert(gbinder_output_data_buffers_size(data) == sizeof(GBinderHidlVec));
     g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
 }
@@ -525,8 +525,9 @@ test_remote_request_obj_validate_data(
     g_assert(offsets->data[1] == 4 + BUFFER_OBJECT_SIZE_64);
     g_assert(offsets->data[2] == 4 + 2*BUFFER_OBJECT_SIZE_64);
     g_assert(bytes->len == 4 + 2*BUFFER_OBJECT_SIZE_64 + BINDER_OBJECT_SIZE_64);
-    /* HidlString + the contents (2 bytes) aligned at 8-byte boundary */
-    g_assert(gbinder_output_data_buffers_size(data) == (sizeof(HidlString)+8));
+    /* GBinderHidlString + the contents (2 bytes) aligned at 8-byte boundary */
+    g_assert(gbinder_output_data_buffers_size(data) ==
+        (sizeof(GBinderHidlString) + 8));
 }
 
 static
