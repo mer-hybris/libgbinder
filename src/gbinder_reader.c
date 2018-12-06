@@ -50,6 +50,8 @@ G_STATIC_ASSERT(sizeof(GBinderReader) >= sizeof(GBinderReaderPriv));
 
 static inline GBinderReaderPriv* gbinder_reader_cast(GBinderReader* reader)
     { return (GBinderReaderPriv*)reader; }
+static inline const GBinderReaderPriv* gbinder_reader_cast_c
+    (const GBinderReader* reader)  { return (GBinderReaderPriv*)reader; }
 
 void
 gbinder_reader_init(
@@ -81,9 +83,9 @@ gbinder_reader_init(
 
 gboolean
 gbinder_reader_at_end(
-    GBinderReader* reader)
+    const GBinderReader* reader)
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
     return p->ptr >= p->end;
 }
@@ -584,20 +586,29 @@ gbinder_reader_read_byte_array(
 
 gsize
 gbinder_reader_bytes_read(
-    GBinderReader* reader)
+    const GBinderReader* reader)
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
     return p->ptr - p->start;
 }
 
 gsize
 gbinder_reader_bytes_remaining(
-    GBinderReader* reader)
+    const GBinderReader* reader)
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
     return p->end - p->ptr;
+}
+
+void
+gbinder_reader_copy(
+    GBinderReader* dest,
+    const GBinderReader* src)
+{
+    /* It's actually quite simple :) */
+    memcpy(dest, src, sizeof(*dest));
 }
 
 /*
