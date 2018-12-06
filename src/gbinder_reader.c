@@ -493,6 +493,24 @@ gbinder_reader_read_nullable_string16(
     GBinderReader* reader,
     char** out)
 {
+    gunichar2* str;
+    gsize len;
+
+    if (gbinder_reader_read_nullable_string16_utf16(reader, &str, &len)) {
+        if (out) {
+            *out = str ? g_utf16_to_utf8(str, len, NULL, NULL, NULL) : NULL;
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+
+gboolean
+gbinder_reader_read_nullable_string16_utf16(
+    GBinderReader* reader,
+    gunichar2** out,
+    gsize* out_len) /* since 1.0.17 */
+{
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
     if ((p->ptr + 4) <= p->end) {
@@ -505,15 +523,21 @@ gbinder_reader_read_nullable_string16(
             if (out) {
                 *out = NULL;
             }
+            if (out_len) {
+                *out_len = 0;
+            }
             return TRUE;
         } else if (len >= 0) {
-            const guint32 padded_len = G_ALIGN4((len+1)*2);
-            const gunichar2* utf16 = (const gunichar2*)(p->ptr + 4);
+            const guint32 padded_len = G_ALIGN4((len + 1)*2);
+            gunichar2* utf16 = (gunichar2*)(p->ptr + 4);
 
             if ((p->ptr + padded_len + 4) <= p->end) {
                 p->ptr += padded_len + 4;
                 if (out) {
-                    *out = g_utf16_to_utf8(utf16, len, NULL, NULL, NULL);
+                    *out = utf16;
+                }
+                if (out_len) {
+                    *out_len = len;
                 }
                 return TRUE;
             }

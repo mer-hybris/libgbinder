@@ -166,6 +166,12 @@ gbinder_reader_read_nullable_string16(
     char** out);
 
 gboolean
+gbinder_reader_read_nullable_string16_utf16(
+    GBinderReader* reader,
+    gunichar2** out,
+    gsize* len); /* since 1.0.17 */
+
+gboolean
 gbinder_reader_skip_string16(
     GBinderReader* reader);
 

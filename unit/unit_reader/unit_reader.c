@@ -445,6 +445,8 @@ test_string16_null(
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
+    gunichar2* out2 = NULL;
+    gsize len = 0;
     char dummy;
     char* out = &dummy;
 
@@ -453,6 +455,16 @@ test_string16_null(
     data.buffer = gbinder_buffer_new(driver,
         g_memdup(TEST_ARRAY_AND_SIZE(test_string16_in_null)),
         sizeof(test_string16_in_null));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(test_string16_in_null));
+    g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, NULL, NULL));
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(test_string16_in_null));
+    g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, &out2, &len));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(!out2);
+    g_assert(!len);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(test_string16_in_null));
     g_assert(gbinder_reader_read_nullable_string16(&reader, NULL));
@@ -485,12 +497,30 @@ test_string16(
     GBinderReader reader;
     GBinderReaderData data;
     const gboolean valid = (test->out != NULL);
+    gunichar2* out2 = NULL;
+    gsize len = 0;
     char* str = NULL;
 
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(test->in, test->in_size),
         test->in_size);
+
+    gbinder_reader_init(&reader, &data, 0, test->in_size);
+    g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, NULL,
+        NULL) == valid);
+    g_assert(gbinder_reader_at_end(&reader) == (!test->remaining));
+    g_assert(gbinder_reader_bytes_remaining(&reader) == test->remaining);
+
+    gbinder_reader_init(&reader, &data, 0, test->in_size);
+    g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, &out2,
+        &len) == valid);
+    g_assert(gbinder_reader_at_end(&reader) == (!test->remaining));
+    g_assert(gbinder_reader_bytes_remaining(&reader) == test->remaining);
+    if (valid) {
+        g_assert(out2);
+        g_assert((gsize)len == strlen(test->out));
+    }
 
     gbinder_reader_init(&reader, &data, 0, test->in_size);
     g_assert(gbinder_reader_read_nullable_string16(&reader, NULL) == valid);
