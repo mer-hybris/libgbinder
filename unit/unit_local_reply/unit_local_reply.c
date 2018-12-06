@@ -359,7 +359,7 @@ test_hidl_string(
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
-    g_assert(gbinder_output_data_buffers_size(data) == sizeof(HidlString));
+    g_assert(gbinder_output_data_buffers_size(data)==sizeof(GBinderHidlString));
     g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
 }
@@ -382,7 +382,7 @@ test_hidl_string_vec(
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
-    g_assert(gbinder_output_data_buffers_size(data) == sizeof(HidlVec));
+    g_assert(gbinder_output_data_buffers_size(data) == sizeof(GBinderHidlVec));
     g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
 }

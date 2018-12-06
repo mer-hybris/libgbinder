@@ -46,28 +46,6 @@ typedef struct gbinder_output_data GBinderOutputData;
 typedef struct gbinder_rpc_protocol GBinderRpcProtocol;
 typedef struct gbinder_servicepoll GBinderServicePoll;
 
-typedef struct hidl_vec {
-    union {
-        guint64 value;
-        const void* ptr;
-    } data;
-    guint32 count;
-    guint32 owns_buffer;
-} HidlVec;
-
-#define HIDL_VEC_BUFFER_OFFSET (0)
-
-typedef struct hidl_string {
-    union {
-        guint64 value;
-        const char* str;
-    } data;
-    guint32 len;
-    guint32 owns_buffer;
-} HidlString;
-
-#define HIDL_STRING_BUFFER_OFFSET (0)
-
 #define GBINDER_INLINE_FUNC static inline
 
 #define GBINDER_TRANSACTION(c2,c3,c4)     GBINDER_FOURCC('_',c2,c3,c4)
