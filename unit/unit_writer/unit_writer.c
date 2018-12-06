@@ -74,6 +74,7 @@ test_null(
     gbinder_writer_append_string16(&writer, NULL);
     gbinder_writer_append_string16_len(NULL, NULL, 0);
     gbinder_writer_append_string16_len(&writer, NULL, 0);
+    gbinder_writer_append_string16_utf16(NULL, NULL, 0);
     gbinder_writer_append_bool(NULL, FALSE);
     gbinder_writer_append_bool(&writer, FALSE);
     gbinder_writer_append_bytes(NULL, NULL, 0);
@@ -339,6 +340,75 @@ test_string16(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == test->output_len);
     g_assert(!memcmp(data->bytes->data, test->output, test->output_len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * utf16
+ *==========================================================================*/
+
+typedef struct test_utf16_data {
+    const char* name;
+    const gunichar2* in;
+    gssize in_len;
+    const guint8* out;
+    gssize out_len;
+} TestUtf16Data;
+
+static const guint8 utf16_tests_data_null[] = {
+    TEST_INT32_BYTES(-1)
+};
+
+static const guint8 utf16_tests_data_empty[] = {
+    TEST_INT32_BYTES(0),
+    0x00, 0x00, 0xff, 0xff
+};
+
+static const guint8 utf16_tests_data_x[] = {
+    TEST_INT32_BYTES(1),
+    TEST_INT16_BYTES('x'), 0x00, 0x00
+};
+
+static const guint8 utf16_tests_data_xy[] = {
+    TEST_INT32_BYTES(2),
+    TEST_INT16_BYTES('x'), TEST_INT16_BYTES('y'),
+    0x00, 0x00, 0x00, 0x00
+};
+
+static const gunichar2 utf16_tests_input_empty[] = { 0 };
+static const gunichar2 utf16_tests_input_x[] = { 'x', 0 };
+static const gunichar2 utf16_tests_input_xy[] = { 'x', 'y', 0 };
+
+static const TestUtf16Data test_utf16_tests[] = {
+    { "null", NULL, -1,
+      TEST_ARRAY_AND_SIZE(utf16_tests_data_null) },
+    { "empty", utf16_tests_input_empty, -1,
+      TEST_ARRAY_AND_SIZE(utf16_tests_data_empty) },
+    { "1", utf16_tests_input_x, -1,
+      TEST_ARRAY_AND_SIZE(utf16_tests_data_x) },
+    { "2", utf16_tests_input_xy, 1,
+      TEST_ARRAY_AND_SIZE(utf16_tests_data_x) },
+    { "3", utf16_tests_input_xy, -1,
+      TEST_ARRAY_AND_SIZE(utf16_tests_data_xy) }
+};
+
+static
+void
+test_utf16(
+    gconstpointer test_data)
+{
+    const TestUtf16Data* test = test_data;
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_string16_utf16(&writer, test->in, test->in_len);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == test->out_len);
+    g_assert(!memcmp(data->bytes->data, test->out, test->out_len));
     gbinder_local_request_unref(req);
 }
 
@@ -745,41 +815,50 @@ test_byte_array(
  *==========================================================================*/
 
 #define TEST_PREFIX "/writer/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     guint i;
 
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "null", test_null);
-    g_test_add_func(TEST_PREFIX "int32", test_int32);
-    g_test_add_func(TEST_PREFIX "int64", test_int64);
-    g_test_add_func(TEST_PREFIX "float", test_float);
-    g_test_add_func(TEST_PREFIX "double", test_double);
-    g_test_add_func(TEST_PREFIX "bool", test_bool);
-    g_test_add_func(TEST_PREFIX "bytes", test_bytes);
-    g_test_add_func(TEST_PREFIX "string8", test_string8);
+    g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("int32"), test_int32);
+    g_test_add_func(TEST_("int64"), test_int64);
+    g_test_add_func(TEST_("float"), test_float);
+    g_test_add_func(TEST_("double"), test_double);
+    g_test_add_func(TEST_("bool"), test_bool);
+    g_test_add_func(TEST_("bytes"), test_bytes);
+    g_test_add_func(TEST_("string8"), test_string8);
 
     for (i = 0; i < G_N_ELEMENTS(test_string16_tests); i++) {
         const TestString16Data* test = test_string16_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "string16/", test->name, NULL);
+        char* path = g_strconcat(TEST_("string16/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_string16);
         g_free(path);
     }
 
+    for (i = 0; i < G_N_ELEMENTS(test_utf16_tests); i++) {
+        const TestUtf16Data* test = test_utf16_tests + i;
+        char* path = g_strconcat(TEST_("utf16/"), test->name, NULL);
+
+        g_test_add_data_func(path, test, test_utf16);
+        g_free(path);
+    }
+
     for (i = 0; i < G_N_ELEMENTS(test_hidl_vec_tests); i++) {
         const TestHidlVecData* test = test_hidl_vec_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "hidl_vec/", test->name, NULL);
+        char* path = g_strconcat(TEST_("hidl_vec/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_hidl_vec);
         g_free(path);
     }
 
-    g_test_add_func(TEST_PREFIX "hidl_string/2strings", test_hidl_string2);
+    g_test_add_func(TEST_("hidl_string/2strings"), test_hidl_string2);
     for (i = 0; i < G_N_ELEMENTS(test_hidl_string_tests); i++) {
         const TestHidlStringData* test = test_hidl_string_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "hidl_string/", test->name, NULL);
+        char* path = g_strconcat(TEST_("hidl_string/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_hidl_string);
         g_free(path);
@@ -787,18 +866,17 @@ int main(int argc, char* argv[])
 
     for (i = 0; i < G_N_ELEMENTS(test_hidl_string_vec_tests); i++) {
         const TestHidlStringVecData* test = test_hidl_string_vec_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "hidl_string_vec/",
-            test->name, NULL);
+        char* path = g_strconcat(TEST_("hidl_string_vec/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_hidl_string_vec);
         g_free(path);
     }
 
-    g_test_add_func(TEST_PREFIX "buffer", test_buffer);
-    g_test_add_func(TEST_PREFIX "parent", test_parent);
-    g_test_add_func(TEST_PREFIX "local_object", test_local_object);
-    g_test_add_func(TEST_PREFIX "remote_object", test_remote_object);
-    g_test_add_func(TEST_PREFIX "byte_array", test_byte_array);
+    g_test_add_func(TEST_("buffer"), test_buffer);
+    g_test_add_func(TEST_("parent"), test_parent);
+    g_test_add_func(TEST_("local_object"), test_local_object);
+    g_test_add_func(TEST_("remote_object"), test_remote_object);
+    g_test_add_func(TEST_("byte_array"), test_byte_array);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

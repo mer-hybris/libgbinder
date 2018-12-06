@@ -87,6 +87,12 @@ gbinder_writer_append_string16_len(
     gssize num_bytes);
 
 void
+gbinder_writer_append_string16_utf16(
+    GBinderWriter* writer,
+    const gunichar2* utf16,
+    gssize length); /* Since 1.0.17 */
+
+void
 gbinder_writer_append_string8(
     GBinderWriter* writer,
     const char* str);

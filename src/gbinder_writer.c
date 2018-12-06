@@ -351,15 +351,36 @@ gbinder_writer_data_append_string16(
     gbinder_writer_data_append_string16_len(data, utf8, utf8? strlen(utf8) : 0);
 }
 
+static
+void
+gbinder_writer_data_append_string16_null(
+    GBinderWriterData* data)
+{
+    /* NULL string */
+    gbinder_writer_data_append_int32(data, -1);
+}
+
+static
+void
+gbinder_writer_data_append_string16_empty(
+    GBinderWriterData* data)
+{
+    GByteArray* buf = data->bytes;
+    const gsize old_size = buf->len;
+    guint16* ptr16;
+
+    /* Empty string */
+    g_byte_array_set_size(buf, old_size + 8);
+    ptr16 = (guint16*)(buf->data + old_size);
+    ptr16[0] = ptr16[1] = ptr16[2] = 0; ptr16[3] = 0xffff;
+}
+
 void
 gbinder_writer_data_append_string16_len(
     GBinderWriterData* data,
     const char* utf8,
     gssize num_bytes)
 {
-    GByteArray* buf = data->bytes;
-    const gsize old_size = buf->len;
-
     if (utf8) {
         const char* end = utf8;
 
@@ -370,6 +391,8 @@ gbinder_writer_data_append_string16_len(
     }
 
     if (num_bytes > 0) {
+        GByteArray* buf = data->bytes;
+        const gsize old_size = buf->len;
         glong len = g_utf8_strlen(utf8, num_bytes);
         gsize padded_len = G_ALIGN4((len+1)*2);
         guint32* len_ptr;
@@ -407,14 +430,69 @@ gbinder_writer_data_append_string16_len(
         g_byte_array_set_size(buf, old_size + padded_len + 4);
     } else if (utf8) {
         /* Empty string */
-        guint16* ptr16;
-
-        g_byte_array_set_size(buf, old_size + 8);
-        ptr16 = (guint16*)(buf->data + old_size);
-        ptr16[0] = ptr16[1] = ptr16[2] = 0; ptr16[3] = 0xffff;
+        gbinder_writer_data_append_string16_empty(data);
     } else {
         /* NULL string */
-        gbinder_writer_data_append_int32(data, -1);
+        gbinder_writer_data_append_string16_null(data);
+    }
+}
+
+static
+void
+gbinder_writer_data_append_string16_utf16(
+    GBinderWriterData* data,
+    const gunichar2* utf16,
+    gssize length)
+{
+    if (length < 0) {
+        length = 0;
+        if (utf16) {
+            const guint16* ptr;
+
+            /* Assume NULL terminated string */
+            for (ptr = utf16; *ptr; ptr++);
+            length = ptr - utf16;
+        }
+    }
+    if (length > 0) {
+        GByteArray* buf = data->bytes;
+        const gsize old_size = buf->len;
+        const gsize padded_size = G_ALIGN4((length + 1) * 2);
+        guint32* len_ptr;
+        gunichar2* utf16_ptr;
+
+        /* Preallocate space */
+        g_byte_array_set_size(buf, old_size + padded_size + 4);
+        len_ptr = (guint32*)(buf->data + old_size);
+        utf16_ptr = (gunichar2*)(len_ptr + 1);
+
+        /* Actual length */
+        *len_ptr = length;
+
+        /* Characters */
+        memcpy(utf16_ptr, utf16, 2 * length);
+
+        /* Zero padding */
+        memset(utf16_ptr + length, 0, padded_size - 2 * length);
+    } else if (utf16) {
+        /* Empty string */
+        gbinder_writer_data_append_string16_empty(data);
+    } else {
+        /* NULL string */
+        gbinder_writer_data_append_string16_null(data);
+    }
+}
+
+void
+gbinder_writer_append_string16_utf16(
+    GBinderWriter* self,
+    const gunichar2* utf16,
+    gssize length) /* Since 1.0.17 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_string16_utf16(data, utf16, length);
     }
 }
 
