@@ -835,6 +835,14 @@ typedef struct test_hidl_string_err {
 } TestHidlStringErr;
 
 static const guint8 test_hidl_string_err_short [] = { 0x00 };
+static const guint8 test_hidl_string_err_bad_obj [] = {
+    TEST_INT32_BYTES(BINDER_TYPE_HANDLE),
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00
+};
 static const guint8 test_hidl_string_err_empty [] = {
     TEST_INT32_BYTES(BINDER_TYPE_PTR),
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -849,6 +857,7 @@ static const guint test_hidl_string_err_one_offset [] = { 0 };
 
 static const TestHidlStringErr test_hidl_string_err_tests [] = {
     { "no-data", TEST_ARRAY_AND_SIZE(test_hidl_string_err_short), NULL },
+    { "no-object", TEST_ARRAY_AND_SIZE(test_hidl_string_err_bad_obj), NULL },
     { "no-offset", TEST_ARRAY_AND_SIZE(test_hidl_string_err_empty), NULL },
     { "empty-offset", TEST_ARRAY_AND_SIZE(test_hidl_string_err_empty),
         test_hidl_string_err_one_offset, 0 },
@@ -1130,36 +1139,99 @@ test_byte_array(
 }
 
 /*==========================================================================*
+ * copy
+ *==========================================================================*/
+
+static
+void
+test_copy(
+    void)
+{
+    const char in_data1[] = "12345678";
+    const char in_data2[] = "abcdefgh";
+    gint32 in_len1 = sizeof(in_data1) - 1;
+    gint32 in_len2 = sizeof(in_data2) - 1;
+    const void* out_data = NULL;
+    gsize out_len = 0;
+    void* tmp;
+    guint8* ptr;
+    gsize tmp_len = 2 * sizeof(guint32) + in_len1 + in_len2;
+
+    GBinderDriver* driver;
+    GBinderReader reader;
+    GBinderReader reader2;
+    GBinderReaderData data;
+
+    /* test for data */
+    g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
+    ptr = tmp = g_malloc0(tmp_len);
+    memcpy(ptr, &in_len1, sizeof(in_len1));
+    ptr += sizeof(in_len1);
+    memcpy(ptr, in_data1, in_len1);
+    ptr += in_len1;
+    memcpy(ptr, &in_len2, sizeof(in_len2));
+    ptr += sizeof(in_len2);
+    memcpy(ptr, in_data2, in_len2);
+
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len);
+    gbinder_reader_init(&reader, &data, 0, tmp_len);
+
+    /* Read the first array */
+    g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
+    g_assert((gsize)in_len1 == out_len);
+    g_assert(memcmp(in_data1, out_data, in_len1) == 0);
+
+    /* Copy the reader */
+    gbinder_reader_copy(&reader2, &reader);
+
+    /* Read both and compare the output */
+    g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert((gsize)in_len2 == out_len);
+    g_assert(memcmp(in_data2, out_data, in_len2) == 0);
+
+    g_assert((out_data = gbinder_reader_read_byte_array(&reader2, &out_len)));
+    g_assert(gbinder_reader_at_end(&reader2));
+    g_assert((gsize)in_len2 == out_len);
+    g_assert(memcmp(in_data2, out_data, in_len2) == 0);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
 #define TEST_PREFIX "/reader/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     guint i;
 
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "empty", test_empty);
-    g_test_add_func(TEST_PREFIX "byte", test_byte);
-    g_test_add_func(TEST_PREFIX "bool", test_bool);
-    g_test_add_func(TEST_PREFIX "int32", test_int32);
-    g_test_add_func(TEST_PREFIX "int64", test_int64);
-    g_test_add_func(TEST_PREFIX "float", test_float);
-    g_test_add_func(TEST_PREFIX "double", test_double);
+    g_test_add_func(TEST_("empty"), test_empty);
+    g_test_add_func(TEST_("byte"), test_byte);
+    g_test_add_func(TEST_("bool"), test_bool);
+    g_test_add_func(TEST_("int32"), test_int32);
+    g_test_add_func(TEST_("int64"), test_int64);
+    g_test_add_func(TEST_("float"), test_float);
+    g_test_add_func(TEST_("double"), test_double);
 
     for (i = 0; i < G_N_ELEMENTS(test_string8_tests); i++) {
         const TestStringData* test = test_string8_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "/string8/", test->name, NULL);
+        char* path = g_strconcat(TEST_("string8/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_string8);
         g_free(path);
     }
 
-    g_test_add_func(TEST_PREFIX "/string16/null", test_string16_null);
+    g_test_add_func(TEST_("string16/null"), test_string16_null);
     for (i = 0; i < G_N_ELEMENTS(test_string16_tests); i++) {
         const TestStringData* test = test_string16_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "/string16/", test->name, NULL);
+        char* path = g_strconcat(TEST_("string16/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_string16);
         g_free(path);
@@ -1167,7 +1239,7 @@ int main(int argc, char* argv[])
 
     for (i = 0; i < G_N_ELEMENTS(test_hidl_struct_tests); i++) {
         const TestHidlStruct* test = test_hidl_struct_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "/hidl_struct/", test->name,
+        char* path = g_strconcat(TEST_("hidl_struct/"), test->name,
             NULL);
 
         g_test_add_data_func(path, test, test_hidl_struct);
@@ -1176,7 +1248,7 @@ int main(int argc, char* argv[])
 
     for (i = 0; i < G_N_ELEMENTS(test_hidl_vec_tests); i++) {
         const TestHidlVec* test = test_hidl_vec_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "/hidl_vec/", test->name,
+        char* path = g_strconcat(TEST_("hidl_vec/"), test->name,
             NULL);
 
         g_test_add_data_func(path, test, test_hidl_vec);
@@ -1185,18 +1257,19 @@ int main(int argc, char* argv[])
 
     for (i = 0; i < G_N_ELEMENTS(test_hidl_string_err_tests); i++) {
         const TestHidlStringErr* test = test_hidl_string_err_tests + i;
-        char* path = g_strconcat(TEST_PREFIX "/hidl_string/err-", test->name,
+        char* path = g_strconcat(TEST_("hidl_string/err-"), test->name,
             NULL);
 
         g_test_add_data_func(path, test, test_hidl_string_err);
         g_free(path);
     }
 
-    g_test_add_func(TEST_PREFIX "/object/object", test_object);
-    g_test_add_func(TEST_PREFIX "/object/object/invalid", test_object_invalid);
-    g_test_add_func(TEST_PREFIX "/object/object/no_reg", test_object_no_reg);
-    g_test_add_func(TEST_PREFIX "/vec", test_vec);
-    g_test_add_func(TEST_PREFIX "/byte_array", test_byte_array);
+    g_test_add_func(TEST_("object/valid"), test_object);
+    g_test_add_func(TEST_("object/invalid"), test_object_invalid);
+    g_test_add_func(TEST_("object/no_reg"), test_object_no_reg);
+    g_test_add_func(TEST_("vec"), test_vec);
+    g_test_add_func(TEST_("byte_array"), test_byte_array);
+    g_test_add_func(TEST_("copy"), test_copy);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

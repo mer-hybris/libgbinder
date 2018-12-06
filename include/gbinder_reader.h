@@ -53,7 +53,7 @@ struct gbinder_reader {
 
 gboolean
 gbinder_reader_at_end(
-    GBinderReader* reader);
+    const GBinderReader* reader);
 
 gboolean
 gbinder_reader_read_byte(
@@ -176,11 +176,16 @@ gbinder_reader_read_byte_array(
 
 gsize
 gbinder_reader_bytes_read(
-    GBinderReader* reader);
+    const GBinderReader* reader);
 
 gsize
 gbinder_reader_bytes_remaining(
-    GBinderReader* reader);
+    const GBinderReader* reader);
+
+void
+gbinder_reader_copy(
+    GBinderReader* dest,
+    const GBinderReader* src); /* Since 1.0.16 */
 
 G_END_DECLS
 
