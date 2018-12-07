@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -83,15 +83,26 @@ app_reply(
     int* status,
     void* user_data)
 {
-    char* str = gbinder_remote_request_read_string16(req);
-    GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
+    if (code == GBINDER_FIRST_CALL_TRANSACTION) {
+        App* app = user_data;
+        const char* iface = gbinder_remote_request_interface(req);
 
-    GVERBOSE("\"%s\" %u", gbinder_remote_request_interface(req), code);
-    GDEBUG("\"%s\"", str);
-    gbinder_local_reply_append_string16(reply, str);
-    g_free(str);
-    *status = 0;
-    return reply;
+        if (!g_strcmp0(iface, app->opt->iface)) {
+            char* str = gbinder_remote_request_read_string16(req);
+            GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
+
+            GVERBOSE("\"%s\" %u", iface, code);
+            GDEBUG("\"%s\"", str);
+            gbinder_local_reply_append_string16(reply, str);
+            g_free(str);
+            *status = 0;
+            return reply;
+        } else {
+             GDEBUG("Unexpected interface \"%s\"", iface);
+        }
+    }
+    *status = -1;
+    return NULL;
 }
 
 static
