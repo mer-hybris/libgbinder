@@ -248,7 +248,7 @@ $(COVERAGE_LIB): $(COVERAGE_OBJS)
 	$(AR) rc $@ $?
 	ranlib $@
 
-$(PKGCONFIG): $(LIB_NAME).pc.in
+$(PKGCONFIG): $(LIB_NAME).pc.in Makefile
 	sed -e 's/\[version\]/'$(PCVERSION)/g $< > $@
 
 #
