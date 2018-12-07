@@ -1,3 +1,10 @@
+libgbinder (1.0.17) unstable; urgency=low
+
+  * Added gbinder_writer_append_string16_utf16()
+  * Added gbinder_reader_read_nullable_string16_utf16()
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 07 Dec 2018 02:54:07 +0200
+
 libgbinder (1.0.16) unstable; urgency=low
 
   * Added GBinderHidlVec and GBinderHidlString types
