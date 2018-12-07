@@ -47,8 +47,7 @@ gbinder_local_reply_data(
 
 GBinderLocalReply*
 gbinder_local_reply_new_from_data(
-    GBinderBuffer* buffer,
-    void** objects);
+    GBinderBuffer* buffer);
 
 #endif /* GBINDER_LOCAL_REPLY_PRIVATE_H */
 

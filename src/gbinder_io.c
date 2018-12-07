@@ -411,6 +411,28 @@ GBINDER_IO_FN(decode_buffer_object)(
     return 0;
 }
 
+static
+guint
+GBINDER_IO_FN(decode_fd_object)(
+    const void* data,
+    gsize size,
+    int* fd)
+{
+    const struct flat_binder_object* obj = data;
+
+    if (size >= sizeof(*obj)) {
+        switch (obj->hdr.type) {
+        case BINDER_TYPE_FD:
+            if (fd) *fd = obj->handle;
+            return sizeof(*obj);
+        default:
+            break;
+        }
+    }
+    if (fd) *fd = -1;
+    return 0;
+}
+
 const GBinderIo GBINDER_IO_PREFIX = {
     .version = BINDER_CURRENT_PROTOCOL_VERSION,
     .pointer_size = GBINDER_POINTER_SIZE,
@@ -478,6 +500,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .decode_binder_ptr_cookie = GBINDER_IO_FN(decode_binder_ptr_cookie),
     .decode_binder_object = GBINDER_IO_FN(decode_binder_object),
     .decode_buffer_object = GBINDER_IO_FN(decode_buffer_object),
+    .decode_fd_object = GBINDER_IO_FN(decode_fd_object),
 
     /* ioctl wrappers */
     .write_read = GBINDER_IO_FN(write_read)

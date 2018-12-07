@@ -53,8 +53,7 @@ gbinder_writer_init(
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
-    GBinderBuffer* buffer,
-    void** objects);
+    GBinderBuffer* buffer);
 
 void
 gbinder_writer_data_append_bool(

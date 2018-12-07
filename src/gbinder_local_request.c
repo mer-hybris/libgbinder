@@ -105,14 +105,13 @@ gbinder_local_request_new(
 
 GBinderLocalRequest*
 gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer,
-    void** objects)
+    GBinderBuffer* buffer)
 {
     GBinderLocalRequest* self = gbinder_local_request_new
         (gbinder_buffer_io(buffer), NULL);
 
     if (self) {
-        gbinder_writer_data_set_contents(&self->data, buffer, objects);
+        gbinder_writer_data_set_contents(&self->data, buffer);
     }
     return self;
 }

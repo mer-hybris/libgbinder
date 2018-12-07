@@ -69,9 +69,13 @@ static
 const char*
 gbinder_rpc_protocol_binder_read_rpc_header(
     GBinderReader* reader,
+    guint32 txcode,
     char** iface)
 {
-    if (gbinder_reader_read_int32(reader, NULL)) {
+    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+        /* Internal transaction e.g. GBINDER_DUMP_TRANSACTION etc. */
+        *iface = NULL;
+    } else if (gbinder_reader_read_int32(reader, NULL)) {
         *iface = gbinder_reader_read_string16(reader);
     } else {
         *iface = NULL;
@@ -99,6 +103,7 @@ static
 const char*
 gbinder_rpc_protocol_hwbinder_read_rpc_header(
     GBinderReader* reader,
+    guint32 txcode,
     char** iface)
 {
     *iface = NULL;

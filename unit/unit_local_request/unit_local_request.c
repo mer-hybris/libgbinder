@@ -65,7 +65,19 @@ test_buffer_from_bytes(
 {
     /* Prevent double free */
     test_binder_set_destroy(gbinder_driver_fd(driver), bytes->data, NULL);
-    return gbinder_buffer_new(driver, bytes->data, bytes->len);
+    return gbinder_buffer_new(driver, bytes->data, bytes->len, NULL);
+}
+
+static
+GBinderBuffer*
+test_buffer_from_bytes_and_objects(
+    GBinderDriver* driver,
+    const GByteArray* bytes,
+    void** objects)
+{
+    /* Prevent double free */
+    test_binder_set_destroy(gbinder_driver_fd(driver), bytes->data, NULL);
+    return gbinder_buffer_new(driver, bytes->data, bytes->len, objects);
 }
 
 /*==========================================================================*
@@ -82,7 +94,7 @@ test_null(
 
     g_assert(!gbinder_local_request_new(NULL, NULL));
     g_assert(!gbinder_local_request_ref(NULL));
-    g_assert(!gbinder_local_request_new_from_data(NULL, NULL));
+    g_assert(!gbinder_local_request_new_from_data(NULL));
     gbinder_local_request_unref(NULL);
     gbinder_local_request_init_writer(NULL, NULL);
     gbinder_local_request_init_writer(NULL, &writer);
@@ -471,14 +483,14 @@ test_remote_request(
     const GByteArray* bytes;
     const GByteArray* bytes2;
     GBinderBuffer* buffer;
-    void* no_obj = NULL;
+    void** no_obj = g_new0(void*, 1);
 
     gbinder_local_request_append_string8(req, input);
     bytes = gbinder_local_request_data(req)->bytes;
 
     /* Copy flat structures (no binder objects) */
     buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_request_new_from_data(buffer, NULL);
+    req2 = gbinder_local_request_new_from_data(buffer);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_request_data(req2);
@@ -490,8 +502,8 @@ test_remote_request(
     gbinder_local_request_unref(req2);
 
     /* Same thing but with non-NULL (albeit empty) array of objects */
-    buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_request_new_from_data(buffer, &no_obj);
+    buffer = test_buffer_from_bytes_and_objects(driver, bytes, no_obj);
+    req2 = gbinder_local_request_new_from_data(buffer);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_request_data(req2);
@@ -559,15 +571,15 @@ test_remote_request_obj(
         objects[i] = bytes->data + offsets->data[i];
     }
 
-    buffer = test_buffer_from_bytes(driver, data->bytes);
-    req2 = gbinder_local_request_new_from_data(buffer, objects);
+    buffer = test_buffer_from_bytes_and_objects(driver, data->bytes, objects);
+    req2 = gbinder_local_request_new_from_data(buffer);
     gbinder_buffer_free(buffer);
-    g_free(objects);
 
     test_remote_request_obj_validate_data(gbinder_local_request_data(req2));
 
-    gbinder_local_request_unref(req);
+    /* req2 has to be freed first because req owns data */
     gbinder_local_request_unref(req2);
+    gbinder_local_request_unref(req);
     gbinder_driver_unref(driver);
 }
 

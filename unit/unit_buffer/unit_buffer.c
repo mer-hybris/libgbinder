@@ -47,19 +47,21 @@ test_null(
     void)
 {
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderBuffer* buf = gbinder_buffer_new(NULL, NULL, 0);
+    GBinderBuffer* buf = gbinder_buffer_new(NULL, NULL, 0, NULL);
     GBinderBuffer* buf2;
     gsize size = 1;
 
     gbinder_buffer_free(buf);
 
     /* No need to reference the driver if there's no data */
-    buf = gbinder_buffer_new(driver, NULL, 0);
+    buf = gbinder_buffer_new(driver, NULL, 0, NULL);
     g_assert(!gbinder_buffer_driver(buf));
     gbinder_buffer_free(buf);
 
     buf = gbinder_buffer_new_with_parent(NULL, NULL, 0);
     buf2 = gbinder_buffer_new_with_parent(buf, NULL, 0);
+    g_assert(!gbinder_buffer_objects(buf));
+    g_assert(!gbinder_buffer_objects(buf2));
     g_assert(!gbinder_buffer_driver(buf));
     g_assert(!gbinder_buffer_driver(buf2));
     gbinder_buffer_free(buf);
@@ -67,6 +69,7 @@ test_null(
 
     gbinder_buffer_free(NULL);
     g_assert(!gbinder_buffer_driver(NULL));
+    g_assert(!gbinder_buffer_objects(NULL));
     g_assert(!gbinder_buffer_io(NULL));
     g_assert(!gbinder_buffer_data(NULL, NULL));
     g_assert(!gbinder_buffer_data(NULL, &size));
@@ -87,14 +90,14 @@ test_parent(
     void* ptr = g_memdup(data, sizeof(data));
     gsize size = 0;
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderBuffer* parent = gbinder_buffer_new(driver, ptr, sizeof(data));
+    GBinderBuffer* parent = gbinder_buffer_new(driver, ptr, sizeof(data), NULL);
     GBinderBuffer* buf = gbinder_buffer_new_with_parent
         (parent, ptr, sizeof(data));
 
     g_assert(gbinder_buffer_driver(buf) == driver);
     g_assert(gbinder_buffer_io(buf));
     g_assert(gbinder_buffer_io(buf) == gbinder_driver_io(driver));
-    g_assert(gbinder_buffer_memory(buf));
+    g_assert(gbinder_buffer_contents(buf));
     g_assert(gbinder_buffer_data(buf, NULL) == ptr);
     g_assert(gbinder_buffer_data(buf, &size) == ptr);
     g_assert(size == sizeof(data));

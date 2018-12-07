@@ -121,7 +121,7 @@ test_byte(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
-        sizeof(in));
+        sizeof(in), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_byte(&reader, &out));
@@ -155,7 +155,7 @@ test_bool(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver,
-        g_memdup(&in_true, sizeof(in_true)), sizeof(in_true));
+        g_memdup(&in_true, sizeof(in_true)), sizeof(in_true), NULL);
 
     /* true */
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
@@ -170,7 +170,7 @@ test_bool(
     /* false */
     gbinder_buffer_free(data.buffer);
     data.buffer = gbinder_buffer_new(driver,
-        g_memdup(&in_false, sizeof(in_false)), sizeof(in_false));
+        g_memdup(&in_false, sizeof(in_false)), sizeof(in_false), NULL);
 
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
     g_assert(gbinder_reader_read_bool(&reader, NULL));
@@ -204,7 +204,7 @@ test_int32(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
-        sizeof(in));
+        sizeof(in), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_uint32(&reader, &out1));
@@ -243,7 +243,7 @@ test_int64(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
-        sizeof(in));
+        sizeof(in), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_uint64(&reader, &out1));
@@ -282,7 +282,7 @@ test_float(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
-        sizeof(in));
+        sizeof(in), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_float(&reader, &out1));
@@ -321,7 +321,7 @@ test_double(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(&in, sizeof(in)),
-        sizeof(in));
+        sizeof(in), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_double(&reader, &out1));
@@ -386,7 +386,7 @@ test_string8(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(test->in, test->in_size),
-        test->in_size);
+        test->in_size, NULL);
 
     gbinder_reader_init(&reader, &data, 0, test->in_size);
     str = gbinder_reader_read_string8(&reader);
@@ -454,7 +454,7 @@ test_string16_null(
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver,
         g_memdup(TEST_ARRAY_AND_SIZE(test_string16_in_null)),
-        sizeof(test_string16_in_null));
+        sizeof(test_string16_in_null), NULL);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(test_string16_in_null));
     g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, NULL, NULL));
@@ -504,7 +504,7 @@ test_string16(
     g_assert(driver);
     memset(&data, 0, sizeof(data));
     data.buffer = gbinder_buffer_new(driver, g_memdup(test->in, test->in_size),
-        test->in_size);
+        test->in_size, NULL);
 
     gbinder_reader_init(&reader, &data, 0, test->in_size);
     g_assert(gbinder_reader_read_nullable_string16_utf16(&reader, NULL,
@@ -596,7 +596,7 @@ test_hidl_struct(
     const TestHidlStruct* test = test_data;
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(test->in, test->in_size), test->in_size);
+        g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
     GBinderReader reader;
 
@@ -801,7 +801,7 @@ test_hidl_vec(
     const TestHidlVec* test = test_data;
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(test->in, test->in_size), test->in_size);
+        g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
     GBinderReader reader;
     gsize n = 0, elem = 0;
@@ -907,7 +907,7 @@ test_hidl_string_err(
     const TestHidlStringErr* test = test_data;
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(test->in, test->in_size), test->in_size);
+        g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
     GBinderReader reader;
 
@@ -949,7 +949,7 @@ test_object(
     };
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(input, sizeof(input)), sizeof(input));
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderRemoteObject* obj = NULL;
     GBinderReaderData data;
     GBinderReader reader;
@@ -1007,7 +1007,7 @@ test_object_invalid(
     };
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(input, sizeof(input)), sizeof(input));
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderRemoteObject* obj = NULL;
     GBinderReaderData data;
     GBinderReader reader;
@@ -1056,7 +1056,7 @@ test_vec(
     /* This one will fail because the buffer is one byte short */
     obj.length = sizeof(vec) - 1;
     data.buffer =  gbinder_buffer_new(ipc->driver,
-        g_memdup(&obj, sizeof(obj)), sizeof(obj));
+        g_memdup(&obj, sizeof(obj)), sizeof(obj), NULL);
     data.reg = gbinder_ipc_object_registry(ipc);
     data.objects = g_new(void*, 2);
     data.objects[0] = data.buffer->data;
@@ -1068,7 +1068,7 @@ test_vec(
     obj.length = sizeof(vec);
     gbinder_buffer_free(data.buffer);
     data.buffer = gbinder_buffer_new(ipc->driver,
-        g_memdup(&obj, sizeof(obj)), sizeof(obj));
+        g_memdup(&obj, sizeof(obj)), sizeof(obj), NULL);
     data.objects[0] = data.buffer->data;
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
     out = gbinder_reader_read_hidl_string_vec(&reader);
@@ -1107,7 +1107,7 @@ test_byte_array(
     tmp = g_malloc0(1);
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, 1);
+    data.buffer = gbinder_buffer_new(driver, tmp, 1, NULL);
     gbinder_reader_init(&reader, &data, 0, 1);
 
     g_assert(!gbinder_reader_read_byte_array(&reader, &out_len));
@@ -1123,7 +1123,7 @@ test_byte_array(
     memcpy(tmp, &in_len, sizeof(in_len));
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, in_len - 1);
+    data.buffer = gbinder_buffer_new(driver, tmp, in_len - 1, NULL);
     gbinder_reader_init(&reader, &data, 0, in_len - 1);
 
     g_assert(!gbinder_reader_read_byte_array(&reader, &out_len));
@@ -1139,7 +1139,7 @@ test_byte_array(
     memcpy(tmp, &null_len, sizeof(null_len));
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, sizeof(null_len));
+    data.buffer = gbinder_buffer_new(driver, tmp, sizeof(null_len), NULL);
     gbinder_reader_init(&reader, &data, 0, sizeof(null_len));
 
     g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
@@ -1156,7 +1156,7 @@ test_byte_array(
     memcpy(tmp + sizeof(in_len), in_data, in_len);
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len);
+    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len, NULL);
     gbinder_reader_init(&reader, &data, 0, tmp_len);
 
     g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
@@ -1204,7 +1204,7 @@ test_copy(
     memcpy(ptr, in_data2, in_len2);
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len);
+    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len, NULL);
     gbinder_reader_init(&reader, &data, 0, tmp_len);
 
     /* Read the first array */

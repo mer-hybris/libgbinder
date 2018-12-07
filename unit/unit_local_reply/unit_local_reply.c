@@ -67,7 +67,7 @@ test_buffer_from_bytes(
 {
     /* Prevent double free */
     test_binder_set_destroy(gbinder_driver_fd(driver), bytes->data, NULL);
-    return gbinder_buffer_new(driver, bytes->data, bytes->len);
+    return gbinder_buffer_new(driver, bytes->data, bytes->len, NULL);
 }
 
 /*==========================================================================*
@@ -88,7 +88,7 @@ test_null(
     gbinder_local_reply_init_writer(NULL, NULL);
     gbinder_local_reply_init_writer(NULL, &writer);
     g_assert(!gbinder_local_reply_data(NULL));
-    g_assert(!gbinder_local_reply_new_from_data(NULL, NULL));
+    g_assert(!gbinder_local_reply_new_from_data(NULL));
 
     gbinder_local_reply_cleanup(NULL, NULL, &count);
     gbinder_local_reply_cleanup(NULL, test_int_inc, &count);
@@ -479,7 +479,7 @@ test_remote_reply(
 
     /* Copy flat structures (no binder objects) */
     buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_reply_new_from_data(buffer, NULL);
+    req2 = gbinder_local_reply_new_from_data(buffer);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_reply_data(req2);

@@ -54,22 +54,21 @@ GBINDER_INLINE_FUNC GBinderWriterData* gbinder_writer_data(GBinderWriter* pub)
 
 static
 void
-gbinder_writer_data_memory_cleanup(
-    gpointer memory)
+gbinder_writer_data_buffer_cleanup(
+    gpointer data)
 {
-    gbinder_buffer_memory_unref(memory);
+    gbinder_buffer_contents_unref((GBinderBufferContents*)data);
 }
 
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
-    GBinderBuffer* buffer,
-    void** objects)
+    GBinderBuffer* buffer)
 {
     gsize bufsize;
     const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
     const GBinderIo* io = gbinder_buffer_io(buffer);
-    GBinderBufferMemory* mem = gbinder_buffer_memory(buffer);
+    GBinderBufferContents* contents = gbinder_buffer_contents(buffer);
 
     GASSERT(data->io == io);
     g_byte_array_set_size(data->bytes, 0);
@@ -77,24 +76,26 @@ gbinder_writer_data_set_contents(
     data->buffers_size = 0;
 
     g_byte_array_append(data->bytes, bufdata, bufsize);
-    if (mem) {
-        data->cleanup = gbinder_cleanup_add(data->cleanup,
-            gbinder_writer_data_memory_cleanup,
-            gbinder_buffer_memory_ref(mem));
-    }
-    if (objects && *objects) {
-        if (!data->offsets) {
-            data->offsets = gutil_int_array_new();
-        }
-        while (*objects) {
-            const guint8* obj = *objects++;
-            gsize offset = obj - bufdata;
-            gsize objsize = io->object_data_size(obj);
+    if (contents) {
+        void** objects = gbinder_buffer_objects(buffer);
 
-            GASSERT(offset > 0 && offset < bufsize);
-            gutil_int_array_append(data->offsets, (int)offset);
-            /* Size of each buffer has to be 8-byte aligned */
-            data->buffers_size += G_ALIGN8(objsize);
+        data->cleanup = gbinder_cleanup_add(data->cleanup,
+            gbinder_writer_data_buffer_cleanup,
+            gbinder_buffer_contents_ref(contents));
+        if (objects && *objects) {
+            if (!data->offsets) {
+                data->offsets = gutil_int_array_new();
+            }
+            while (*objects) {
+                const guint8* obj = *objects++;
+                gsize offset = obj - bufdata;
+                gsize objsize = io->object_data_size(obj);
+
+                GASSERT(offset > 0 && offset < bufsize);
+                gutil_int_array_append(data->offsets, (int)offset);
+                /* Size of each buffer has to be 8-byte aligned */
+                data->buffers_size += G_ALIGN8(objsize);
+            }
         }
     }
 }

@@ -167,6 +167,7 @@ struct gbinder_io {
        GBinderObjectRegistry* reg, GBinderRemoteObject** obj);
     guint (*decode_buffer_object)(GBinderBuffer* buf, gsize offset,
         GBinderBuffer** out);
+    guint (*decode_fd_object)(const void* data, gsize size, int* fd);
 
     /* ioctl wrappers */
     int (*write_read)(int fd, GBinderIoBuf* write, GBinderIoBuf* read);

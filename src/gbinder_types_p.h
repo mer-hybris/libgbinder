@@ -35,7 +35,7 @@
 
 #include <gbinder_types.h>
 
-typedef struct gbinder_buffer_memory GBinderBufferMemory;
+typedef struct gbinder_buffer_contents GBinderBufferContents;
 typedef struct gbinder_cleanup GBinderCleanup;
 typedef struct gbinder_driver GBinderDriver;
 typedef struct gbinder_handler GBinderHandler;

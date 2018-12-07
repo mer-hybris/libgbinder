@@ -34,7 +34,7 @@
 #include "gbinder_local_reply_p.h"
 #include "gbinder_reader_p.h"
 #include "gbinder_object_registry.h"
-#include "gbinder_buffer.h"
+#include "gbinder_buffer_p.h"
 #include "gbinder_log.h"
 
 #include <gutil_macros.h>
@@ -65,26 +65,22 @@ gbinder_remote_reply_free(
 
     gbinder_object_registry_unref(data->reg);
     gbinder_buffer_free(data->buffer);
-    g_free(data->objects);
     g_slice_free(GBinderRemoteReply, self);
 }
 
 void
 gbinder_remote_reply_set_data(
     GBinderRemoteReply* self,
-    GBinderBuffer* buffer,
-    void** objects)
+    GBinderBuffer* buffer)
 {
     if (G_LIKELY(self)) {
         GBinderReaderData* data = &self->data;
 
-        g_free(data->objects);
         gbinder_buffer_free(data->buffer);
         data->buffer = buffer;
-        data->objects = objects;
+        data->objects = gbinder_buffer_objects(buffer);
     } else {
         gbinder_buffer_free(buffer);
-        g_free(objects);
     }
 }
 
@@ -125,7 +121,7 @@ gbinder_remote_reply_copy_to_local(
     if (G_LIKELY(self)) {
         GBinderReaderData* d = &self->data;
 
-        return gbinder_local_reply_new_from_data(d->buffer, d->objects);
+        return gbinder_local_reply_new_from_data(d->buffer);
     }
     return NULL;
 }

@@ -35,7 +35,7 @@
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_local_request_p.h"
 #include "gbinder_object_registry.h"
-#include "gbinder_buffer.h"
+#include "gbinder_buffer_p.h"
 #include "gbinder_log.h"
 
 #include <gutil_macros.h>
@@ -76,7 +76,7 @@ gbinder_remote_request_copy_to_local(
     if (G_LIKELY(self)) {
         GBinderReaderData* d = &self->data;
 
-        return gbinder_local_request_new_from_data(d->buffer, d->objects);
+        return gbinder_local_request_new_from_data(d->buffer);
     }
     return NULL;
 }
@@ -90,7 +90,6 @@ gbinder_remote_request_free(
 
     gbinder_object_registry_unref(data->reg);
     gbinder_buffer_free(data->buffer);
-    g_free(data->objects);
     g_free(self->iface2);
     g_slice_free(GBinderRemoteRequest, self);
 }
@@ -117,27 +116,30 @@ gbinder_remote_request_init_reader2(
 void
 gbinder_remote_request_set_data(
     GBinderRemoteRequest* self,
-    GBinderBuffer* buffer,
-    void** objects)
+    guint32 txcode,
+    GBinderBuffer* buffer)
 {
     if (G_LIKELY(self)) {
         GBinderReaderData* data = &self->data;
         GBinderReader reader;
 
         g_free(self->iface2);
-        g_free(data->objects);
         gbinder_buffer_free(data->buffer);
         data->buffer = buffer;
-        data->objects = objects;
+        data->objects = gbinder_buffer_objects(buffer);
 
         /* Parse RPC header */
-        self->header_size = 0;
         gbinder_remote_request_init_reader2(self, &reader);
-        self->iface = self->protocol->read_rpc_header(&reader, &self->iface2);
-        self->header_size = gbinder_reader_bytes_read(&reader);
+        self->iface = self->protocol->read_rpc_header(&reader, txcode,
+            &self->iface2);
+        if (self->iface) {
+            self->header_size = gbinder_reader_bytes_read(&reader);
+        } else {
+            /* No RPC header */
+            self->header_size = 0;
+        }
     } else {
         gbinder_buffer_free(buffer);
-        g_free(objects);
     }
 }
 
