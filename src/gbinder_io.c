@@ -153,6 +153,21 @@ GBINDER_IO_FN(encode_remote_object)(
     return sizeof(*dest);
 }
 
+static
+guint
+GBINDER_IO_FN(encode_fd_object)(
+    void* out,
+    int fd)
+{
+    struct flat_binder_object* dest = out;
+
+    memset(dest, 0, sizeof(*dest));
+    dest->hdr.type = BINDER_TYPE_FD;
+    dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
+    dest->handle = fd;
+    return sizeof(*dest);
+}
+
 /* Encodes binder_buffer_object */
 static
 guint
@@ -488,6 +503,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .encode_pointer = GBINDER_IO_FN(encode_pointer),
     .encode_local_object = GBINDER_IO_FN(encode_local_object),
     .encode_remote_object = GBINDER_IO_FN(encode_remote_object),
+    .encode_fd_object = GBINDER_IO_FN(encode_fd_object),
     .encode_buffer_object = GBINDER_IO_FN(encode_buffer_object),
     .encode_death_notification = GBINDER_IO_FN(encode_death_notification),
     .encode_transaction = GBINDER_IO_FN(encode_transaction),

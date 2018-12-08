@@ -39,6 +39,9 @@
 #include "gbinder_remote_object_p.h"
 #include "gbinder_io.h"
 
+#include <unistd.h>
+#include <fcntl.h>
+
 static TestOpt test_opt;
 
 typedef struct binder_buffer_object_64 {
@@ -53,9 +56,12 @@ typedef struct binder_buffer_object_64 {
     guint64 parent_offset;
 } BinderObject64;
 
-#define BINDER_TYPE_HANDLE GBINDER_FOURCC('s','h','*',0x85)
-#define BINDER_TYPE_PTR GBINDER_FOURCC('p','t','*',0x85)
+#define BINDER_TYPE_(c1,c2,c3) GBINDER_FOURCC(c1,c2,c3,0x85)
+#define BINDER_TYPE_HANDLE BINDER_TYPE_('s','h','*')
+#define BINDER_TYPE_PTR BINDER_TYPE_('p','t','*')
+#define BINDER_TYPE_FD BINDER_TYPE_('f', 'd', '*')
 #define BINDER_BUFFER_FLAG_HAS_PARENT 0x01
+#define BINDER_FLAG_ACCEPTS_FDS 0x100
 #define BUFFER_OBJECT_SIZE_64 (GBINDER_MAX_BUFFER_OBJECT_SIZE)
 G_STATIC_ASSERT(sizeof(BinderObject64) == BUFFER_OBJECT_SIZE_64);
 
@@ -934,6 +940,256 @@ test_hidl_string_err(
 }
 
 /*==========================================================================*
+ * fd_ok
+ *==========================================================================*/
+
+static
+void
+test_fd_ok(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int fd = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_FD),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS),
+        TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_read_fd(&reader) == fd);
+    gbinder_driver_close_fds(ipc->driver, data.objects,
+        (guint8*)buf->data + buf->size);
+    /* The above call must have closed the descriptor */
+    g_assert(close(fd) < 0);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * fd_shortbuf
+ *==========================================================================*/
+
+static
+void
+test_fd_shortbuf(
+    void)
+{
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_FD),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_read_fd(&reader) < 0);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * fd_badtype
+ *==========================================================================*/
+
+static
+void
+test_fd_badtype(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int fd = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS),
+        TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_read_fd(&reader) < 0);
+    gbinder_driver_close_fds(ipc->driver, data.objects,
+        (guint8*)buf->data + buf->size);
+    /* The above call doesn't close the descriptor */
+    g_assert(close(fd) == 0);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * dupfd_ok
+ *==========================================================================*/
+
+static
+void
+test_dupfd_ok(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int fd = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_FD),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS),
+        TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+    int fd2;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    fd2 = gbinder_reader_read_dup_fd(&reader);
+    g_assert(fd2 >= 0);
+    g_assert(fd2 != fd);
+    gbinder_driver_close_fds(ipc->driver, data.objects,
+        (guint8*)buf->data + buf->size);
+    /* The above call closes fd*/
+    g_assert(close(fd) < 0);
+    g_assert(close(fd2) == 0);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * dupfd_badtype
+ *==========================================================================*/
+
+static
+void
+test_dupfd_badtype(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int fd = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS),
+        TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_read_dup_fd(&reader) < 0);
+    gbinder_driver_close_fds(ipc->driver, data.objects,
+        (guint8*)buf->data + buf->size);
+    /* The above call doesn't close fd*/
+    g_assert(close(fd) == 0);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * dupfd_badfd
+ *==========================================================================*/
+
+static
+void
+test_dupfd_badfd(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int fd = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
+    const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_FD),
+        TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS),
+        TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    /* Invalidate the descriptor by closing it */
+    g_assert(close(fd) == 0);
+    g_assert(gbinder_reader_read_dup_fd(&reader) < 0);
+    gbinder_driver_close_fds(ipc->driver, data.objects,
+        (guint8*)buf->data + buf->size);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
  * object
  *==========================================================================*/
 
@@ -1294,6 +1550,12 @@ int main(int argc, char* argv[])
         g_free(path);
     }
 
+    g_test_add_func(TEST_("fd/ok"), test_fd_ok);
+    g_test_add_func(TEST_("fd/shortbuf"), test_fd_shortbuf);
+    g_test_add_func(TEST_("fd/badtype"), test_fd_badtype);
+    g_test_add_func(TEST_("dupfd/ok"), test_dupfd_ok);
+    g_test_add_func(TEST_("dupfd/badtype"), test_dupfd_badtype);
+    g_test_add_func(TEST_("dupfd/badfd"), test_dupfd_badfd);
     g_test_add_func(TEST_("object/valid"), test_object);
     g_test_add_func(TEST_("object/invalid"), test_object_invalid);
     g_test_add_func(TEST_("object/no_reg"), test_object_no_reg);

@@ -36,6 +36,9 @@
 
 #include <glib-unix.h>
 
+#define BINDER_TRANSACTION(c2,c3,c4) GBINDER_FOURCC('_',c2,c3,c4)
+#define BINDER_DUMP_TRANSACTION      BINDER_TRANSACTION('D','M','P')
+
 #define RET_OK          (0)
 #define RET_NOTFOUND    (1)
 #define RET_INVARG      (2)
@@ -83,12 +86,15 @@ app_reply(
     int* status,
     void* user_data)
 {
+    App* app = user_data;
+    GBinderReader reader;
+
+    gbinder_remote_request_init_reader(req, &reader);
     if (code == GBINDER_FIRST_CALL_TRANSACTION) {
-        App* app = user_data;
         const char* iface = gbinder_remote_request_interface(req);
 
         if (!g_strcmp0(iface, app->opt->iface)) {
-            char* str = gbinder_remote_request_read_string16(req);
+            char* str = gbinder_reader_read_string16(&reader);
             GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
 
             GVERBOSE("\"%s\" %u", iface, code);
@@ -100,6 +106,17 @@ app_reply(
         } else {
              GDEBUG("Unexpected interface \"%s\"", iface);
         }
+    } else if (code == BINDER_DUMP_TRANSACTION) {
+        int fd = gbinder_reader_read_fd(&reader);
+        const char* dump = "Sorry, I've got nothing to dump...\n";
+        const gssize dump_len = strlen(dump);
+
+        GDEBUG("Dump request from %d", gbinder_remote_request_sender_pid(req));
+        if (write(fd, dump, dump_len) != dump_len) {
+            GERR("Failed to write dump: %s", strerror(errno));
+        }
+        *status = 0;
+        return NULL;
     }
     *status = -1;
     return NULL;

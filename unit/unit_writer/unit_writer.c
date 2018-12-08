@@ -39,6 +39,8 @@
 
 #include <gutil_intarray.h>
 
+#include <unistd.h>
+
 static TestOpt test_opt;
 
 #define BUFFER_OBJECT_SIZE_32 (24)
@@ -77,6 +79,7 @@ test_null(
     gbinder_writer_append_string16_utf16(NULL, NULL, 0);
     gbinder_writer_append_bool(NULL, FALSE);
     gbinder_writer_append_bool(&writer, FALSE);
+    gbinder_writer_append_fd(NULL, 0);
     gbinder_writer_append_bytes(NULL, NULL, 0);
     gbinder_writer_append_bytes(&writer, NULL, 0);
     gbinder_writer_append_hidl_vec(NULL, NULL, 0, 0);
@@ -707,6 +710,76 @@ test_parent(
 }
 
 /*==========================================================================*
+ * fd
+ * fd_invalid
+ *==========================================================================*/
+
+static
+void
+test_fd2(
+    int fd)
+{
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GUtilIntArray* offsets;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_fd(&writer, fd);
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert(offsets->count == 1);
+    g_assert(offsets->data[0] == 0);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
+    gbinder_local_request_unref(req);
+}
+
+static
+void
+test_fd(
+    void)
+{
+    test_fd2(0);
+}
+
+static
+void
+test_fd_invalid(
+    void)
+{
+    test_fd2(-1);
+}
+
+/*==========================================================================*
+ * fd_close_error
+ *==========================================================================*/
+
+static
+void
+test_fd_close_error(
+    void)
+{
+    const GBinderIo* io = &gbinder_io_32;
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    int fd = -1;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_fd(&writer, STDOUT_FILENO);
+    data = gbinder_local_request_data(req);
+    g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
+
+    /* Fetch duplicated fd and close it. That makes the second close
+     * done by gbinder_writer_data_close_fd() fail. */
+    g_assert(io->decode_fd_object(data->bytes->data, data->bytes->len, &fd));
+    g_assert(close(fd) == 0);
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
  * local_object
  *==========================================================================*/
 
@@ -874,6 +947,9 @@ int main(int argc, char* argv[])
 
     g_test_add_func(TEST_("buffer"), test_buffer);
     g_test_add_func(TEST_("parent"), test_parent);
+    g_test_add_func(TEST_("fd"), test_fd);
+    g_test_add_func(TEST_("fd_invalid"), test_fd_invalid);
+    g_test_add_func(TEST_("fd_close_error"), test_fd_close_error);
     g_test_add_func(TEST_("local_object"), test_local_object);
     g_test_add_func(TEST_("remote_object"), test_remote_object);
     g_test_add_func(TEST_("byte_array"), test_byte_array);

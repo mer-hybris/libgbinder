@@ -39,7 +39,10 @@
 #include <gutil_macros.h>
 #include <gutil_strv.h>
 
+#include <unistd.h>
 #include <stdint.h>
+#include <errno.h>
+#include <fcntl.h>
 
 typedef struct gbinder_writer_priv {
     GBinderWriterData* data;
@@ -74,6 +77,7 @@ gbinder_writer_data_set_contents(
     g_byte_array_set_size(data->bytes, 0);
     gutil_int_array_set_count(data->offsets, 0);
     data->buffers_size = 0;
+    gbinder_cleanup_reset(data->cleanup);
 
     g_byte_array_append(data->bytes, bufdata, bufsize);
     if (contents) {
@@ -519,6 +523,60 @@ gbinder_writer_data_prepare(
         data->offsets = gutil_int_array_new();
     }
     return data->offsets->count;
+}
+
+static
+void
+gbinder_writer_data_close_fd(
+    gpointer data)
+{
+    const int fd = GPOINTER_TO_INT(data);
+
+    if (close(fd) < 0) {
+        GWARN("Error closing fd %d: %s", fd, strerror(errno));
+    }
+}
+
+static
+void
+gbinder_writer_data_append_fd(
+    GBinderWriterData* data,
+    int fd)
+{
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
+    /* Duplicate the descriptor so that caller can do whatever with
+     * the one it passed in. */
+    const int dupfd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+    guint written;
+
+    /* Preallocate enough space */
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
+    /* Write the original fd if we failed to dup it */
+    if (dupfd < 0) {
+        GWARN("Error dupping fd %d: %s", fd, strerror(errno));
+        written = data->io->encode_fd_object(buf->data + offset, fd);
+    } else {
+        written = data->io->encode_fd_object(buf->data + offset, dupfd);
+        data->cleanup = gbinder_cleanup_add(data->cleanup,
+            gbinder_writer_data_close_fd, GINT_TO_POINTER(dupfd));
+    }
+    /* Fix the data size */
+    g_byte_array_set_size(buf, offset + written);
+    /* Record the offset */
+    gbinder_writer_data_record_offset(data, offset);
+}
+
+void
+gbinder_writer_append_fd(
+    GBinderWriter* self,
+    int fd) /* Since 1.0.18 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_fd(data, fd);
+    }
 }
 
 guint

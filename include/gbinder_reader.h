@@ -95,6 +95,15 @@ gbinder_reader_read_double(
     GBinderReader* reader,
     gdouble* value);
 
+int
+gbinder_reader_read_fd(
+    GBinderReader* reader); /* Since 1.0.18 */
+
+int
+gbinder_reader_read_dup_fd(
+    GBinderReader* reader) /* Since 1.0.18 */
+    G_GNUC_WARN_UNUSED_RESULT;
+
 gboolean
 gbinder_reader_read_nullable_object(
     GBinderReader* reader,
