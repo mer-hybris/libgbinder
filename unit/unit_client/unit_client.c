@@ -100,7 +100,6 @@ test_basic(
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, 0);
     GBinderClient* client = gbinder_client_new(obj, "foo");
 
-    g_assert(!gbinder_client_new(obj, NULL));
     g_assert(client);
     g_assert(gbinder_client_ref(client) == client);
     gbinder_client_unref(client);
@@ -109,6 +108,25 @@ test_basic(
     gbinder_client_unref(client);
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * no_header
+ *==========================================================================*/
+
+static
+void
+test_no_header(
+    void)
+{
+    GBinderClient* client = test_client_new(0, NULL);
+    int fd = gbinder_driver_fd(gbinder_client_ipc(client)->driver);
+
+    test_binder_br_transaction_complete(fd);
+    g_assert(gbinder_client_transact_sync_oneway(client, 0, NULL) ==
+        GBINDER_STATUS_OK);
+
+    gbinder_client_unref(client);
 }
 
 /*==========================================================================*
@@ -326,17 +344,19 @@ test_reply_ok3(
  *==========================================================================*/
 
 #define TEST_PREFIX "/client/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "null", test_null);
-    g_test_add_func(TEST_PREFIX "basic", test_basic);
-    g_test_add_func(TEST_PREFIX "sync_oneway", test_sync_oneway);
-    g_test_add_func(TEST_PREFIX "sync_reply", test_sync_reply);
-    g_test_add_func(TEST_PREFIX "reply/ok1", test_reply_ok1);
-    g_test_add_func(TEST_PREFIX "reply/ok2", test_reply_ok2);
-    g_test_add_func(TEST_PREFIX "reply/ok3", test_reply_ok3);
+    g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("no_header"), test_no_header);
+    g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
+    g_test_add_func(TEST_("sync_reply"), test_sync_reply);
+    g_test_add_func(TEST_("reply/ok1"), test_reply_ok1);
+    g_test_add_func(TEST_("reply/ok2"), test_reply_ok2);
+    g_test_add_func(TEST_("reply/ok3"), test_reply_ok3);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

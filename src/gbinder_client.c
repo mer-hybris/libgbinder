@@ -75,7 +75,9 @@ gbinder_client_free(
     gbinder_remote_object_unref(self->remote);
     gbinder_local_request_unref(priv->basic_req);
     g_free(priv->iface);
-    g_bytes_unref(priv->rpc_header);
+    if (priv->rpc_header) {
+        g_bytes_unref(priv->rpc_header);
+    }
     g_slice_free(GBinderClientPriv, priv);
 }
 
@@ -117,13 +119,13 @@ gbinder_client_new(
     GBinderRemoteObject* remote,
     const char* iface)
 {
-    if (G_LIKELY(remote) && G_LIKELY(iface)) {
+    if (G_LIKELY(remote)) {
         GBinderClientPriv* priv = g_slice_new0(GBinderClientPriv);
         GBinderClient* self = &priv->pub;
-        GBinderIpc* ipc = remote->ipc;
-        GBinderOutputData* hdr;
+        GBinderDriver* driver = remote->ipc->driver;
 
         g_atomic_int_set(&priv->refcount, 1);
+        self->remote = gbinder_remote_object_ref(remote);
 
         /*
          * Generate basic request (without additional parameters) and pull
@@ -131,12 +133,17 @@ gbinder_client_new(
          * transactions which has no additional parameters. The header data
          * are needed for building non-trivial requests.
          */
-        priv->basic_req = gbinder_driver_local_request_new(ipc->driver, iface);
-        hdr = gbinder_local_request_data(priv->basic_req);
-        priv->rpc_header = g_bytes_new(hdr->bytes->data, hdr->bytes->len);
+        if (iface) {
+            GBinderOutputData* hdr;
 
-        self->remote = gbinder_remote_object_ref(remote);
-        self->iface = priv->iface = g_strdup(iface);
+            priv->basic_req = gbinder_driver_local_request_new(driver, iface);
+            hdr = gbinder_local_request_data(priv->basic_req);
+            priv->rpc_header = g_bytes_new(hdr->bytes->data, hdr->bytes->len);
+            self->iface = priv->iface = g_strdup(iface);
+        } else {
+            priv->basic_req = gbinder_local_request_new
+                (gbinder_driver_io(driver), NULL);
+        }
         return self;
     }
     return NULL;
