@@ -41,7 +41,8 @@ GBinderBuffer*
 gbinder_buffer_new(
     GBinderDriver* driver,
     void* data,
-    gsize size);
+    gsize size,
+    void** objects);
 
 GBinderBuffer*
 gbinder_buffer_new_with_parent(
@@ -53,8 +54,8 @@ GBinderDriver*
 gbinder_buffer_driver(
     GBinderBuffer* buf);
 
-GBinderBufferMemory*
-gbinder_buffer_memory(
+GBinderBufferContents*
+gbinder_buffer_contents(
     GBinderBuffer* buf);
 
 gconstpointer
@@ -66,13 +67,17 @@ const GBinderIo*
 gbinder_buffer_io(
     GBinderBuffer* buf);
 
-GBinderBufferMemory*
-gbinder_buffer_memory_ref(
-    GBinderBufferMemory* mem);
+void**
+gbinder_buffer_objects(
+    GBinderBuffer* buffer);
+
+GBinderBufferContents*
+gbinder_buffer_contents_ref(
+    GBinderBufferContents* contents);
 
 void
-gbinder_buffer_memory_unref(
-    GBinderBufferMemory* mem);
+gbinder_buffer_contents_unref(
+    GBinderBufferContents* contents);
 
 #endif /* GBINDER_BUFFER_PRIVATE_H */
 

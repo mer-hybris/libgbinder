@@ -42,7 +42,8 @@
  */
 
 struct gbinder_rpc_protocol {
-    const char* (*read_rpc_header)(GBinderReader* reader, char** iface);
+    const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
+        char** iface);
     void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
 };
 

@@ -91,20 +91,42 @@ test_device(
 }
 
 /*==========================================================================*
- * no_header
+ * no_header1
  *==========================================================================*/
 
 static
 void
-test_no_header(
+test_no_header1(
     void)
 {
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER), 0, 0);
 
-    gbinder_remote_request_set_data(req, NULL, NULL);
+    gbinder_remote_request_set_data(req, GBINDER_FIRST_CALL_TRANSACTION, NULL);
     g_assert(!gbinder_remote_request_interface(req));
     gbinder_remote_request_unref(req);
+}
+
+/*==========================================================================*
+ * no_header2
+ *==========================================================================*/
+
+static
+void
+test_no_header2(
+    void)
+{
+    const GBinderRpcProtocol* p = &gbinder_rpc_protocol_binder;
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, p);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(NULL, p, 0, 0);
+
+    gbinder_remote_request_set_data(req, GBINDER_DUMP_TRANSACTION,
+        gbinder_buffer_new(driver,
+        g_memdup(TEST_ARRAY_AND_SIZE(test_header_binder)),
+        sizeof(test_header_binder), NULL));
+    g_assert(!gbinder_remote_request_interface(req));
+    gbinder_remote_request_unref(req);
+    gbinder_driver_unref(driver);
 }
 
 /*==========================================================================*
@@ -144,38 +166,39 @@ test_read_header(
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(test->dev), 0, 0);
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(driver,
-        g_memdup(test->header, test->header_size), test->header_size), NULL);
+    gbinder_remote_request_set_data(req, GBINDER_FIRST_CALL_TRANSACTION,
+        gbinder_buffer_new(driver, g_memdup(test->header, test->header_size),
+        test->header_size, NULL));
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), test->iface));
     gbinder_remote_request_unref(req);
     gbinder_driver_unref(driver);
 }
 
- /*==========================================================================*
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
 #define TEST_PREFIX "/protocol/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     guint i;
 
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "device", test_device);
-    g_test_add_func(TEST_PREFIX "no_header", test_no_header);
+    g_test_add_func(TEST_("device"), test_device);
+    g_test_add_func(TEST_("no_header1"), test_no_header1);
+    g_test_add_func(TEST_("no_header2"), test_no_header2);
 
     for (i = 0; i < G_N_ELEMENTS(test_header_tests); i++) {
         const TestHeaderData* test = test_header_tests + i;
-        char* path = g_strconcat(TEST_PREFIX, "/", test->name,
-            "/read_header", NULL);
+        char* path;
 
+        path = g_strconcat(TEST_PREFIX, test->name, "/read_header", NULL);
         g_test_add_data_func(path, test, test_read_header);
         g_free(path);
 
-        path = g_strconcat(TEST_PREFIX, "/", test->name,
-            "/write_header", NULL);
-
+        path = g_strconcat(TEST_PREFIX, test->name, "/write_header", NULL);
         g_test_add_data_func(path, test, test_write_header);
         g_free(path);
     }

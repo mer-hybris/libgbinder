@@ -5,6 +5,7 @@
 
 TESTS="\
 unit_buffer \
+unit_cleanup \
 unit_client \
 unit_driver \
 unit_ipc \

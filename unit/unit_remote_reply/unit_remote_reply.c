@@ -59,7 +59,7 @@ test_null(
 
     g_assert(!gbinder_remote_reply_ref(NULL));
     gbinder_remote_reply_unref(NULL);
-    gbinder_remote_reply_set_data(NULL, NULL, NULL);
+    gbinder_remote_reply_set_data(NULL, NULL);
     gbinder_remote_reply_init_reader(NULL, &reader);
     g_assert(gbinder_reader_at_end(&reader));
     g_assert(gbinder_remote_reply_is_empty(NULL));
@@ -85,8 +85,8 @@ test_empty(
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
-    gbinder_remote_reply_set_data
-        (reply, gbinder_buffer_new(driver, NULL, 0), NULL);
+    gbinder_remote_reply_set_data(reply,
+        gbinder_buffer_new(driver, NULL, 0, NULL));
 
     g_assert(gbinder_remote_reply_is_empty(reply));
     gbinder_remote_reply_unref(reply);
@@ -132,8 +132,7 @@ test_int32(
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
-        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data)),
-        NULL);
+        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data), NULL));
 
     g_assert(!gbinder_remote_reply_is_empty(reply));
     g_assert(gbinder_remote_reply_read_uint32(reply, &out1));
@@ -163,8 +162,7 @@ test_int64(
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
-        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data)),
-        NULL);
+        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data), NULL));
 
     g_assert(!gbinder_remote_reply_is_empty(reply));
     g_assert(gbinder_remote_reply_read_uint64(reply, &out1));
@@ -192,8 +190,7 @@ test_string8(
     GBinderRemoteReply* reply = gbinder_remote_reply_new(NULL);
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
-        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data)),
-        NULL);
+        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data), NULL));
 
     g_assert(!gbinder_remote_reply_is_empty(reply));
     g_assert(!g_strcmp0(gbinder_remote_reply_read_string8(reply), "bar"));
@@ -221,8 +218,7 @@ test_string16(
     char* str;
 
     gbinder_remote_reply_set_data(reply, gbinder_buffer_new(driver,
-        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data)),
-        NULL);
+        g_memdup(reply_data, sizeof(reply_data)), sizeof(reply_data), NULL));
 
     g_assert(!gbinder_remote_reply_is_empty(reply));
     str = gbinder_remote_reply_read_string16(reply);
@@ -264,7 +260,7 @@ test_to_local(
     /* Skip the 32-bit integer */
     objects[0] = req_data + 4;
     gbinder_remote_reply_set_data(req, gbinder_buffer_new(driver, req_data,
-        sizeof(reply_data)), objects);
+        sizeof(reply_data), objects));
 
     /* Convert to GBinderLocalReply */
     req2 = gbinder_remote_reply_copy_to_local(req);

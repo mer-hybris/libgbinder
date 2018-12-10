@@ -153,6 +153,21 @@ GBINDER_IO_FN(encode_remote_object)(
     return sizeof(*dest);
 }
 
+static
+guint
+GBINDER_IO_FN(encode_fd_object)(
+    void* out,
+    int fd)
+{
+    struct flat_binder_object* dest = out;
+
+    memset(dest, 0, sizeof(*dest));
+    dest->hdr.type = BINDER_TYPE_FD;
+    dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
+    dest->handle = fd;
+    return sizeof(*dest);
+}
+
 /* Encodes binder_buffer_object */
 static
 guint
@@ -411,6 +426,28 @@ GBINDER_IO_FN(decode_buffer_object)(
     return 0;
 }
 
+static
+guint
+GBINDER_IO_FN(decode_fd_object)(
+    const void* data,
+    gsize size,
+    int* fd)
+{
+    const struct flat_binder_object* obj = data;
+
+    if (size >= sizeof(*obj)) {
+        switch (obj->hdr.type) {
+        case BINDER_TYPE_FD:
+            if (fd) *fd = obj->handle;
+            return sizeof(*obj);
+        default:
+            break;
+        }
+    }
+    if (fd) *fd = -1;
+    return 0;
+}
+
 const GBinderIo GBINDER_IO_PREFIX = {
     .version = BINDER_CURRENT_PROTOCOL_VERSION,
     .pointer_size = GBINDER_POINTER_SIZE,
@@ -466,6 +503,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .encode_pointer = GBINDER_IO_FN(encode_pointer),
     .encode_local_object = GBINDER_IO_FN(encode_local_object),
     .encode_remote_object = GBINDER_IO_FN(encode_remote_object),
+    .encode_fd_object = GBINDER_IO_FN(encode_fd_object),
     .encode_buffer_object = GBINDER_IO_FN(encode_buffer_object),
     .encode_death_notification = GBINDER_IO_FN(encode_death_notification),
     .encode_transaction = GBINDER_IO_FN(encode_transaction),
@@ -478,6 +516,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .decode_binder_ptr_cookie = GBINDER_IO_FN(decode_binder_ptr_cookie),
     .decode_binder_object = GBINDER_IO_FN(decode_binder_object),
     .decode_buffer_object = GBINDER_IO_FN(decode_buffer_object),
+    .decode_fd_object = GBINDER_IO_FN(decode_fd_object),
 
     /* ioctl wrappers */
     .write_read = GBINDER_IO_FN(write_read)

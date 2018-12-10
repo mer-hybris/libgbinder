@@ -73,7 +73,8 @@ test_reader_data_init_for_reply(
     GUtilIntArray* offsets = gbinder_output_data_offsets(out);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
-        g_memdup(out->bytes->data, out->bytes->len), out->bytes->len);
+        g_memdup(out->bytes->data, out->bytes->len),
+        out->bytes->len, NULL);
 
     memset(data, 0, sizeof(*data));
     data->buffer = buf;
@@ -206,8 +207,9 @@ test_ping(
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(ipc->driver,
-        g_memdup(req_data, sizeof(req_data)), sizeof(req_data)), NULL);
+    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+        gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
+        sizeof(req_data), NULL));
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), base_interface));
     g_assert(gbinder_local_object_can_handle_transaction(obj, base_interface,
         HIDL_PING_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
@@ -248,8 +250,9 @@ test_get_descriptor(
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(ipc->driver,
-        g_memdup(req_data, sizeof(req_data)), sizeof(req_data)), NULL);
+    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+        gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
+        sizeof(req_data), NULL));
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), base_interface));
     g_assert(gbinder_local_object_can_handle_transaction(obj, base_interface,
         HIDL_GET_DESCRIPTOR_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
@@ -303,8 +306,9 @@ test_descriptor_chain(
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(ipc->driver,
-        g_memdup(req_data, sizeof(req_data)), sizeof(req_data)), NULL);
+    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+        gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
+        sizeof(req_data), NULL));
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), base_interface));
     g_assert(gbinder_local_object_can_handle_transaction(obj, base_interface,
         HIDL_DESCRIPTOR_CHAIN_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
@@ -374,8 +378,9 @@ test_custom_iface(
     char** strv;
     char* str;
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(ipc->driver,
-        g_memdup(req_data, sizeof(req_data)), sizeof(req_data)), NULL);
+    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+        gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
+        sizeof(req_data), NULL));
     g_assert(gbinder_local_object_can_handle_transaction(obj, base_interface,
         HIDL_DESCRIPTOR_CHAIN_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
     g_assert(gbinder_local_object_can_handle_transaction(obj, custom_iface,
@@ -474,8 +479,9 @@ test_reply_status(
     GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, custom_iface,
         test_reply_status_handler, &count);
 
-    gbinder_remote_request_set_data(req, gbinder_buffer_new(ipc->driver,
-        g_memdup(req_data, sizeof(req_data)), sizeof(req_data)), NULL);
+    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+        gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
+        sizeof(req_data), NULL));
 
     /* Execute the custom transaction */
     g_assert(!gbinder_local_object_handle_transaction(obj, req,

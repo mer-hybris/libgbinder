@@ -95,14 +95,13 @@ gbinder_local_reply_new(
 
 GBinderLocalReply*
 gbinder_local_reply_new_from_data(
-    GBinderBuffer* buffer,
-    void** objects)
+    GBinderBuffer* buffer)
 {
     const GBinderIo* io = gbinder_buffer_io(buffer);
     GBinderLocalReply* self = gbinder_local_reply_new(io);
 
     if (self) {
-        gbinder_writer_data_set_contents(&self->data, buffer, objects);
+        gbinder_writer_data_set_contents(&self->data, buffer);
     }
     return self;
 }

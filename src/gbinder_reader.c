@@ -38,6 +38,9 @@
 
 #include <gutil_macros.h>
 
+#include <errno.h>
+#include <fcntl.h>
+
 typedef struct gbinder_reader_priv {
     const guint8* start;
     const guint8* end;
@@ -231,16 +234,67 @@ gbinder_reader_read_double(
     }
 }
 
+static
+inline
+gboolean
+gbinder_reader_can_read_object(
+    GBinderReaderPriv* p)
+{
+    const GBinderReaderData* data = p->data;
+
+    return data && data->reg &&
+        p->objects && p->objects[0] &&
+        p->ptr == p->objects[0];
+}
+
+int
+gbinder_reader_read_fd(
+    GBinderReader* reader) /* Since 1.0.18 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+    if (gbinder_reader_can_read_object(p)) {
+        int fd;
+        const guint eaten = p->data->reg->io->decode_fd_object(p->ptr,
+            gbinder_reader_bytes_remaining(reader), &fd);
+
+        if (eaten) {
+            GASSERT(fd >= 0);
+            p->ptr += eaten;
+            p->objects++;
+            return fd;
+        }
+    }
+    return -1;
+}
+
+int
+gbinder_reader_read_dup_fd(
+    GBinderReader* reader) /* Since 1.0.18 */
+{
+    const int fd = gbinder_reader_read_fd(reader);
+
+    if (fd >= 0) {
+        const int dupfd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+
+        if (dupfd >= 0) {
+            return dupfd;
+        } else {
+            GWARN("Error dupping fd %d: %s", fd, strerror(errno));
+        }
+    }
+    return -1;
+}
+
 gboolean
 gbinder_reader_read_nullable_object(
     GBinderReader* reader,
     GBinderRemoteObject** out)
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
-    const GBinderReaderData* data = p->data;
 
-    if (data && data->reg && p->objects && p->objects[0] &&
-        p->ptr == p->objects[0]) {
+    if (gbinder_reader_can_read_object(p)) {
+        const GBinderReaderData* data = p->data;
         const guint eaten = data->reg->io->decode_binder_object(p->ptr,
             gbinder_reader_bytes_remaining(reader), data->reg, out);
 
@@ -271,10 +325,9 @@ gbinder_reader_read_buffer_impl(
     GBinderBuffer** out)
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
-    const GBinderReaderData* data = p->data;
 
-    if (data && data->reg && p->objects && p->objects[0] &&
-        p->ptr == p->objects[0]) {
+    if (gbinder_reader_can_read_object(p)) {
+        const GBinderReaderData* data = p->data;
         GBinderBuffer* buf = data->buffer;
         const GBinderIo* io = data->reg->io;
         const gsize offset = p->ptr - (guint8*)buf->data;

@@ -36,54 +36,62 @@
 
 #include <gutil_macros.h>
 
-struct gbinder_buffer_memory {
+struct gbinder_buffer_contents {
     gint refcount;
     void* buffer;
     gsize size;
+    void** objects;
     GBinderDriver* driver;
 };
 
 typedef struct gbinder_buffer_priv {
     GBinderBuffer pub;
-    GBinderBufferMemory* memory;
+    GBinderBufferContents* contents;
 } GBinderBufferPriv;
 
 static inline GBinderBufferPriv* gbinder_buffer_cast(GBinderBuffer* buf)
     { return G_CAST(buf, GBinderBufferPriv, pub); }
 
 /*==========================================================================*
- * GBinderBufferMemory
+ * GBinderBufferContents
  *==========================================================================*/
 
 static
-GBinderBufferMemory*
-gbinder_buffer_memory_new(
+GBinderBufferContents*
+gbinder_buffer_contents_new(
     GBinderDriver* driver,
     void* buffer,
-    gsize size)
+    gsize size,
+    void** objects)
 {
-    GBinderBufferMemory* self = g_slice_new0(GBinderBufferMemory);
+    GBinderBufferContents* self = g_slice_new0(GBinderBufferContents);
 
     g_atomic_int_set(&self->refcount, 1);
     self->buffer = buffer;
     self->size = size;
+    self->objects = objects;
     self->driver = gbinder_driver_ref(driver);
     return self;
 }
 
 static
 void
-gbinder_buffer_memory_free(
-    GBinderBufferMemory* self)
+gbinder_buffer_contents_free(
+    GBinderBufferContents* self)
 {
+    if (self->objects) {
+        gbinder_driver_close_fds(self->driver, self->objects,
+            ((guint8*)self->buffer) + self->size);
+        g_free(self->objects);
+    }
     gbinder_driver_free_buffer(self->driver, self->buffer);
     gbinder_driver_unref(self->driver);
-    g_slice_free(GBinderBufferMemory, self);
+    g_slice_free(GBinderBufferContents, self);
 }
 
-GBinderBufferMemory*
-gbinder_buffer_memory_ref(
-    GBinderBufferMemory* self)
+GBinderBufferContents*
+gbinder_buffer_contents_ref(
+    GBinderBufferContents* self)
 {
     if (G_LIKELY(self)) {
         GASSERT(self->refcount > 0);
@@ -93,13 +101,13 @@ gbinder_buffer_memory_ref(
 }
 
 void
-gbinder_buffer_memory_unref(
-    GBinderBufferMemory* self)
+gbinder_buffer_contents_unref(
+    GBinderBufferContents* self)
 {
     if (G_LIKELY(self)) {
         GASSERT(self->refcount > 0);
         if (g_atomic_int_dec_and_test(&self->refcount)) {
-            gbinder_buffer_memory_free(self);
+            gbinder_buffer_contents_free(self);
         }
     }
 }
@@ -111,14 +119,14 @@ gbinder_buffer_memory_unref(
 static
 GBinderBuffer*
 gbinder_buffer_alloc(
-    GBinderBufferMemory* memory,
+    GBinderBufferContents* contents,
     void* data,
     gsize size)
 {
     GBinderBufferPriv* priv = g_slice_new0(GBinderBufferPriv);
     GBinderBuffer* self = &priv->pub;
 
-    priv->memory = memory;
+    priv->contents = contents;
     self->data = data;
     self->size = size;
     return self;
@@ -131,7 +139,7 @@ gbinder_buffer_free(
     if (G_LIKELY(self)) {
         GBinderBufferPriv* priv = gbinder_buffer_cast(self);
 
-        gbinder_buffer_memory_unref(priv->memory);
+        gbinder_buffer_contents_unref(priv->contents);
         g_slice_free(GBinderBufferPriv, priv);
     }
 }
@@ -140,10 +148,12 @@ GBinderBuffer*
 gbinder_buffer_new(
     GBinderDriver* driver,
     void* data,
-    gsize size)
+    gsize size,
+    void** objects)
 {
     return gbinder_buffer_alloc((driver && data) ?
-        gbinder_buffer_memory_new(driver, data, size) : NULL, data, size);
+        gbinder_buffer_contents_new(driver, data, size, objects) : NULL,
+        data, size);
 }
 
 GBinderBuffer*
@@ -153,7 +163,7 @@ gbinder_buffer_new_with_parent(
     gsize size)
 {
     return gbinder_buffer_alloc(parent ?
-        gbinder_buffer_memory_ref(gbinder_buffer_memory(parent)) : NULL,
+        gbinder_buffer_contents_ref(gbinder_buffer_contents(parent)) : NULL,
         data, size);
 }
 
@@ -162,13 +172,13 @@ gbinder_buffer_data(
     GBinderBuffer* self,
     gsize* size)
 {
-    GBinderBufferMemory* memory = gbinder_buffer_memory(self);
+    GBinderBufferContents* contents = gbinder_buffer_contents(self);
 
-    if (G_LIKELY(memory)) {
+    if (G_LIKELY(contents)) {
         if (size) {
-            *size = memory->size;
+            *size = contents->size;
         }
-        return memory->buffer;
+        return contents->buffer;
     } else {
         if (size) {
             *size = 0;
@@ -184,8 +194,8 @@ gbinder_buffer_driver(
     if (G_LIKELY(self)) {
         GBinderBufferPriv* priv = gbinder_buffer_cast(self);
 
-        if (priv->memory) {
-            return priv->memory->driver;
+        if (priv->contents) {
+            return priv->contents->driver;
         }
     }
     return NULL;
@@ -200,11 +210,25 @@ gbinder_buffer_io(
     return driver ? gbinder_driver_io(driver) : NULL;
 }
 
-GBinderBufferMemory*
-gbinder_buffer_memory(
+void**
+gbinder_buffer_objects(
     GBinderBuffer* self)
 {
-    return G_LIKELY(self) ? gbinder_buffer_cast(self)->memory : NULL;
+    if (G_LIKELY(self)) {
+        GBinderBufferPriv* priv = gbinder_buffer_cast(self);
+
+        if (priv->contents) {
+            return priv->contents->objects;
+        }
+    }
+    return NULL;
+}
+
+GBinderBufferContents*
+gbinder_buffer_contents(
+    GBinderBuffer* self)
+{
+    return G_LIKELY(self) ? gbinder_buffer_cast(self)->contents : NULL;
 }
 
 /*

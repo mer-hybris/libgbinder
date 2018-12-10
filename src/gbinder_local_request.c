@@ -44,7 +44,6 @@ struct gbinder_local_request {
     gint refcount;
     GBinderWriterData data;
     GBinderOutputData out;
-    GBinderBufferMemory* memory;
 };
 
 GBINDER_INLINE_FUNC
@@ -106,14 +105,13 @@ gbinder_local_request_new(
 
 GBinderLocalRequest*
 gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer,
-    void** objects)
+    GBinderBuffer* buffer)
 {
     GBinderLocalRequest* self = gbinder_local_request_new
         (gbinder_buffer_io(buffer), NULL);
 
     if (self) {
-        gbinder_writer_data_set_contents(&self->data, buffer, objects);
+        gbinder_writer_data_set_contents(&self->data, buffer);
     }
     return self;
 }
@@ -128,7 +126,6 @@ gbinder_local_request_free(
     g_byte_array_free(data->bytes, TRUE);
     gutil_int_array_free(data->offsets, TRUE);
     gbinder_cleanup_free(data->cleanup);
-    gbinder_buffer_memory_unref(self->memory);
     g_slice_free(GBinderLocalRequest, self);
 }
 

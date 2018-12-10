@@ -439,11 +439,10 @@ gbinder_driver_handle_transaction(
     /* Transfer data ownership to the request */
     if (tx.data && tx.size) {
         gbinder_driver_verbose_dump(' ', (uintptr_t)tx.data, tx.size);
-        gbinder_remote_request_set_data(req,
-            gbinder_buffer_new(self, tx.data, tx.size),
-            tx.objects);
+        gbinder_remote_request_set_data(req, tx.code,
+            gbinder_buffer_new(self, tx.data, tx.size, tx.objects));
     } else {
-        g_free(tx.objects);
+        GASSERT(!tx.objects);
         gbinder_driver_free_buffer(self, tx.data);
     }
 
@@ -637,10 +636,9 @@ gbinder_driver_txstatus(
             if (tx.data && tx.size) {
                 gbinder_driver_verbose_dump(' ', (uintptr_t)tx.data, tx.size);
                 gbinder_remote_reply_set_data(reply,
-                    gbinder_buffer_new(self, tx.data, tx.size),
-                    tx.objects);
+                    gbinder_buffer_new(self, tx.data, tx.size, tx.objects));
             } else {
-                g_free(tx.objects);
+                GASSERT(!tx.objects);
                 gbinder_driver_free_buffer(self, tx.data);
             }
 
@@ -861,6 +859,32 @@ gbinder_driver_release(
 {
     GVERBOSE("< BC_RELEASE 0x%08x", handle);
     return gbinder_driver_cmd_int32(self, self->io->bc.release, handle);
+}
+
+void
+gbinder_driver_close_fds(
+    GBinderDriver* self,
+    void** objects,
+    const void* end)
+{
+    const GBinderIo* io = self->io;
+    void** ptr;
+
+    /* Caller checks objects for NULL */
+    for (ptr = objects; *ptr; ptr++) {
+        void* obj = *ptr;
+
+        GASSERT(obj < end);
+        if (obj < end) {
+            int fd;
+
+            if (io->decode_fd_object(obj, (guint8*)end - (guint8*)obj, &fd)) {
+                if (close(fd) < 0) {
+                    GWARN("Error closing fd %d: %s", fd, strerror(errno));
+                }
+            }
+        }
+    }
 }
 
 void

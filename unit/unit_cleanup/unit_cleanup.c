@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -30,12 +30,19 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
+#include "test_binder.h"
 
-#include "gbinder_driver.h"
-#include "gbinder_buffer_p.h"
+#include "gbinder_cleanup.h"
 
 static TestOpt test_opt;
+
+static
+void
+test_cleanup_inc(
+    gpointer data)
+{
+    (*((int*)data))++;
+}
 
 /*==========================================================================*
  * null
@@ -46,78 +53,66 @@ void
 test_null(
     void)
 {
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderBuffer* buf = gbinder_buffer_new(NULL, NULL, 0, NULL);
-    GBinderBuffer* buf2;
-    gsize size = 1;
-
-    gbinder_buffer_free(buf);
-
-    /* No need to reference the driver if there's no data */
-    buf = gbinder_buffer_new(driver, NULL, 0, NULL);
-    g_assert(!gbinder_buffer_driver(buf));
-    gbinder_buffer_free(buf);
-
-    buf = gbinder_buffer_new_with_parent(NULL, NULL, 0);
-    buf2 = gbinder_buffer_new_with_parent(buf, NULL, 0);
-    g_assert(!gbinder_buffer_objects(buf));
-    g_assert(!gbinder_buffer_objects(buf2));
-    g_assert(!gbinder_buffer_driver(buf));
-    g_assert(!gbinder_buffer_driver(buf2));
-    gbinder_buffer_free(buf);
-    gbinder_buffer_free(buf2);
-
-    gbinder_buffer_free(NULL);
-    g_assert(!gbinder_buffer_driver(NULL));
-    g_assert(!gbinder_buffer_objects(NULL));
-    g_assert(!gbinder_buffer_io(NULL));
-    g_assert(!gbinder_buffer_data(NULL, NULL));
-    g_assert(!gbinder_buffer_data(NULL, &size));
-    g_assert(!size);
-    gbinder_driver_unref(driver);
+    g_assert(!gbinder_cleanup_add(NULL, NULL, NULL));
+    gbinder_cleanup_free(NULL);
+    gbinder_cleanup_reset(NULL);
 }
 
 /*==========================================================================*
- * parent
+ * basic
  *==========================================================================*/
 
 static
 void
-test_parent(
+test_basic(
     void)
 {
-    static const guint8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
-    void* ptr = g_memdup(data, sizeof(data));
-    gsize size = 0;
-    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderBuffer* parent = gbinder_buffer_new(driver, ptr, sizeof(data), NULL);
-    GBinderBuffer* buf = gbinder_buffer_new_with_parent
-        (parent, ptr, sizeof(data));
+    int n1 = 0, n2 =0;
+    GBinderCleanup* cleanup = gbinder_cleanup_add(NULL, test_cleanup_inc, &n1);
 
-    g_assert(gbinder_buffer_driver(buf) == driver);
-    g_assert(gbinder_buffer_io(buf));
-    g_assert(gbinder_buffer_io(buf) == gbinder_driver_io(driver));
-    g_assert(gbinder_buffer_contents(buf));
-    g_assert(gbinder_buffer_data(buf, NULL) == ptr);
-    g_assert(gbinder_buffer_data(buf, &size) == ptr);
-    g_assert(size == sizeof(data));
+    g_assert(cleanup);
+    g_assert(gbinder_cleanup_add(cleanup, test_cleanup_inc, &n2) == cleanup);
+    gbinder_cleanup_free(cleanup);
+    g_assert(n1 == 1);
+    g_assert(n2 == 1);
+}
 
-    gbinder_buffer_free(buf);
-    gbinder_buffer_free(parent);
-    gbinder_driver_unref(driver);
+/*==========================================================================*
+ * reset
+ *==========================================================================*/
+
+static
+void
+test_reset(
+    void)
+{
+    int n1 = 0, n2 =0;
+    GBinderCleanup* cleanup = gbinder_cleanup_add(NULL, test_cleanup_inc, &n1);
+
+    g_assert(cleanup);
+    g_assert(gbinder_cleanup_add(cleanup, test_cleanup_inc, &n2) == cleanup);
+    gbinder_cleanup_reset(cleanup);
+    g_assert(n1 == 1);
+    g_assert(n2 == 1);
+
+    gbinder_cleanup_free(cleanup);
+    g_assert(n1 == 1);
+    g_assert(n2 == 1);
 }
 
 /*==========================================================================*
  * Common
  *==========================================================================*/
 
-#define TEST_PREFIX "/buffer/"
+#define TEST_PREFIX "/cleanup/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "null", test_null);
-    g_test_add_func(TEST_PREFIX "parent", test_parent);
+    g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("reset"), test_reset);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

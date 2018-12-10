@@ -34,132 +34,104 @@
 
 #include <gutil_log.h>
 
-#include <glib-unix.h>
-
-#define BINDER_TRANSACTION(c2,c3,c4) GBINDER_FOURCC('_',c2,c3,c4)
-#define BINDER_DUMP_TRANSACTION      BINDER_TRANSACTION('D','M','P')
+#include <unistd.h>
 
 #define RET_OK          (0)
 #define RET_NOTFOUND    (1)
 #define RET_INVARG      (2)
 #define RET_ERR         (3)
 
-#define DEFAULT_DEVICE  "/dev/binder"
-#define DEFAULT_NAME    "test"
-#define DEFAULT_IFACE   "test@1.0"
+#define DEV_DEFAULT     GBINDER_DEFAULT_BINDER
+
+#define GBINDER_TRANSACTION(c2,c3,c4)     GBINDER_FOURCC('_',c2,c3,c4)
+#define GBINDER_DUMP_TRANSACTION          GBINDER_TRANSACTION('D','M','P')
 
 typedef struct app_options {
     char* dev;
-    char* iface;
-    const char* name;
+    const char* service;
 } AppOptions;
 
 typedef struct app {
     const AppOptions* opt;
     GMainLoop* loop;
     GBinderServiceManager* sm;
-    GBinderLocalObject* obj;
     int ret;
 } App;
 
-static const char pname[] = "binder-service";
+static const char pname[] = "binder-dump";
 
 static
 gboolean
-app_signal(
-    gpointer user_data)
+app_dump_service(
+    App* app,
+    const char* service)
 {
-    App* app = user_data;
+    int status = 0;
+    GBinderRemoteObject* obj = gbinder_servicemanager_get_service_sync(app->sm,
+        service, &status);
 
-    GINFO("Caught signal, shutting down...");
-    g_main_loop_quit(app->loop);
-    return G_SOURCE_CONTINUE;
-}
+    if (obj) {
+        GBinderClient* client = gbinder_client_new(obj, NULL);
+        GBinderLocalRequest* req = gbinder_client_new_request(client);
+        GBinderRemoteReply* reply;
+        GBinderWriter writer;
 
-static
-GBinderLocalReply*
-app_reply(
-    GBinderLocalObject* obj,
-    GBinderRemoteRequest* req,
-    guint code,
-    guint flags,
-    int* status,
-    void* user_data)
-{
-    App* app = user_data;
-    GBinderReader reader;
-
-    gbinder_remote_request_init_reader(req, &reader);
-    if (code == GBINDER_FIRST_CALL_TRANSACTION) {
-        const char* iface = gbinder_remote_request_interface(req);
-
-        if (!g_strcmp0(iface, app->opt->iface)) {
-            char* str = gbinder_reader_read_string16(&reader);
-            GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
-
-            GVERBOSE("\"%s\" %u", iface, code);
-            GDEBUG("\"%s\"", str);
-            gbinder_local_reply_append_string16(reply, str);
-            g_free(str);
-            *status = 0;
-            return reply;
-        } else {
-             GDEBUG("Unexpected interface \"%s\"", iface);
+        gbinder_remote_object_ref(obj);
+        gbinder_local_request_init_writer(req, &writer);
+        gbinder_writer_append_fd(&writer, STDOUT_FILENO);
+        gbinder_writer_append_int32(&writer, 0);
+        reply = gbinder_client_transact_sync_reply(client,
+            GBINDER_DUMP_TRANSACTION, req, &status);
+        if (status < 0) {
+            GERR("Error %d", status);
         }
-    } else if (code == BINDER_DUMP_TRANSACTION) {
-        int fd = gbinder_reader_read_fd(&reader);
-        const char* dump = "Sorry, I've got nothing to dump...\n";
-        const gssize dump_len = strlen(dump);
-
-        GDEBUG("Dump request from %d", gbinder_remote_request_sender_pid(req));
-        if (write(fd, dump, dump_len) != dump_len) {
-            GERR("Failed to write dump: %s", strerror(errno));
-        }
-        *status = 0;
-        return NULL;
+        gbinder_remote_object_unref(obj);
+        gbinder_remote_reply_unref(reply);
+        gbinder_local_request_unref(req);
+        gbinder_client_unref(client);
+        return TRUE;
+    } else {
+        GERR("No such service: %s (%d)", service, status);
+        return FALSE;
     }
-    *status = -1;
-    return NULL;
 }
 
 static
 void
-app_add_service_done(
-    GBinderServiceManager* sm,
-    int status,
-    void* user_data)
+app_dump_services(
+    App* app,
+    char** strv)
 {
-    App* app = user_data;
+    if (strv) {
+        while (*strv) {
+            const char* name = *strv++;
 
-    if (status == GBINDER_STATUS_OK) {
-        printf("Added \"%s\"\n", app->opt->name);
-        app->ret = RET_OK;
-    } else {
-        GERR("Failed to add \"%s\" (%d)", app->opt->name, status);
-        g_main_loop_quit(app->loop);
+            printf("========= %s\n", name);
+            app_dump_service(app, name);
+        }
     }
 }
 
 static
 void
 app_run(
-   App* app)
+    App* app)
 {
-    const char* name = app->opt->name;
-    guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, app);
-    guint sigint = g_unix_signal_add(SIGINT, app_signal, app);
+    const AppOptions* opt = app->opt;
 
-    app->loop = g_main_loop_new(NULL, TRUE);
+    if (opt->service) {
+        app->ret = app_dump_service(app, opt->service) ? RET_OK : RET_NOTFOUND;
+    } else {
+        char** services = gbinder_servicemanager_list_sync(app->sm);
 
-    gbinder_servicemanager_add_service(app->sm, name, app->obj,
-        app_add_service_done, app);
-
-    g_main_loop_run(app->loop);
-
-    if (sigtrm) g_source_remove(sigtrm);
-    if (sigint) g_source_remove(sigint);
-    g_main_loop_unref(app->loop);
-    app->loop = NULL;
+        if (services) {
+            app_dump_services(app, services);
+            g_strfreev(services);
+            app->ret = RET_OK;
+        } else {
+            app->ret = RET_ERR;
+       }
+    }
 }
 
 static
@@ -199,15 +171,11 @@ app_init(
           app_log_verbose, "Enable verbose output", NULL },
         { "quiet", 'q', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           app_log_quiet, "Be quiet", NULL },
-        { "device", 'd', 0, G_OPTION_ARG_STRING, &opt->dev,
-          "Binder device [" DEFAULT_DEVICE "]", "DEVICE" },
-        { "interface", 'i', 0, G_OPTION_ARG_STRING, &opt->iface,
-          "Local interface [" DEFAULT_IFACE "]", "IFACE" },
         { NULL }
     };
 
     GError* error = NULL;
-    GOptionContext* options = g_option_context_new("[NAME]");
+    GOptionContext* options = g_option_context_new("[SERVICE]");
 
     memset(opt, 0, sizeof(*opt));
 
@@ -219,15 +187,12 @@ app_init(
     if (g_option_context_parse(options, &argc, &argv, &error)) {
         char* help;
 
-        if (!opt->dev || !opt->dev[0]) opt->dev = g_strdup(DEFAULT_DEVICE);
-        if (!opt->iface) opt->iface = g_strdup(DEFAULT_IFACE);
+        opt->dev = g_strdup(DEV_DEFAULT);
         switch (argc) {
         case 2:
-            opt->name = argv[1];
-            ok = TRUE;
-            break;
+            opt->service = argv[1];
+            /* no break */
         case 1:
-            opt->name = DEFAULT_NAME;
             ok = TRUE;
             break;
         default:
@@ -255,14 +220,10 @@ int main(int argc, char* argv[])
     if (app_init(&opt, argc, argv)) {
         app.sm = gbinder_servicemanager_new(opt.dev);
         if (app.sm) {
-            app.obj = gbinder_servicemanager_new_local_object
-                (app.sm, opt.iface, app_reply, &app);
             app_run(&app);
-            gbinder_local_object_unref(app.obj);
             gbinder_servicemanager_unref(app.sm);
         }
     }
-    g_free(opt.iface);
     g_free(opt.dev);
     return app.ret;
 }

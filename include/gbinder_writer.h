@@ -114,6 +114,11 @@ gbinder_writer_append_bytes(
     const void* data,
     gsize size);
 
+void
+gbinder_writer_append_fd(
+    GBinderWriter* writer,
+    int fd); /* Since 1.0.18 */
+
 guint
 gbinder_writer_append_buffer_object_with_parent(
     GBinderWriter* writer,

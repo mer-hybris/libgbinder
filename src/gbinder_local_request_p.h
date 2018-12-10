@@ -48,8 +48,7 @@ gbinder_local_request_data(
 
 GBinderLocalRequest*
 gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer,
-    void** objects);
+    GBinderBuffer* buffer);
 
 #endif /* GBINDER_LOCAL_REQUEST_PRIVATE_H */
 

@@ -98,6 +98,12 @@ gbinder_driver_release(
     guint32 handle);
 
 void
+gbinder_driver_close_fds(
+    GBinderDriver* self,
+    void** objects,
+    const void* end);
+
+void
 gbinder_driver_free_buffer(
     GBinderDriver* driver,
     void* buffer);
