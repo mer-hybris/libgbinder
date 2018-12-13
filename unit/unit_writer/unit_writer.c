@@ -97,9 +97,50 @@ test_null(
     gbinder_writer_append_remote_object(&writer, NULL);
     gbinder_writer_append_byte_array(NULL, NULL, 0);
     gbinder_writer_append_byte_array(&writer, NULL, 0);
+    gbinder_writer_add_cleanup(NULL, NULL, 0);
+    gbinder_writer_add_cleanup(NULL, g_free, 0);
 
     g_assert(!gbinder_output_data_offsets(NULL));
     g_assert(!gbinder_output_data_buffers_size(NULL));
+    g_assert(!gbinder_writer_malloc(NULL, 0));
+    g_assert(!gbinder_writer_malloc0(NULL, 0));
+    g_assert(!gbinder_writer_memdup(&writer, NULL, 0));
+    g_assert(!gbinder_writer_memdup(NULL, &writer, 0));
+}
+
+/*==========================================================================*
+ * cleanup
+ *==========================================================================*/
+
+static
+void
+test_cleanup_fn(
+    gpointer ptr)
+{
+    (*((int*)ptr))++;
+}
+
+static
+void
+test_cleanup(
+    void)
+{
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderWriter writer;
+    int cleanup_count = 0;
+    int value = 42;
+    int* zero;
+    int* copy;
+
+    gbinder_local_request_init_writer(req, &writer);
+    zero = gbinder_writer_new0(&writer, int);
+    copy = gbinder_writer_memdup(&writer, &value, sizeof(value));
+    g_assert(*zero == 0);
+    g_assert(*copy == value);
+    gbinder_writer_add_cleanup(&writer, test_cleanup_fn, &cleanup_count);
+    gbinder_writer_add_cleanup(&writer, test_cleanup_fn, &cleanup_count);
+    gbinder_local_request_unref(req);
+    g_assert(cleanup_count == 2);
 }
 
 /*==========================================================================*
@@ -896,6 +937,7 @@ int main(int argc, char* argv[])
 
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("cleanup"), test_cleanup);
     g_test_add_func(TEST_("int32"), test_int32);
     g_test_add_func(TEST_("int64"), test_int64);
     g_test_add_func(TEST_("float"), test_float);

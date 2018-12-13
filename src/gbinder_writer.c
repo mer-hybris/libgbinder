@@ -889,6 +889,73 @@ gbinder_writer_data_append_remote_object(
     gbinder_writer_data_record_offset(data, offset);
 }
 
+static
+void*
+gbinder_writer_alloc(
+    GBinderWriter* self,
+    gsize size,
+    gpointer (*alloc)(gsize),
+    void (*dealloc)())
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        void* ptr = alloc(size);
+
+        data->cleanup = gbinder_cleanup_add(data->cleanup, dealloc, ptr);
+        return ptr;
+    }
+    return NULL;
+}
+
+void*
+gbinder_writer_malloc(
+    GBinderWriter* self,
+    gsize size) /* since 1.0.19 */
+{
+    return gbinder_writer_alloc(self, size, g_malloc, g_free);
+}
+
+void*
+gbinder_writer_malloc0(
+    GBinderWriter* self,
+    gsize size) /* since 1.0.19 */
+{
+    return gbinder_writer_alloc(self, size, g_malloc0, g_free);
+}
+
+void*
+gbinder_writer_memdup(
+    GBinderWriter* self,
+    const void* buf,
+    gsize size) /* since 1.0.19 */
+{
+    if (buf) {
+        void* ptr = gbinder_writer_malloc(self, size);
+
+        if (ptr) {
+            memcpy(ptr, buf, size);
+            return ptr;
+        }
+    }
+    return NULL;
+}
+
+void
+gbinder_writer_add_cleanup(
+    GBinderWriter* self,
+    GDestroyNotify destroy,
+    gpointer ptr) /* since 1.0.19 */
+{
+    if (G_LIKELY(destroy)) {
+        GBinderWriterData* data = gbinder_writer_data(self);
+
+        if (G_LIKELY(data)) {
+            data->cleanup = gbinder_cleanup_add(data->cleanup, destroy, ptr);
+        }
+    }
+}
+
 /*
  * Local Variables:
  * mode: C
