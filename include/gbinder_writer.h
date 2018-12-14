@@ -162,9 +162,37 @@ gbinder_writer_append_remote_object(
 
 void
 gbinder_writer_append_byte_array(
-    GBinderWriter* self,
+    GBinderWriter* writer,
     const void* byte_array,
     gint32 len); /* since 1.0.12 */
+
+void*
+gbinder_writer_malloc(
+    GBinderWriter* writer,
+    gsize size); /* since 1.0.19 */
+
+void*
+gbinder_writer_malloc0(
+    GBinderWriter* writer,
+    gsize size); /* since 1.0.19 */
+
+#define gbinder_writer_new(writer,type) \
+    ((type*) gbinder_writer_malloc(writer, sizeof(type)))
+
+#define gbinder_writer_new0(writer,type) \
+    ((type*) gbinder_writer_malloc0(writer, sizeof(type)))
+
+void*
+gbinder_writer_memdup(
+    GBinderWriter* writer,
+    const void* buf,
+    gsize size); /* since 1.0.19 */
+
+void
+gbinder_writer_add_cleanup(
+    GBinderWriter* writer,
+    GDestroyNotify destroy,
+    gpointer data); /* since 1.0.19 */
 
 G_END_DECLS
 
