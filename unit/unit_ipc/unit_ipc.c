@@ -52,6 +52,24 @@
 
 static TestOpt test_opt;
 
+static
+gboolean
+test_unref_ipc(
+    gpointer ipc)
+{
+    gbinder_ipc_unref(ipc);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_quit_when_destroyed(
+    gpointer loop,
+    GObject* obj)
+{
+    test_quit_later((GMainLoop*)loop);
+}
+
 /*==========================================================================*
  * null
  *==========================================================================*/
@@ -607,24 +625,6 @@ test_transact_incoming_proc(
 }
 
 static
-gboolean
-test_transact_unref_ipc(
-    gpointer ipc)
-{
-    gbinder_ipc_unref(ipc);
-    return G_SOURCE_REMOVE;
-}
-
-static
-void
-test_transact_done(
-    gpointer loop,
-    GObject* ipc)
-{
-    test_quit_later((GMainLoop*)loop);
-}
-
-static
 void
 test_transact_incoming(
     void)
@@ -651,17 +651,17 @@ test_transact_incoming(
 
     /* Now we need to wait until GBinderIpc is destroyed */
     GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_transact_done, loop);
+    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_local_object_unref(obj);
     gbinder_local_request_unref(req);
-    g_idle_add(test_transact_unref_ipc, ipc);
+    g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
     g_main_loop_unref(loop);
 }
 
 /*==========================================================================*
- * transact_incoming_status
+ * transact_status_reply
  *==========================================================================*/
 
 static
@@ -712,10 +712,184 @@ test_transact_status_reply(
 
     /* Now we need to wait until GBinderIpc is destroyed */
     GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_transact_done, loop);
+    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_local_object_unref(obj);
     gbinder_local_request_unref(req);
-    g_idle_add(test_transact_unref_ipc, ipc);
+    g_idle_add(test_unref_ipc, ipc);
+    test_run(&test_opt, loop);
+
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * transact_async
+ *==========================================================================*/
+
+typedef struct test_transact_async_req {
+    GBinderLocalObject* obj;
+    GBinderRemoteRequest* req;
+    GMainLoop* loop;
+} TestTransactAsyncReq;
+
+static
+void
+test_transact_async_done(
+    gpointer data)
+{
+    TestTransactAsyncReq* test = data;
+
+    gbinder_local_object_unref(test->obj);
+    gbinder_remote_request_unref(test->req);
+    test_quit_later(test->loop);
+    g_free(test);
+}
+
+static
+gboolean
+test_transact_async_reply(
+    gpointer data)
+{
+    TestTransactAsyncReq* test = data;
+    GBinderLocalReply* reply = gbinder_local_object_new_reply(test->obj);
+
+    gbinder_remote_request_complete(test->req, reply, 0);
+    gbinder_local_reply_unref(reply);
+    return G_SOURCE_REMOVE;
+}
+
+static
+GBinderLocalReply*
+test_transact_async_proc(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* loop)
+{
+    TestTransactAsyncReq* test = g_new(TestTransactAsyncReq, 1);
+
+    GVERBOSE_("\"%s\" %u", gbinder_remote_request_interface(req), code);
+    g_assert(!flags);
+    g_assert(gbinder_remote_request_sender_pid(req) == getpid());
+    g_assert(gbinder_remote_request_sender_euid(req) == geteuid());
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), "test"));
+    g_assert(!g_strcmp0(gbinder_remote_request_read_string8(req), "message"));
+    g_assert(code == 1);
+
+    test->obj = gbinder_local_object_ref(obj);
+    test->req = gbinder_remote_request_ref(req);
+    test->loop = (GMainLoop*)loop;
+
+    gbinder_remote_request_block(req);
+    gbinder_remote_request_block(req); /* wrong state; has no effect */
+
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, test_transact_async_reply, test,
+        test_transact_async_done);
+    return NULL;
+}
+
+static
+void
+test_transact_async(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const GBinderIo* io = gbinder_driver_io(ipc->driver);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    const char* dev = gbinder_driver_dev(ipc->driver);
+    const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+        (ipc, "test", test_transact_async_proc, loop);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    prot->write_rpc_header(&writer, "test");
+    gbinder_writer_append_string8(&writer, "message");
+    data = gbinder_local_request_data(req);
+
+    test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_run(&test_opt, loop);
+
+    /* Now we need to wait until GBinderIpc is destroyed */
+    GDEBUG("waiting for GBinderIpc to get destroyed");
+    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
+    gbinder_local_object_unref(obj);
+    gbinder_local_request_unref(req);
+    g_idle_add(test_unref_ipc, ipc);
+    test_run(&test_opt, loop);
+
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * transact_async_sync
+ *==========================================================================*/
+
+static
+GBinderLocalReply*
+test_transact_async_sync_proc(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* loop)
+{
+    GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
+
+    GVERBOSE_("\"%s\" %u", gbinder_remote_request_interface(req), code);
+    g_assert(!flags);
+    g_assert(gbinder_remote_request_sender_pid(req) == getpid());
+    g_assert(gbinder_remote_request_sender_euid(req) == geteuid());
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), "test"));
+    g_assert(!g_strcmp0(gbinder_remote_request_read_string8(req), "message"));
+    g_assert(code == 1);
+
+    /* Block and immediately complete the call */
+    gbinder_remote_request_block(req);
+    gbinder_remote_request_complete(req, reply, 0);
+    gbinder_remote_request_complete(req, reply, 0); /* This one is ignored */
+    gbinder_local_reply_unref(reply);
+
+    test_quit_later((GMainLoop*)loop);
+    return NULL;
+}
+
+static
+void
+test_transact_async_sync(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const GBinderIo* io = gbinder_driver_io(ipc->driver);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    const char* dev = gbinder_driver_dev(ipc->driver);
+    const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+        (ipc, "test", test_transact_async_sync_proc, loop);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    prot->write_rpc_header(&writer, "test");
+    gbinder_writer_append_string8(&writer, "message");
+    data = gbinder_local_request_data(req);
+
+    test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_run(&test_opt, loop);
+
+    /* Now we need to wait until GBinderIpc is destroyed */
+    GDEBUG("waiting for GBinderIpc to get destroyed");
+    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
+    gbinder_local_object_unref(obj);
+    gbinder_local_request_unref(req);
+    g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
     g_main_loop_unref(loop);
@@ -726,26 +900,28 @@ test_transact_status_reply(
  *==========================================================================*/
 
 #define TEST_PREFIX "/ipc/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "null", test_null);
-    g_test_add_func(TEST_PREFIX "basic", test_basic);
-    g_test_add_func(TEST_PREFIX "sync_oneway", test_sync_oneway);
-    g_test_add_func(TEST_PREFIX "sync_reply_ok", test_sync_reply_ok);
-    g_test_add_func(TEST_PREFIX "sync_reply_error", test_sync_reply_error);
-    g_test_add_func(TEST_PREFIX "transact_ok", test_transact_ok);
-    g_test_add_func(TEST_PREFIX "transact_dead", test_transact_dead);
-    g_test_add_func(TEST_PREFIX "transact_failed", test_transact_failed);
-    g_test_add_func(TEST_PREFIX "transact_status", test_transact_status);
-    g_test_add_func(TEST_PREFIX "transact_custom", test_transact_custom);
-    g_test_add_func(TEST_PREFIX "transact_custom2", test_transact_custom2);
-    g_test_add_func(TEST_PREFIX "transact_cancel", test_transact_cancel);
-    g_test_add_func(TEST_PREFIX "transact_cancel2", test_transact_cancel2);
-    g_test_add_func(TEST_PREFIX "transact_incoming", test_transact_incoming);
-    g_test_add_func(TEST_PREFIX "transact_status_reply",
-        test_transact_status_reply);
+    g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
+    g_test_add_func(TEST_("sync_reply_ok"), test_sync_reply_ok);
+    g_test_add_func(TEST_("sync_reply_error"), test_sync_reply_error);
+    g_test_add_func(TEST_("transact_ok"), test_transact_ok);
+    g_test_add_func(TEST_("transact_dead"), test_transact_dead);
+    g_test_add_func(TEST_("transact_failed"), test_transact_failed);
+    g_test_add_func(TEST_("transact_status"), test_transact_status);
+    g_test_add_func(TEST_("transact_custom"), test_transact_custom);
+    g_test_add_func(TEST_("transact_custom2"), test_transact_custom2);
+    g_test_add_func(TEST_("transact_cancel"), test_transact_cancel);
+    g_test_add_func(TEST_("transact_cancel2"), test_transact_cancel2);
+    g_test_add_func(TEST_("transact_incoming"), test_transact_incoming);
+    g_test_add_func(TEST_("transact_status_reply"), test_transact_status_reply);
+    g_test_add_func(TEST_("transact_async"), test_transact_async);
+    g_test_add_func(TEST_("transact_async_sync"), test_transact_async_sync);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

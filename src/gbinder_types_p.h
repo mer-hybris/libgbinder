@@ -45,6 +45,7 @@ typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;
 typedef struct gbinder_rpc_protocol GBinderRpcProtocol;
 typedef struct gbinder_servicepoll GBinderServicePoll;
+typedef struct gbinder_ipc_looper_tx GBinderIpcLooperTx;
 
 #define GBINDER_INLINE_FUNC static inline
 

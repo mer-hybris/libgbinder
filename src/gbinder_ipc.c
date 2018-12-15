@@ -68,9 +68,9 @@ struct gbinder_ipc_priv {
     GMutex local_objects_mutex;
     GHashTable* local_objects;
 
-    /* We may need more loopers... But let's start with just one */
     GMutex looper_mutex;
-    GBinderIpcLooper* looper;
+    GBinderIpcLooper* primary_loopers;
+    GBinderIpcLooper* blocked_loopers;
 };
 
 typedef GObjectClass GBinderIpcClass;
@@ -100,7 +100,7 @@ static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
  * When the main thread receives GBinderIpcLooperTx:
  *
  * 1. Lets the object to process it and produce the response (GBinderOutput).
- * 2. Writes one byte to the sending end of the tx pipe.
+ * 2. Writes one byte (TX_DONE) to the sending end of the tx pipe.
  * 3. Unreferences GBinderIpcLooperTx
  *
  * When tx pipe wakes up the looper:
@@ -111,11 +111,26 @@ static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
  * Note that GBinderIpcLooperTx can be deallocated on either looper or
  * main thread, depending on whether looper gives up on the transaction
  * before it gets processed.
+ *
+ * When transaction is blocked by gbinder_remote_request_block() call, it
+ * gets slightly more complicated. Then the main thread writes TX_BLOCKED
+ * to the pipe (rather than TX_DONE) and then looper thread spawn another
+ * looper and keeps waiting for TX_DONE.
  */
 
 #define TX_DONE (0x2a)
+#define TX_BLOCKED (0x3b)
 
-typedef struct gbinder_ipc_looper_tx {
+typedef enum gbinder_ipc_looper_tx_state {
+    GBINDER_IPC_LOOPER_TX_SCHEDULED,
+    GBINDER_IPC_LOOPER_TX_PROCESSING,
+    GBINDER_IPC_LOOPER_TX_PROCESSED,
+    GBINDER_IPC_LOOPER_TX_BLOCKING,
+    GBINDER_IPC_LOOPER_TX_BLOCKED,
+    GBINDER_IPC_LOOPER_TX_COMPLETE
+} GBINDER_IPC_LOOPER_TX_STATE;
+
+struct gbinder_ipc_looper_tx {
     /* Reference count */
     gint refcount;
     /* These are filled by the looper: */
@@ -125,19 +140,23 @@ typedef struct gbinder_ipc_looper_tx {
     GBinderLocalObject* obj;
     GBinderRemoteRequest* req;
     /* And these by the main thread processing the transaction: */
+    GBINDER_IPC_LOOPER_TX_STATE state;
     GBinderLocalReply* reply;
     int status;
-} GBinderIpcLooperTx;
+} /* GBinderIpcLooperTx */;
 
 struct gbinder_ipc_looper {
     gint refcount;
+    GBinderIpcLooper* next;
+    char* name;
     GBinderHandler handler;
     GBinderDriver* driver;
     GBinderIpc* ipc; /* Not a reference! */
     GThread* thread;
     GMutex mutex;
     GCond start_cond;
-    gboolean started;
+    gint exit;
+    gint started;
     int pipefd[2];
     int txfd[2];
 };
@@ -177,6 +196,11 @@ typedef struct gbinder_ipc_tx_custom {
 
 GBINDER_INLINE_FUNC const char* gbinder_ipc_name(GBinderIpc* self)
     { return gbinder_driver_dev(self->driver); }
+
+static
+GBinderIpcLooper*
+gbinder_ipc_looper_new(
+    GBinderIpc* ipc);
 
 /*==========================================================================*
  * GBinderIpcLooperTx
@@ -246,6 +270,91 @@ gbinder_ipc_looper_tx_unref(
 }
 
 /*==========================================================================*
+ * State machine of transaction handling. All this is happening on the event
+ * thread and therefore doesn't need to be synchronized.
+ *
+ * SCHEDULED
+ * =========
+ *     |
+ * PROCESSING
+ * ==========
+ *     |
+ * --------------------- handler is called ---------------------------------
+ *     |
+ *     +---------------- request doesn't need to be blocked ----------+
+ *     |                                                              |
+ *   gbinder_remote_request_block()                                   |
+ *     |                                                              |
+ * BLOCKING -- gbinder_remote_request_complete() --> PROCESSED        |
+ * ========                                          =========        |
+ *     |                                                 |            |
+ * --------------------- handler returns -----------------------------------
+ *     |                                                 |            |
+ * BLOCKED                                           COMPLETE <-------+
+ * =======                                           ========
+ *                                                       ^
+ *   ...                                                 |
+ * gbinder_remote_request_complete() is called later ----+
+ *==========================================================================*/
+
+void
+gbinder_remote_request_block(
+    GBinderRemoteRequest* req) /* Since 1.0.20 */
+{
+    if (G_LIKELY(req)) {
+        GBinderIpcLooperTx* tx = req->tx;
+
+        GASSERT(tx);
+        if (G_LIKELY(tx)) {
+            GASSERT(tx->state == GBINDER_IPC_LOOPER_TX_PROCESSING);
+            if (tx->state == GBINDER_IPC_LOOPER_TX_PROCESSING) {
+                tx->state = GBINDER_IPC_LOOPER_TX_BLOCKING;
+            }
+        }
+    }
+}
+
+void
+gbinder_remote_request_complete(
+    GBinderRemoteRequest* req,
+    GBinderLocalReply* reply,
+    int status) /* Since 1.0.20 */
+{
+    if (G_LIKELY(req)) {
+        GBinderIpcLooperTx* tx = req->tx;
+
+        GASSERT(tx);
+        if (G_LIKELY(tx)) {
+            const guint8 done = TX_DONE;
+
+            switch (tx->state) {
+            case GBINDER_IPC_LOOPER_TX_BLOCKING:
+                /* Called by the transaction handler */
+                tx->status = status;
+                tx->reply = gbinder_local_reply_ref(reply);
+                tx->state = GBINDER_IPC_LOOPER_TX_PROCESSED;
+                break;
+            case GBINDER_IPC_LOOPER_TX_BLOCKED:
+                /* Really asynchronous completion */
+                tx->status = status;
+                tx->reply = gbinder_local_reply_ref(reply);
+                tx->state = GBINDER_IPC_LOOPER_TX_COMPLETE;
+                /* Wake up the looper */
+                (void)write(tx->pipefd[1], &done, sizeof(done));
+                break;
+            default:
+                GWARN("Unexpected state %d in request completion", tx->state);
+                break;
+            }
+
+            /* Clear the transaction reference */
+            gbinder_ipc_looper_tx_unref(tx, FALSE);
+            req->tx = NULL;
+       }
+    }
+}
+
+/*==========================================================================*
  * GBinderIpcLooper
  *==========================================================================*/
 
@@ -255,11 +364,70 @@ gbinder_ipc_looper_tx_handle(
     gpointer data)
 {
     GBinderIpcLooperTx* tx = data;
-    guint8 done = TX_DONE;
+    GBinderRemoteRequest* req = tx->req;
+    GBinderLocalReply* reply;
+    int status = GBINDER_STATUS_OK;
+    guint8 done;
+
+    /*
+     * Transaction reference for gbinder_remote_request_block()
+     * and gbinder_remote_request_complete().
+     */
+    req->tx = gbinder_ipc_looper_tx_ref(tx);
+
+    /* See state machine */
+    GASSERT(tx->state == GBINDER_IPC_LOOPER_TX_SCHEDULED);
+    tx->state = GBINDER_IPC_LOOPER_TX_PROCESSING;
 
     /* Actually handle the transaction */
-    tx->reply = gbinder_local_object_handle_transaction(tx->obj, tx->req,
-        tx->code, tx->flags, &tx->status);
+    reply = gbinder_local_object_handle_transaction(tx->obj, req,
+        tx->code, tx->flags, &status);
+
+    /* Handle all possible return states */
+    switch (tx->state) {
+    case GBINDER_IPC_LOOPER_TX_PROCESSING:
+        /* Result was returned by the handler */
+        tx->reply = reply;
+        tx->status = status;
+        tx->state = GBINDER_IPC_LOOPER_TX_COMPLETE;
+        reply = NULL;
+        break;
+    case GBINDER_IPC_LOOPER_TX_PROCESSED:
+        /* Result has been provided to gbinder_remote_request_complete() */
+        tx->state = GBINDER_IPC_LOOPER_TX_COMPLETE;
+        break;
+    case GBINDER_IPC_LOOPER_TX_BLOCKING:
+        /* Result will be provided to gbinder_remote_request_complete() */
+        tx->state = GBINDER_IPC_LOOPER_TX_BLOCKED;
+        break;
+    default:
+        break;
+    }
+
+    /* In case handler returns a reply which it wasn't expected to return */
+    GASSERT(!reply);
+    gbinder_local_reply_unref(reply);
+
+    /* Drop the transaction reference unless blocked */
+    if (tx->state == GBINDER_IPC_LOOPER_TX_BLOCKED) {
+        done = TX_BLOCKED;
+        /*
+         * From this point on, it's GBinderRemoteRequest who's holding
+         * reference to GBinderIpcLooperTx, not the other way around and
+         * not both ways. Even if gbinder_remote_request_complete() never
+         * gets called, transaction will still be completed when the last
+         * reference to GBinderRemoteRequest goes away. And if request
+         * never gets deallocated... oh well.
+         */
+        gbinder_remote_request_unref(tx->req);
+        tx->req = NULL;
+    } else {
+        done = TX_DONE;
+        if (req->tx) {
+            gbinder_ipc_looper_tx_unref(req->tx, FALSE);
+            req->tx = NULL;
+        }
+    }
 
     /* And wake up the looper */
     (void)write(tx->pipefd[1], &done, sizeof(done));
@@ -272,6 +440,52 @@ gbinder_ipc_looper_tx_done(
     gpointer data)
 {
     gbinder_ipc_looper_tx_unref(data, FALSE);
+}
+
+static
+gboolean
+gbinder_ipc_looper_remove_from_list(
+    GBinderIpcLooper* looper,
+    GBinderIpcLooper** list)
+{
+    /* Caller holds looper_mutex */
+    if (*list) {
+        if ((*list) == looper) {
+            (*list) = looper->next;
+            looper->next = NULL;
+            return TRUE;
+        } else {
+            GBinderIpcLooper* prev = (*list);
+
+            while (prev->next) {
+                if (prev->next == looper) {
+                    prev->next = looper->next;
+                    looper->next = NULL;
+                    return TRUE;
+                }
+                prev = prev->next;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static
+gboolean
+gbinder_ipc_looper_remove_primary(
+    GBinderIpcLooper* looper)
+{
+    return gbinder_ipc_looper_remove_from_list(looper,
+        &looper->ipc->priv->primary_loopers);
+}
+
+static
+gboolean
+gbinder_ipc_looper_remove_blocked(
+    GBinderIpcLooper* looper)
+{
+    return gbinder_ipc_looper_remove_from_list(looper,
+        &looper->ipc->priv->blocked_loopers);
 }
 
 static
@@ -318,11 +532,65 @@ gbinder_ipc_looper_transact(
         if ((fds[1].revents & POLLIN) &&
             read(fds[1].fd, &done, sizeof(done)) == 1) {
             /* Normal completion */
+            if (done == TX_BLOCKED) {
+                /*
+                 * We are going to block this looper for potentially
+                 * significant period of time. Start new looper to
+                 * accept normal incoming requests and terminate this
+                 * one when we are done with this transaction.
+                 *
+                 * For the duration of the transaction, this looper is
+                 * moved to the blocked_loopers list.
+                 */
+                GBinderIpcPriv* priv = looper->ipc->priv;
+
+                /* Lock */
+                g_mutex_lock(&priv->looper_mutex);
+                if (gbinder_ipc_looper_remove_primary(looper)) {
+                    GBinderIpcLooper* new_looper;
+
+                    GDEBUG("Primary looper %s is blocked", looper->name);
+                    looper->next = priv->blocked_loopers;
+                    priv->blocked_loopers = looper;
+
+                    /* Looper will exit once transaction completes */
+                    g_atomic_int_set(&looper->exit, 1);
+
+                    /* Create new primary looper to replace this one */
+                    new_looper = gbinder_ipc_looper_new(ipc);
+                    if (new_looper) {
+                        new_looper->next = priv->primary_loopers;
+                        priv->primary_loopers = new_looper;
+                    }
+                }
+                g_mutex_unlock(&priv->looper_mutex);
+                /* Unlock */
+
+                /* Block until asynchronous transaction gets completed. */
+                done = 0;
+                memset(fds, 0, sizeof(fds));
+                fds[0].fd = looper->pipefd[0];
+                fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+                fds[1].fd = tx->pipefd[0];
+                fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+                poll(fds, 2, -1);
+                if ((fds[1].revents & POLLIN) &&
+                    read(fds[1].fd, &done, sizeof(done)) == 1) {
+                    GASSERT(done == TX_DONE);
+                }
+            }
+        }
+        if (done) {
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
             status = tx->status;
             if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
-                /* gbinder_ipc_looper_tx_free() will close those */
+                /*
+                 * This wasn't the last references meaning that
+                 * gbinder_ipc_looper_tx_free() will close the
+                 * descriptors and we will have to create a new
+                 * pipe for the next transaction.
+                 */
                 looper->txfd[0] = looper->txfd[1] = -1;
             }
         } else {
@@ -348,6 +616,7 @@ gbinder_ipc_looper_free(
         close(looper->txfd[1]);
     }
     gbinder_driver_unref(looper->driver);
+    g_free(looper->name);
     g_cond_clear(&looper->start_cond);
     g_mutex_clear(&looper->mutex);
     g_slice_free(GBinderIpcLooper, looper);
@@ -384,11 +653,11 @@ gbinder_ipc_looper_thread(
 
     if (gbinder_driver_enter_looper(driver)) {
         struct pollfd pipefd;
-        int result;
+        int res;
 
-        GDEBUG("Looper %s running", gbinder_driver_dev(driver));
+        GDEBUG("Looper %s running", looper->name);
         g_mutex_lock(&looper->mutex);
-        looper->started = TRUE;
+        g_atomic_int_set(&looper->started, TRUE);
         g_cond_broadcast(&looper->start_cond);
         g_mutex_unlock(&looper->mutex);
 
@@ -396,31 +665,33 @@ gbinder_ipc_looper_thread(
         pipefd.fd = looper->pipefd[0]; /* read end of the pipe */
         pipefd.events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
 
-        result = gbinder_driver_poll(driver, &pipefd);
-        while (looper->ipc && ((result & POLLIN) || !result)) {
-            if (result & POLLIN) {
-                /* No need to synchronize access to looper->ipc because
+        res = gbinder_driver_poll(driver, &pipefd);
+        while (!g_atomic_int_get(&looper->exit) && ((res & POLLIN) || !res)) {
+            if (res & POLLIN) {
+                /*
+                 * No need to synchronize access to looper->ipc because
                  * the other thread would wait until this thread exits
-                 * before setting looper->ipc to NULL */
+                 * before setting looper->ipc to NULL.
+                 */
                 GBinderIpc* ipc = gbinder_ipc_ref(looper->ipc);
                 GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
                 /* But that gbinder_driver_read() may unref GBinderIpc */
                 int ret = gbinder_driver_read(driver, reg, &looper->handler);
+
                 /* And this gbinder_ipc_unref() may release the last ref: */
                 gbinder_ipc_unref(ipc);
                 /* And at this point looper->ipc may be NULL */
                 if (ret < 0) {
-                    GDEBUG("Looper %s failed", gbinder_driver_dev(driver));
+                    GDEBUG("Looper %s failed", looper->name);
                     break;
                 }
             }
-            if (pipefd.revents) {
-                /* Any event from this pipe terminates the loop */
-                GDEBUG("Looper %s is asked to exit",
-                    gbinder_driver_dev(driver));
+            /* Any event from this pipe terminates the loop */
+            if (pipefd.revents || g_atomic_int_get(&looper->exit)) {
+                GDEBUG("Looper %s is requested to exit", looper->name);
                 break;
             }
-            result = gbinder_driver_poll(driver, &pipefd);
+            res = gbinder_driver_poll(driver, &pipefd);
         }
 
         gbinder_driver_exit_looper(driver);
@@ -432,24 +703,26 @@ gbinder_ipc_looper_thread(
          */
         if (looper->ipc) {
             GBinderIpcPriv* priv = looper->ipc->priv;
+
             /* Lock */
             g_mutex_lock(&priv->looper_mutex);
-            if (priv->looper == looper) {
+            if (gbinder_ipc_looper_remove_blocked(looper) ||
+                gbinder_ipc_looper_remove_primary(looper)) {
                 /* Spontaneous exit */
-                priv->looper = NULL;
-                GDEBUG("Looper %s exits", gbinder_driver_dev(driver));
+                GDEBUG("Looper %s exits", looper->name);
+                gbinder_ipc_looper_unref(looper);
             } else {
                 /* Main thread is shutting it down */
-                GDEBUG("Looper %s done", gbinder_driver_dev(driver));
+                GDEBUG("Looper %s done", looper->name);
             }
             g_mutex_unlock(&priv->looper_mutex);
             /* Unlock */
         } else {
-            GDEBUG("Looper %s is abandoned", gbinder_driver_dev(driver));
+            GDEBUG("Looper %s is abandoned", looper->name);
         }
     } else {
         g_mutex_lock(&looper->mutex);
-        looper->started = TRUE;
+        g_atomic_int_set(&looper->started, TRUE);
         g_cond_broadcast(&looper->start_cond);
         g_mutex_unlock(&looper->mutex);
     }
@@ -472,20 +745,24 @@ gbinder_ipc_looper_new(
         };
         GError* error = NULL;
         GBinderIpcLooper* looper = g_slice_new0(GBinderIpcLooper);
+        static gint gbinder_ipc_next_looper_id = 1;
+        guint id = (guint)g_atomic_int_add(&gbinder_ipc_next_looper_id, 1);
 
         memcpy(looper->pipefd, fd, sizeof(fd));
         looper->txfd[0] = looper->txfd[1] = -1;
         g_atomic_int_set(&looper->refcount, 1);
         g_cond_init(&looper->start_cond);
         g_mutex_init(&looper->mutex);
+        looper->name = g_strdup_printf("%s#%u", gbinder_ipc_name(ipc), id);
         looper->handler.f = &handler_functions;
         looper->ipc = ipc;
         looper->driver = gbinder_driver_ref(ipc->driver);
-        looper->thread = g_thread_try_new(gbinder_ipc_name(ipc),
+        looper->thread = g_thread_try_new(looper->name,
             gbinder_ipc_looper_thread, looper, &error);
         if (looper->thread) {
             /* gbinder_ipc_looper_thread() will release this reference: */
             gbinder_ipc_looper_ref(looper);
+            GDEBUG("Starting looper %s", looper->name);
             return looper;
         } else {
             GERR("Failed to create looper thread: %s", GERRMSG(error));
@@ -505,35 +782,83 @@ gbinder_ipc_looper_check(
     if (G_LIKELY(self)) {
         GBinderIpcPriv* priv = self->priv;
 
-        if (!priv->looper) {
+        if (!priv->primary_loopers) {
             GBinderIpcLooper* looper;
+
             /* Lock */
             g_mutex_lock(&priv->looper_mutex);
-            if (!priv->looper) {
-                GDEBUG("Starting looper %s", gbinder_ipc_name(self));
-                priv->looper = gbinder_ipc_looper_new(self);
+            looper = priv->primary_loopers;
+            if (!looper) {
+                looper = priv->primary_loopers = gbinder_ipc_looper_new(self);
             }
             g_mutex_unlock(&priv->looper_mutex);
             /* Unlock */
 
             /* We are not ready to accept incoming transactions until
              * looper has started. We may need to wait a bit. */
-            looper = priv->looper;
-            if (!looper->started) {
+            if (looper && !g_atomic_int_get(&looper->started)) {
                 /* Lock */
                 g_mutex_lock(&looper->mutex);
-                if (!looper->started) {
+                if (!g_atomic_int_get(&looper->started)) {
                     g_cond_wait_until(&looper->start_cond, &looper->mutex,
                         g_get_monotonic_time() +
                         GBINDER_IPC_LOOPER_START_TIMEOUT_SEC *
                         G_TIME_SPAN_SECOND);
-                    GASSERT(looper->started);
+                    GASSERT(g_atomic_int_get(&looper->started));
                 }
                 g_mutex_unlock(&looper->mutex);
                 /* Unlock */
             }
         }
     }
+}
+
+static
+void
+gbinder_ipc_looper_stop(
+    GBinderIpcLooper* looper)
+{
+    /* Caller checks looper for NULL */
+    if (looper->thread && looper->thread != g_thread_self()) {
+        guint8 done = TX_DONE;
+
+        GDEBUG("Stopping looper %s", looper->name);
+        g_atomic_int_set(&looper->exit, TRUE);
+        if (write(looper->pipefd[1], &done, sizeof(done)) <= 0) {
+            looper->thread = NULL;
+        }
+    }
+}
+
+static
+GBinderIpcLooper*
+gbinder_ipc_looper_stop_all(
+    GBinderIpcLooper* loopers,
+    GBinderIpcLooper* list)
+{
+    while (list) {
+        GBinderIpcLooper* looper = list;
+        GBinderIpcLooper* next = looper->next;
+
+        gbinder_ipc_looper_stop(looper);
+        looper->next = loopers;
+        loopers = looper;
+        list = next;
+    }
+    return loopers;
+}
+
+static
+void
+gbinder_ipc_looper_join(
+    GBinderIpcLooper* looper)
+{
+    /* Caller checks looper for NULL */
+    if (looper->thread && looper->thread != g_thread_self()) {
+        g_thread_join(looper->thread);
+        looper->thread = NULL;
+    }
+    looper->ipc = NULL;
 }
 
 /*==========================================================================*
@@ -1232,7 +1557,7 @@ gbinder_ipc_dispose(
 {
     GBinderIpc* self = GBINDER_IPC(object);
     GBinderIpcPriv* priv = self->priv;
-    GBinderIpcLooper* looper;
+    GBinderIpcLooper* loopers = NULL;
 
     GVERBOSE_("%s", self->dev);
     /* Lock */
@@ -1253,22 +1578,19 @@ gbinder_ipc_dispose(
 
     /* Lock */
     g_mutex_lock(&priv->looper_mutex);
-    looper = priv->looper;
-    priv->looper = NULL;
+    loopers = gbinder_ipc_looper_stop_all(loopers, priv->primary_loopers);
+    loopers = gbinder_ipc_looper_stop_all(loopers, priv->blocked_loopers);
+    priv->blocked_loopers = NULL;
+    priv->primary_loopers = NULL;
     g_mutex_unlock(&priv->looper_mutex);
     /* Unlock */
 
-    if (looper) {
-        if (looper->thread && looper->thread != g_thread_self()) {
-            guint8 done = TX_DONE;
+    while (loopers) {
+        GBinderIpcLooper* looper = loopers;
 
-            GDEBUG("Stopping looper %s", gbinder_ipc_name(looper->ipc));
-            if (write(looper->pipefd[1], &done, sizeof(done)) > 0) {
-                g_thread_join(looper->thread);
-                looper->thread = NULL;
-            }
-        }
-        looper->ipc = NULL;
+        loopers = looper->next;
+        looper->next = NULL;
+        gbinder_ipc_looper_join(looper);
         gbinder_ipc_looper_unref(looper);
     }
 

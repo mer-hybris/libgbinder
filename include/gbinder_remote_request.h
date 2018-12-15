@@ -67,6 +67,16 @@ gbinder_remote_request_copy_to_local(
     GBinderRemoteRequest* req) /* since 1.0.6 */
     G_GNUC_WARN_UNUSED_RESULT;
 
+void
+gbinder_remote_request_block(
+    GBinderRemoteRequest* req); /* Since 1.0.20 */
+
+void
+gbinder_remote_request_complete(
+    GBinderRemoteRequest* req,
+    GBinderLocalReply* reply,
+    int status); /* Since 1.0.20 */
+
 /* Convenience function to decode requests with just one data item */
 
 gboolean
