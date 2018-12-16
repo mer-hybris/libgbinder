@@ -194,7 +194,7 @@ app_init(
         { "quiet", 'q', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           app_log_quiet, "Be quiet", NULL },
         { "async", 'a', 0, G_OPTION_ARG_NONE, &opt->async,
-          "Parform operations asynchronously", NULL },
+          "Perform operations asynchronously", NULL },
         { "device", 'd', 0, G_OPTION_ARG_STRING, &opt->dev,
           "Binder device [" DEV_DEFAULT "]", "DEVICE" },
         { NULL }
