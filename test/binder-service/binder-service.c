@@ -52,6 +52,7 @@ typedef struct app_options {
     char* dev;
     char* iface;
     const char* name;
+    gboolean async;
 } AppOptions;
 
 typedef struct app {
@@ -61,6 +62,11 @@ typedef struct app {
     GBinderLocalObject* obj;
     int ret;
 } App;
+
+typedef struct response {
+    GBinderRemoteRequest* req;
+    GBinderLocalReply* reply;
+} Response;
 
 static const char pname[] = "binder-service";
 
@@ -74,6 +80,29 @@ app_signal(
     GINFO("Caught signal, shutting down...");
     g_main_loop_quit(app->loop);
     return G_SOURCE_CONTINUE;
+}
+
+static
+gboolean
+app_async_resp(
+    gpointer user_data)
+{
+    Response* resp = user_data;
+
+    gbinder_remote_request_complete(resp->req, resp->reply, 0);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+app_async_free(
+    gpointer user_data)
+{
+    Response* resp = user_data;
+
+    gbinder_local_reply_unref(resp->reply);
+    gbinder_remote_request_unref(resp->req);
+    g_free(resp);
 }
 
 static
@@ -91,18 +120,30 @@ app_reply(
 
     gbinder_remote_request_init_reader(req, &reader);
     if (code == GBINDER_FIRST_CALL_TRANSACTION) {
+        const AppOptions* opt = app->opt;
         const char* iface = gbinder_remote_request_interface(req);
 
-        if (!g_strcmp0(iface, app->opt->iface)) {
+        if (!g_strcmp0(iface, opt->iface)) {
             char* str = gbinder_reader_read_string16(&reader);
             GBinderLocalReply* reply = gbinder_local_object_new_reply(obj);
 
             GVERBOSE("\"%s\" %u", iface, code);
             GDEBUG("\"%s\"", str);
+            *status = 0;
             gbinder_local_reply_append_string16(reply, str);
             g_free(str);
-            *status = 0;
-            return reply;
+            if (opt->async) {
+                Response* resp = g_new0(Response, 1);
+
+                resp->reply = reply;
+                resp->req = gbinder_remote_request_ref(req);
+                g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, app_async_resp,
+                    resp, app_async_free);
+                gbinder_remote_request_block(resp->req);
+                return NULL;
+            } else {
+                return reply;
+            }
         } else {
              GDEBUG("Unexpected interface \"%s\"", iface);
         }
@@ -203,6 +244,8 @@ app_init(
           "Binder device [" DEFAULT_DEVICE "]", "DEVICE" },
         { "interface", 'i', 0, G_OPTION_ARG_STRING, &opt->iface,
           "Local interface [" DEFAULT_IFACE "]", "IFACE" },
+        { "async", 'a', 0, G_OPTION_ARG_NONE, &opt->async,
+          "Handle calls asynchronously", NULL },
         { NULL }
     };
 

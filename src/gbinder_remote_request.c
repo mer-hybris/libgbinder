@@ -40,7 +40,10 @@
 
 #include <gutil_macros.h>
 
-struct gbinder_remote_request {
+#include <errno.h>
+
+typedef struct gbinder_remote_request_priv {
+    GBinderRemoteRequest pub;
     gint refcount;
     pid_t pid;
     uid_t euid;
@@ -49,7 +52,11 @@ struct gbinder_remote_request {
     char* iface2;
     gsize header_size;
     GBinderReaderData data;
-};
+} GBinderRemoteRequestPriv;
+
+GBINDER_INLINE_FUNC GBinderRemoteRequestPriv*
+gbinder_remote_request_cast(GBinderRemoteRequest* pub)
+    { return G_LIKELY(pub) ? G_CAST(pub,GBinderRemoteRequestPriv,pub) : NULL; }
 
 GBinderRemoteRequest*
 gbinder_remote_request_new(
@@ -58,7 +65,7 @@ gbinder_remote_request_new(
     pid_t pid,
     uid_t euid)
 {
-    GBinderRemoteRequest* self = g_slice_new0(GBinderRemoteRequest);
+    GBinderRemoteRequestPriv* self = g_slice_new0(GBinderRemoteRequestPriv);
     GBinderReaderData* data = &self->data;
 
     g_atomic_int_set(&self->refcount, 1);
@@ -66,13 +73,15 @@ gbinder_remote_request_new(
     self->euid = euid;
     self->protocol = protocol;
     data->reg = gbinder_object_registry_ref(reg);
-    return self;
+    return &self->pub;
 }
 
 GBinderLocalRequest*
 gbinder_remote_request_copy_to_local(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReaderData* d = &self->data;
 
@@ -84,21 +93,27 @@ gbinder_remote_request_copy_to_local(
 static
 void
 gbinder_remote_request_free(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequestPriv* self)
 {
     GBinderReaderData* data = &self->data;
+    GBinderRemoteRequest* req = &self->pub;
 
+    GASSERT(!req->tx);
+    if (req->tx) {
+        GWARN("Request is dropped without completing the transaction");
+        gbinder_remote_request_complete(req, NULL, -ECANCELED);
+    }
     gbinder_object_registry_unref(data->reg);
     gbinder_buffer_free(data->buffer);
     g_free(self->iface2);
-    g_slice_free(GBinderRemoteRequest, self);
+    g_slice_free(GBinderRemoteRequestPriv, self);
 }
 
 static
 inline
 void
 gbinder_remote_request_init_reader2(
-    GBinderRemoteRequest* self,
+    GBinderRemoteRequestPriv* self,
     GBinderReader* p)
 {
     /* The caller has already checked the request for NULL */
@@ -115,10 +130,12 @@ gbinder_remote_request_init_reader2(
 
 void
 gbinder_remote_request_set_data(
-    GBinderRemoteRequest* self,
+    GBinderRemoteRequest* req,
     guint32 txcode,
     GBinderBuffer* buffer)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReaderData* data = &self->data;
         GBinderReader reader;
@@ -145,26 +162,32 @@ gbinder_remote_request_set_data(
 
 const char*
 gbinder_remote_request_interface(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     return G_LIKELY(self) ? self->iface : NULL;
 }
 
 GBinderRemoteRequest*
 gbinder_remote_request_ref(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GASSERT(self->refcount > 0);
         g_atomic_int_inc(&self->refcount);
     }
-    return self;
+    return req;
 }
 
 void
 gbinder_remote_request_unref(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GASSERT(self->refcount > 0);
         if (g_atomic_int_dec_and_test(&self->refcount)) {
@@ -175,9 +198,11 @@ gbinder_remote_request_unref(
 
 void
 gbinder_remote_request_init_reader(
-    GBinderRemoteRequest* self,
+    GBinderRemoteRequest* req,
     GBinderReader* reader)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         gbinder_remote_request_init_reader2(self, reader);
     } else {
@@ -187,15 +212,19 @@ gbinder_remote_request_init_reader(
 
 pid_t
 gbinder_remote_request_sender_pid(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     return G_LIKELY(self) ? self->pid : (uid_t)(-1);
 }
 
 uid_t
 gbinder_remote_request_sender_euid(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     return G_LIKELY(self) ? self->euid : (uid_t)(-1);
 }
 
@@ -209,9 +238,11 @@ gbinder_remote_request_read_int32(
 
 gboolean
 gbinder_remote_request_read_uint32(
-    GBinderRemoteRequest* self,
+    GBinderRemoteRequest* req,
     guint32* value)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReader reader;
 
@@ -231,9 +262,11 @@ gbinder_remote_request_read_int64(
 
 gboolean
 gbinder_remote_request_read_uint64(
-    GBinderRemoteRequest* self,
+    GBinderRemoteRequest* req,
     guint64* value)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReader reader;
 
@@ -245,8 +278,10 @@ gbinder_remote_request_read_uint64(
 
 const char*
 gbinder_remote_request_read_string8(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReader reader;
 
@@ -258,8 +293,10 @@ gbinder_remote_request_read_string8(
 
 char*
 gbinder_remote_request_read_string16(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReader reader;
 
@@ -271,8 +308,10 @@ gbinder_remote_request_read_string16(
 
 GBinderRemoteObject*
 gbinder_remote_request_read_object(
-    GBinderRemoteRequest* self)
+    GBinderRemoteRequest* req)
 {
+    GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
+
     if (G_LIKELY(self)) {
         GBinderReader reader;
 

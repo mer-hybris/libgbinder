@@ -73,6 +73,8 @@ test_null(
     gbinder_remote_request_unref(NULL);
     gbinder_remote_request_set_data(NULL, 0, NULL);
     gbinder_remote_request_init_reader(NULL, &reader);
+    gbinder_remote_request_block(NULL);
+    gbinder_remote_request_complete(NULL, NULL, 0);
     g_assert(gbinder_reader_at_end(&reader));
     g_assert(!gbinder_remote_request_interface(NULL));
     g_assert(!gbinder_remote_request_copy_to_local(NULL));
@@ -99,6 +101,10 @@ test_basic(
     GBinderReader reader;
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(NULL), 0, 0);
+
+    /* These two calls are wrong but won't cause problems: */
+    gbinder_remote_request_block(req);
+    gbinder_remote_request_complete(req, NULL, 0);
 
     gbinder_remote_request_init_reader(req, &reader);
     g_assert(gbinder_reader_at_end(&reader));

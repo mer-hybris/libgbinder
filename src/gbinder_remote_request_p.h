@@ -37,6 +37,10 @@
 
 #include "gbinder_types_p.h"
 
+struct gbinder_remote_request {
+    GBinderIpcLooperTx* tx;
+};
+
 GBinderRemoteRequest*
 gbinder_remote_request_new(
     GBinderObjectRegistry* reg,
