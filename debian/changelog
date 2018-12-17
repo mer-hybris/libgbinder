@@ -1,3 +1,9 @@
+libgbinder (1.0.20) unstable; urgency=low
+
+  * Added API to block incoming requests.
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 17 Dec 2018 16:06:43 +0200
+
 libgbinder (1.0.19) unstable; urgency=low
 
   * Added GBinderWriter memory allocation and cleanup API
