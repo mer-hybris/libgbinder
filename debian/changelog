@@ -1,6 +1,12 @@
+libgbinder (1.0.21) unstable; urgency=low
+
+  * Added API to verwrite prefix length
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 18 Dec 2018 14:05:14 +0200
+
 libgbinder (1.0.20) unstable; urgency=low
 
-  * Added API to block incoming requests.
+  * Added API to block incoming requests
 
  -- Slava Monich <slava.monich@jolla.com>  Mon, 17 Dec 2018 16:06:43 +0200
 
