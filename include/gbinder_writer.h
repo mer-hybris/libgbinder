@@ -119,6 +119,16 @@ gbinder_writer_append_fd(
     GBinderWriter* writer,
     int fd); /* Since 1.0.18 */
 
+gsize
+gbinder_writer_bytes_written(
+    GBinderWriter* writer); /* since 1.0.21 */
+
+void
+gbinder_writer_overwrite_int32(
+    GBinderWriter* writer,
+    gsize offset,
+    gint32 value); /* since 1.0.21 */
+
 guint
 gbinder_writer_append_buffer_object_with_parent(
     GBinderWriter* writer,

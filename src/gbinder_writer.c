@@ -149,6 +149,14 @@ gbinder_writer_init(
     gbinder_writer_cast(self)->data = data;
 }
 
+gsize
+gbinder_writer_bytes_written(
+    GBinderWriter* self) /* since 1.0.21 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+    return data->bytes->len;
+}
+
 void
 gbinder_writer_append_bool(
     GBinderWriter* self,
@@ -197,6 +205,24 @@ gbinder_writer_data_append_int32(
     g_byte_array_set_size(buf, buf->len + sizeof(*ptr));
     ptr = (void*)(buf->data + (buf->len - sizeof(*ptr)));
     *ptr = value;
+}
+
+void
+gbinder_writer_overwrite_int32(
+    GBinderWriter* self,
+    gsize offset,
+    gint32 value) /* since 1.0.21 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+    GByteArray* buf = data->bytes;
+    gint32* ptr;
+    if (buf->len >= offset + sizeof(*ptr)) {
+        ptr = (void*)(buf->data + offset);
+        *ptr = value;
+    } else {
+        GWARN("Can't overwrite at %d as buffer is only %d bytes long.",
+            offset, buf->len);
+    }
 }
 
 void
