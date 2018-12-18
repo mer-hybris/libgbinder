@@ -164,6 +164,19 @@ test_int32(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == sizeof(value));
     g_assert(!memcmp(data->bytes->data, &value, data->bytes->len));
+
+    const guint32 value2 = 2345678;
+    gbinder_writer_overwrite_int32(&writer, 0, value2);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(value2));
+    g_assert(!memcmp(data->bytes->data, &value2, data->bytes->len));
+    
+    // test overlap over the end of the buffer
+    gbinder_writer_overwrite_int32(&writer, 2, value2);
+    g_assert(data->bytes->len == sizeof(value2));
+    
     gbinder_local_request_unref(req);
 }
 
@@ -925,6 +938,26 @@ test_byte_array(
 }
 
 /*==========================================================================*
+ * bytes_written
+ *==========================================================================*/
+
+static
+void
+test_bytes_written(
+    void)
+{
+    const guint32 value = 1234567;
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    g_assert(gbinder_writer_bytes_written(&writer) == 0);
+    gbinder_writer_append_int32(&writer, value);
+    g_assert(gbinder_writer_bytes_written(&writer) == sizeof(value));
+    
+    gbinder_local_request_unref(req);
+}
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -995,6 +1028,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("local_object"), test_local_object);
     g_test_add_func(TEST_("remote_object"), test_remote_object);
     g_test_add_func(TEST_("byte_array"), test_byte_array);
+    g_test_add_func(TEST_("bytes_written"), test_bytes_written);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
