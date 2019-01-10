@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -99,6 +99,7 @@ test_null(
     gbinder_writer_append_byte_array(&writer, NULL, 0);
     gbinder_writer_add_cleanup(NULL, NULL, 0);
     gbinder_writer_add_cleanup(NULL, g_free, 0);
+    gbinder_writer_overwrite_int32(NULL, 0, 0);
 
     g_assert(!gbinder_output_data_offsets(NULL));
     g_assert(!gbinder_output_data_buffers_size(NULL));

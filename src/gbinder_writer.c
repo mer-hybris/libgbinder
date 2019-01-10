@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -214,14 +214,16 @@ gbinder_writer_overwrite_int32(
     gint32 value) /* since 1.0.21 */
 {
     GBinderWriterData* data = gbinder_writer_data(self);
-    GByteArray* buf = data->bytes;
-    gint32* ptr;
-    if (buf->len >= offset + sizeof(*ptr)) {
-        ptr = (void*)(buf->data + offset);
-        *ptr = value;
-    } else {
-        GWARN("Can't overwrite at %d as buffer is only %d bytes long.",
-            offset, buf->len);
+
+    if (G_LIKELY(data)) {
+        GByteArray* buf = data->bytes;
+
+        if (buf->len >= offset + sizeof(gint32)) {
+            *((gint32*)(buf->data + offset)) = value;
+        } else {
+            GWARN("Can't overwrite at %lu as buffer is only %u bytes long",
+                (gulong)offset, buf->len);
+        }
     }
 }
 
