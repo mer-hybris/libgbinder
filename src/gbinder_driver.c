@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -458,7 +458,7 @@ gbinder_driver_handle_transaction(
             &status);
         break;
     default:
-        GWARN("Unhandled transaction 0x%08x", tx.code);
+        GWARN("Unhandled transaction %s 0x%08x", iface, tx.code);
         break;
     }
 
