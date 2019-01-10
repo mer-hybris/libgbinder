@@ -1,6 +1,12 @@
+libgbinder (1.0.22) unstable; urgency=low
+
+  * Added gbinder_client_interface()
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 10 Jan 2019 14:09:44 +0300
+
 libgbinder (1.0.21) unstable; urgency=low
 
-  * Added API to verwrite prefix length
+  * Added API to overwrite prefix length
 
  -- Slava Monich <slava.monich@jolla.com>  Tue, 18 Dec 2018 14:05:14 +0200
 
