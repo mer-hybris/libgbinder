@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -74,16 +74,15 @@ void
 test_null(
     void)
 {
-    GBinderClient* null = NULL;
-
     g_assert(!gbinder_client_new(NULL, NULL));
-    g_assert(!gbinder_client_ref(null));
-    gbinder_client_unref(null);
+    g_assert(!gbinder_client_ref(NULL));
+    g_assert(!gbinder_client_interface(NULL));
+    gbinder_client_unref(NULL);
     g_assert(!gbinder_client_new_request(NULL));
-    g_assert(!gbinder_client_transact_sync_reply(null, 0, NULL, NULL));
-    g_assert(gbinder_client_transact_sync_oneway(null, 0, NULL) == (-EINVAL));
-    g_assert(!gbinder_client_transact(null, 0, 0, NULL, NULL, NULL, NULL));
-    gbinder_client_cancel(null, 0);
+    g_assert(!gbinder_client_transact_sync_reply(NULL, 0, NULL, NULL));
+    g_assert(gbinder_client_transact_sync_oneway(NULL, 0, NULL) == (-EINVAL));
+    g_assert(!gbinder_client_transact(NULL, 0, 0, NULL, NULL, NULL, NULL));
+    gbinder_client_cancel(NULL, 0);
 }
 
 /*==========================================================================*
@@ -98,10 +97,12 @@ test_basic(
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, 0);
-    GBinderClient* client = gbinder_client_new(obj, "foo");
+    const char* iface = "foo";
+    GBinderClient* client = gbinder_client_new(obj, iface);
 
     g_assert(client);
     g_assert(gbinder_client_ref(client) == client);
+    g_assert(!g_strcmp0(gbinder_client_interface(client), iface));
     gbinder_client_unref(client);
     gbinder_client_cancel(client, 0); /* does nothing */
 
