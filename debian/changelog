@@ -1,3 +1,9 @@
+libgbinder (1.0.23) unstable; urgency=low
+
+  * Added gbinder_reader_read_hidl_string_c()
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 15 Jan 2019 15:16:41 +0200
+
 libgbinder (1.0.22) unstable; urgency=low
 
   * Added gbinder_client_interface()
