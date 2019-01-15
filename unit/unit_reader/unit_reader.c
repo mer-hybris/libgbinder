@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -100,6 +100,7 @@ test_empty(
     g_assert(!gbinder_reader_read_hidl_vec1(&reader, &count, 1));
     g_assert(!count);
     g_assert(!elemsize);
+    g_assert(!gbinder_reader_skip_hidl_string(&reader));
     g_assert(!gbinder_reader_read_hidl_string(&reader));
     g_assert(!gbinder_reader_read_hidl_string_vec(&reader));
     g_assert(!gbinder_reader_skip_buffer(&reader));
@@ -939,6 +940,40 @@ test_hidl_string_err(
     gbinder_ipc_unref(ipc);
 }
 
+static
+void
+test_hidl_string_err_skip(
+    gconstpointer test_data)
+{
+    const TestHidlStringErr* test = test_data;
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(test->in, test->in_size), test->in_size, NULL);
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    if (test->offset) {
+        guint i;
+
+        data.objects = g_new(void*, test->offset_count + 1);
+        for (i = 0; i < test->offset_count; i++) {
+            data.objects[i] = (guint8*)buf->data + test->offset[i];
+        }
+        data.objects[i] = NULL;
+    }
+
+    gbinder_reader_init(&reader, &data, 0, test->in_size);
+    g_assert(!gbinder_reader_skip_hidl_string(&reader));
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
 /*==========================================================================*
  * fd_ok
  *==========================================================================*/
@@ -1190,6 +1225,324 @@ test_dupfd_badfd(
 }
 
 /*==========================================================================*
+ * hidl_string
+ *==========================================================================*/
+
+static
+void
+test_hidl_string(
+    const guint8* input,
+    gsize size,
+    const guint* offsets,
+    guint bufcount,
+    const char* result)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver, g_memdup(input, size),
+        size, NULL);
+    GBinderRemoteObject* obj = NULL;
+    GBinderReaderData data;
+    GBinderReader reader;
+    guint i;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, bufcount + 1);
+    for (i = 0; i < bufcount; i++) {
+        data.objects[i] = buf->data + offsets[i];
+    }
+    data.objects[i] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_read_hidl_string_c(&reader) == result);
+
+    g_free(data.objects);
+    gbinder_remote_object_unref(obj);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+static
+void
+test_hidl_string1(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), contents);
+}
+
+static
+void
+test_hidl_string2(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Invalid object type */
+        TEST_INT32_BYTES(BINDER_TYPE_HANDLE),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+static
+void
+test_hidl_string3(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* No parent */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+static
+void
+test_hidl_string4(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Invalid length */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(sizeof(contents) - 1),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+static
+void
+test_hidl_string5(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Invalid pointer */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents + 1),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+static
+void
+test_hidl_string6(
+    void)
+{
+    /* No NULL-terminated */
+    const char contents[] = "testx";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = 4,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(5),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+static
+void
+test_hidl_string7(
+    void)
+{
+    const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&str), TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Invalid parent offset */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)contents),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET + 1)
+    };
+    static const guint offsets[] = { 0, BUFFER_OBJECT_SIZE_64 };
+
+    test_hidl_string(TEST_ARRAY_AND_SIZE(input),
+        TEST_ARRAY_AND_COUNT(offsets), NULL);
+}
+
+/*==========================================================================*
+ * buffer
+ *==========================================================================*/
+
+static
+void
+test_buffer(
+    void)
+{
+    /* Using 64-bit I/O */
+    const int data1 = 0x1234;
+    const int data2 = 0x5678;
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&data1), TEST_INT64_BYTES(sizeof(data1)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)&data2), TEST_INT64_BYTES(sizeof(data2)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Not a buffer object */
+        TEST_INT32_BYTES(BINDER_TYPE_HANDLE), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0)
+    };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderRemoteObject* obj = NULL;
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderBuffer* res;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 4);
+    data.objects[0] = buf->data;
+    data.objects[1] = buf->data + BUFFER_OBJECT_SIZE_64;
+    data.objects[2] = buf->data + 2 * BUFFER_OBJECT_SIZE_64;
+    data.objects[3] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(gbinder_reader_skip_buffer(&reader));
+    res = gbinder_reader_read_buffer(&reader);
+    g_assert(res);
+    g_assert(res->data == &data2);
+
+    /* The next one is not a buffer object */
+    g_assert(!gbinder_reader_skip_buffer(&reader));
+
+    gbinder_buffer_free(res);
+    g_free(data.objects);
+    gbinder_remote_object_unref(obj);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
  * object
  *==========================================================================*/
 
@@ -1335,6 +1688,290 @@ test_vec(
     g_free(data.objects);
     gbinder_buffer_free(data.buffer);
     gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * hidl_string_vec
+ *==========================================================================*/
+
+static
+void
+test_hidl_string_vec(
+    const guint8* input,
+    gsize size,
+    const char* const* result)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver, g_memdup(input, size),
+        size, NULL);
+    GBinderRemoteObject* obj = NULL;
+    GBinderReaderData data;
+    GBinderReader reader;
+    char** out;
+    guint i;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+
+    /* We assume that input consists only from buffer objects */
+    g_assert(!(size % BUFFER_OBJECT_SIZE_64));
+    data.objects = g_new(void*, size/BUFFER_OBJECT_SIZE_64 + 1);
+    for (i = 0; i < size/BUFFER_OBJECT_SIZE_64; i++) {
+        data.objects[i] = buf->data + i * BUFFER_OBJECT_SIZE_64;
+    }
+    data.objects[i] = NULL;
+
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+    out = gbinder_reader_read_hidl_string_vec(&reader)
+;
+    if (out) {
+        const guint n = g_strv_length(out);
+
+        g_assert(result);
+        g_assert(n == g_strv_length((char**)result));
+        for (i = 0; i < n; i++) {
+            g_assert(!g_strcmp0(out[i], result[i]));
+        }
+    } else {
+        g_assert(!result);
+    }
+
+    g_strfreev(out);
+    g_free(data.objects);
+    gbinder_remote_object_unref(obj);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+}
+
+static
+void
+test_hidl_string_vec1(
+    void)
+{
+    static const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    const GBinderHidlVec vec = {
+        .data = { .ptr = &str },
+        .count = 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&vec),
+        TEST_INT64_BYTES(sizeof(vec)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)&str),
+        TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(1),
+        TEST_INT64_BYTES(GBINDER_HIDL_VEC_BUFFER_OFFSET),
+        /* Buffer object #3 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)&contents),
+        TEST_INT64_BYTES(sizeof(contents)),
+        TEST_INT64_BYTES(2),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+    };
+    static const char* const result[] = { contents, NULL };
+
+    test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), result);
+}
+
+static
+void
+test_hidl_string_vec2(
+    void)
+{
+    static const char str1[] = "meh";
+    static const char str2[] = "foobar";
+    const GBinderHidlString str[] = {
+        {
+            .data = { (uintptr_t)str1 },
+            .len = sizeof(str1) - 1,
+            .owns_buffer = TRUE
+        },{
+            .data = { (uintptr_t)str2 },
+            .len = sizeof(str2) - 1,
+            .owns_buffer = TRUE
+        }
+    };
+    const GBinderHidlVec vec = {
+        .data = { .ptr = &str },
+        .count = 2,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&vec),
+        TEST_INT64_BYTES(sizeof(vec)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str),
+        TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(1),
+        TEST_INT64_BYTES(GBINDER_HIDL_VEC_BUFFER_OFFSET),
+        /* Buffer object #3 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str1),
+        TEST_INT64_BYTES(sizeof(str1)),
+        TEST_INT64_BYTES(2),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET),
+        /* Buffer object #4 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str2),
+        TEST_INT64_BYTES(sizeof(str2)),
+        TEST_INT64_BYTES(2),
+        TEST_INT64_BYTES(sizeof(GBinderHidlString) +
+            GBINDER_HIDL_STRING_BUFFER_OFFSET)
+                        
+    };
+    static const char* const result[] = { str1, str2, NULL };
+
+    test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), result);
+}
+
+static
+void
+test_hidl_string_vec3(
+    void)
+{
+    static const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    const GBinderHidlVec vec = {
+        .data = { .ptr = &str },
+        .count = 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&vec),
+        TEST_INT64_BYTES(sizeof(vec)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)&str),
+        TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(1),
+        TEST_INT64_BYTES(GBINDER_HIDL_VEC_BUFFER_OFFSET)
+        /* The next buffer is missing */
+    };
+
+    test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), NULL);
+}
+
+static
+void
+test_hidl_string_vec4(
+    void)
+{
+    static const char contents[] = "test";
+    const GBinderHidlString str = {
+        .data = { (uintptr_t)contents },
+        .len = sizeof(contents) - 1,
+        .owns_buffer = TRUE
+    };
+    const GBinderHidlVec vec = {
+        .data = { .ptr = &str },
+        .count = 1,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&vec),
+        TEST_INT64_BYTES(sizeof(vec)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* The next buffer is missing */
+    };
+
+    test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), NULL);
+}
+
+static
+void
+test_hidl_string_vec5(
+    void)
+{
+    static const char str1[] = "meh";
+    static const char str2[] = "foobar";
+    const GBinderHidlString str[] = {
+        {
+            .data = { (uintptr_t)str1 },
+            .len = sizeof(str1) - 1,
+            .owns_buffer = TRUE
+        },{
+            .data = { (uintptr_t)str2 },
+            .len = sizeof(str2) - 1,
+            .owns_buffer = TRUE
+        }
+    };
+    const GBinderHidlVec vec = {
+        .data = { .ptr = &str },
+        .count = 2,
+        .owns_buffer = TRUE
+    };
+    /* Using 64-bit I/O */
+    const guint8 input[] = {
+        /* Buffer object #1 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES((uintptr_t)&vec),
+        TEST_INT64_BYTES(sizeof(vec)),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
+        /* Buffer object #2 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str),
+        TEST_INT64_BYTES(sizeof(str)),
+        TEST_INT64_BYTES(1),
+        TEST_INT64_BYTES(GBINDER_HIDL_VEC_BUFFER_OFFSET),
+        /* Buffer object #3 */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str1),
+        TEST_INT64_BYTES(sizeof(str1)),
+        TEST_INT64_BYTES(2),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET),
+        /* Buffer object #4 (with invalid offset) */
+        TEST_INT32_BYTES(BINDER_TYPE_PTR),
+        TEST_INT32_BYTES(BINDER_BUFFER_FLAG_HAS_PARENT),
+        TEST_INT64_BYTES((uintptr_t)str2),
+        TEST_INT64_BYTES(sizeof(str2)),
+        TEST_INT64_BYTES(2),
+        TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
+                        
+    };
+
+    test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), NULL);
 }
 
 /*==========================================================================*
@@ -1548,6 +2185,11 @@ int main(int argc, char* argv[])
 
         g_test_add_data_func(path, test, test_hidl_string_err);
         g_free(path);
+
+        path = g_strconcat(TEST_("hidl_string/err-skip-"), test->name,
+            NULL);
+        g_test_add_data_func(path, test, test_hidl_string_err_skip);
+        g_free(path);
     }
 
     g_test_add_func(TEST_("fd/ok"), test_fd_ok);
@@ -1556,10 +2198,23 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("dupfd/ok"), test_dupfd_ok);
     g_test_add_func(TEST_("dupfd/badtype"), test_dupfd_badtype);
     g_test_add_func(TEST_("dupfd/badfd"), test_dupfd_badfd);
+    g_test_add_func(TEST_("hidl_string/1"), test_hidl_string1);
+    g_test_add_func(TEST_("hidl_string/2"), test_hidl_string2);
+    g_test_add_func(TEST_("hidl_string/3"), test_hidl_string3);
+    g_test_add_func(TEST_("hidl_string/4"), test_hidl_string4);
+    g_test_add_func(TEST_("hidl_string/5"), test_hidl_string5);
+    g_test_add_func(TEST_("hidl_string/6"), test_hidl_string6);
+    g_test_add_func(TEST_("hidl_string/7"), test_hidl_string7);
+    g_test_add_func(TEST_("buffer"), test_buffer);
     g_test_add_func(TEST_("object/valid"), test_object);
     g_test_add_func(TEST_("object/invalid"), test_object_invalid);
     g_test_add_func(TEST_("object/no_reg"), test_object_no_reg);
     g_test_add_func(TEST_("vec"), test_vec);
+    g_test_add_func(TEST_("hidl_string_vec/1"), test_hidl_string_vec1);
+    g_test_add_func(TEST_("hidl_string_vec/2"), test_hidl_string_vec2);
+    g_test_add_func(TEST_("hidl_string_vec/3"), test_hidl_string_vec3);
+    g_test_add_func(TEST_("hidl_string_vec/4"), test_hidl_string_vec4);
+    g_test_add_func(TEST_("hidl_string_vec/5"), test_hidl_string_vec5);
     g_test_add_func(TEST_("byte_array"), test_byte_array);
     g_test_add_func(TEST_("copy"), test_copy);
     test_init(&test_opt, argc, argv);

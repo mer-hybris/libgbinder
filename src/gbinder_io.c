@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -409,7 +409,7 @@ guint
 GBINDER_IO_FN(decode_buffer_object)(
     GBinderBuffer* buf,
     gsize offset,
-    GBinderBuffer** out)
+    GBinderIoBufferObject* out)
 {
     const void* data = (guint8*)buf->data + offset;
     const gsize size = (offset < buf->size) ? (buf->size - offset) : 0;
@@ -417,12 +417,14 @@ GBINDER_IO_FN(decode_buffer_object)(
 
     if (size >= sizeof(*flat) && flat->hdr.type == BINDER_TYPE_PTR) {
         if (out) {
-            *out = gbinder_buffer_new_with_parent(buf,
-                (void*)(uintptr_t)flat->buffer, flat->length);
+            out->data = (void*)(uintptr_t)flat->buffer;
+            out->size = (gsize)flat->length;
+            out->parent_offset = (gsize)flat->parent_offset;
+            out->has_parent = (flat->flags & BINDER_BUFFER_FLAG_HAS_PARENT) ?
+                TRUE : FALSE;
         }
         return sizeof(*flat);
     }
-    if (out) *out = NULL;
     return 0;
 }
 

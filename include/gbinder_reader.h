@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -125,7 +125,7 @@ gbinder_reader_read_buffer(
 const void*
 gbinder_reader_read_hidl_struct1(
     GBinderReader* reader,
-    gsize size); /* since 1.0.9 */
+    gsize size); /* Since 1.0.9 */
 
 #define gbinder_reader_read_hidl_struct(reader,type) \
     ((const type*)gbinder_reader_read_hidl_struct1(reader, sizeof(type)))
@@ -140,7 +140,7 @@ const void*
 gbinder_reader_read_hidl_vec1(
     GBinderReader* reader,
     gsize* count,
-    guint expected_elemsize); /* since 1.0.9 */
+    guint expected_elemsize); /* Since 1.0.9 */
 
 #define gbinder_reader_read_hidl_type_vec(reader,type,count) \
     ((const type*)gbinder_reader_read_hidl_vec1(reader, count, sizeof(type)))
@@ -151,6 +151,13 @@ char*
 gbinder_reader_read_hidl_string(
     GBinderReader* reader)
     G_GNUC_WARN_UNUSED_RESULT;
+
+const char*
+gbinder_reader_read_hidl_string_c(
+    GBinderReader* reader); /* Since 1.0.23 */
+
+#define gbinder_reader_skip_hidl_string(reader) \
+    (gbinder_reader_read_hidl_string_c(reader) != NULL)
 
 char**
 gbinder_reader_read_hidl_string_vec(
@@ -178,7 +185,7 @@ gboolean
 gbinder_reader_read_nullable_string16_utf16(
     GBinderReader* reader,
     gunichar2** out,
-    gsize* len); /* since 1.0.17 */
+    gsize* len); /* Since 1.0.17 */
 
 gboolean
 gbinder_reader_skip_string16(
@@ -187,7 +194,7 @@ gbinder_reader_skip_string16(
 const void*
 gbinder_reader_read_byte_array(
     GBinderReader* reader,
-    gsize* len); /* since 1.0.12 */
+    gsize* len); /* Since 1.0.12 */
 
 gsize
 gbinder_reader_bytes_read(
