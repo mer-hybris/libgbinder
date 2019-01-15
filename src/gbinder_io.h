@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,6 +42,13 @@ typedef struct gbinder_io_buf {
     gsize size;
     gsize consumed;
 } GBinderIoBuf;
+
+typedef struct gbinder_io_buffer_object {
+    void* data;
+    gsize size;
+    gsize parent_offset;
+    gboolean has_parent;
+} GBinderIoBufferObject;
 
 typedef struct gbinder_io_tx_data {
     int status;
@@ -165,9 +172,9 @@ struct gbinder_io {
     void* (*decode_binder_ptr_cookie)(const void* data);
     guint (*decode_cookie)(const void* data, guint64* cookie);
     guint (*decode_binder_object)(const void* data, gsize size,
-       GBinderObjectRegistry* reg, GBinderRemoteObject** obj);
+        GBinderObjectRegistry* reg, GBinderRemoteObject** obj);
     guint (*decode_buffer_object)(GBinderBuffer* buf, gsize offset,
-        GBinderBuffer** out);
+        GBinderIoBufferObject* out);
     guint (*decode_fd_object)(const void* data, gsize size, int* fd);
 
     /* ioctl wrappers */

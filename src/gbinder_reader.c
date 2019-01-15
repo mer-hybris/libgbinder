@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -320,9 +320,9 @@ gbinder_reader_read_object(
 
 static
 gboolean
-gbinder_reader_read_buffer_impl(
+gbinder_reader_read_buffer_object(
     GBinderReader* reader,
-    GBinderBuffer** out)
+    GBinderIoBufferObject* out)
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
@@ -339,7 +339,6 @@ gbinder_reader_read_buffer_impl(
             return TRUE;
         }
     }
-    if (out) *out = NULL;
     return FALSE;
 }
 
@@ -347,34 +346,36 @@ GBinderBuffer*
 gbinder_reader_read_buffer(
     GBinderReader* reader)
 {
-    GBinderBuffer* buf = NULL;
+    GBinderIoBufferObject obj;
 
-    gbinder_reader_read_buffer_impl(reader, &buf);
-    return buf;
+    if (gbinder_reader_read_buffer_object(reader, &obj)) {
+        const GBinderReaderData* data = gbinder_reader_cast(reader)->data;
+        GBinderBuffer* buf = data->buffer;
+
+        return gbinder_buffer_new_with_parent(buf, obj.data, obj.size);
+    }
+    return NULL;
 }
 
 gboolean
 gbinder_reader_skip_buffer(
     GBinderReader* reader)
 {
-    return gbinder_reader_read_buffer_impl(reader, NULL);
+    return gbinder_reader_read_buffer_object(reader, NULL);
 }
 
 /* Helper for gbinder_reader_read_hidl_struct() macro */
 const void*
 gbinder_reader_read_hidl_struct1(
     GBinderReader* reader,
-    gsize size) /* since 1.0.9 */
+    gsize size) /* Since 1.0.9 */
 {
-    const void* result = NULL;
-    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
+    GBinderIoBufferObject obj;
 
-    /* Check the size */
-    if (buf && buf->size == size) {
-        result = buf->data;
+    if (gbinder_reader_read_buffer_object(reader, &obj) && obj.size == size) {
+        return obj.data;
     }
-    gbinder_buffer_free(buf);
-    return result;
+    return NULL;
 }
 
 /* Doesn't copy the data */
@@ -384,30 +385,28 @@ gbinder_reader_read_hidl_vec(
     gsize* count,
     gsize* elemsize)
 {
-    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
-    gsize out_count = 0, out_elemsize = 0;
+    GBinderIoBufferObject obj;
     const void* out = NULL;
+    gsize out_count = 0, out_elemsize = 0;
 
-    if (buf && buf->size == sizeof(GBinderHidlVec)) {
-        const GBinderHidlVec* vec = buf->data;
+    if (gbinder_reader_read_buffer_object(reader, &obj) &&
+        obj.data && obj.size == sizeof(GBinderHidlVec)) {
+        const GBinderHidlVec* vec = obj.data;
         const void* next = vec->data.ptr;
 
         if (next) {
-            GBinderBuffer* vbuf = gbinder_reader_read_buffer(reader);
-
-            if (vbuf && vbuf->data == next && ((!vec->count && !vbuf->size) ||
-                (vec->count && vbuf->size && !(vbuf->size % vec->count)))) {
-                out_elemsize = vec->count ? (vbuf->size / vec->count) : 0;
+            if (gbinder_reader_read_buffer_object(reader, &obj) &&
+                obj.data == next && ((!vec->count && !obj.size) ||
+                (vec->count && obj.size && !(obj.size % vec->count)))) {
+                out_elemsize = vec->count ? (obj.size / vec->count) : 0;
                 out_count = vec->count;
-                out = vbuf->data;
+                out = obj.data;
             }
-            gbinder_buffer_free(vbuf);
         } else if (!vec->count) {
-            /* Any non-NULL pointer just to indicate success */
+            /* Any non-NULL pointer just to indicate success? */
             out = vec;
         }
     }
-    gbinder_buffer_free(buf);
     if (elemsize) {
         *elemsize = out_elemsize;
     }
@@ -422,7 +421,7 @@ const void*
 gbinder_reader_read_hidl_vec1(
     GBinderReader* reader,
     gsize* count,
-    guint expected_elem_size) /* since 1.0.9 */
+    guint expected_elem_size) /* Since 1.0.9 */
 {
     gsize actual;
     const void* data = gbinder_reader_read_hidl_vec(reader, count, &actual);
@@ -431,89 +430,94 @@ gbinder_reader_read_hidl_vec1(
     return (data && (actual == expected_elem_size || !actual)) ? data : NULL;
 }
 
+const char*
+gbinder_reader_read_hidl_string_c(
+    GBinderReader* reader) /* Since 1.0.23 */
+{
+    GBinderIoBufferObject obj;
+
+    if (gbinder_reader_read_buffer_object(reader, &obj) &&
+        obj.data && obj.size == sizeof(GBinderHidlString)) {
+        const GBinderHidlString* str = obj.data;
+
+        if (gbinder_reader_read_buffer_object(reader, &obj) &&
+            obj.has_parent &&
+            obj.parent_offset == GBINDER_HIDL_STRING_BUFFER_OFFSET &&
+            obj.data == str->data.str &&
+            obj.size == str->len + 1 &&
+            str->data.str[str->len] == 0) {
+            return str->data.str;
+        }
+    }
+    return NULL;
+}
+
 char*
 gbinder_reader_read_hidl_string(
     GBinderReader* reader)
 {
-    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
-    char* str = NULL;
-
-    if (buf && buf->size == sizeof(GBinderHidlString)) {
-        const GBinderHidlString* s = buf->data;
-        GBinderBuffer* sbuf = gbinder_reader_read_buffer(reader);
-
-        if (sbuf && sbuf->size == s->len + 1 &&
-            sbuf->data == s->data.str &&
-            s->data.str[s->len] == 0) {
-            str = g_strdup(s->data.str);
-        }
-        gbinder_buffer_free(sbuf);
-    }
-    gbinder_buffer_free(buf);
-    return str;
+    /* This function should've been called gbinder_reader_dup_hidl_string */
+    return g_strdup(gbinder_reader_read_hidl_string_c(reader));
 }
 
 char**
 gbinder_reader_read_hidl_string_vec(
     GBinderReader* reader)
 {
-    GBinderBuffer* buf = gbinder_reader_read_buffer(reader);
+    GBinderIoBufferObject obj;
 
     /* First buffer contains hidl_vector */
-    if (buf && buf->size == sizeof(GBinderHidlVec)) {
-        GBinderHidlVec* vec = buf->data;
+    if (gbinder_reader_read_buffer_object(reader, &obj) &&
+        obj.data && obj.size == sizeof(GBinderHidlVec)) {
+        GBinderHidlVec* vec = obj.data;
         const guint n = vec->count;
         const void* next = vec->data.ptr;
 
-        gbinder_buffer_free(buf);
         if (!next && !n) {
-            char** out = g_new(char*, 1);
+            /* Should this be considered an error? */
+            return g_new0(char*, 1);
+        } else if (gbinder_reader_read_buffer_object(reader, &obj) &&
+                   /* The second buffer (if any) contains n hidl_string's */
+                   obj.parent_offset == GBINDER_HIDL_VEC_BUFFER_OFFSET &&
+                   obj.has_parent &&
+                   obj.data == next &&
+                   obj.size == (sizeof(GBinderHidlString) * n)) {
+            const GBinderHidlString* strings = obj.data;
+            GPtrArray* list = g_ptr_array_sized_new(n + 1);
+            guint i;
 
-            out[0] = NULL;
-            return out;
-        } else {
-            /* The second buffer (if any) contains n hidl_string's */
-            buf = gbinder_reader_read_buffer(reader);
-            if (buf && buf->data == next &&
-                buf->size == (sizeof(GBinderHidlString) * n)) {
-                const GBinderHidlString* strings = buf->data;
-                GBinderBuffer* sbuf;
-                GPtrArray* list = g_ptr_array_new();
-                guint i;
+            /* Now we expect n buffers containing the actual data */
+            for (i = 0; i < n &&
+                gbinder_reader_read_buffer_object(reader, &obj); i++) {
+                const GBinderHidlString* s = strings + i;
+                const gsize expected_offset = (i * sizeof(*s)) +
+                    GBINDER_HIDL_STRING_BUFFER_OFFSET;
+                if (obj.has_parent &&
+                    obj.parent_offset == expected_offset &&
+                    obj.data == s->data.str &&
+                    obj.size == s->len + 1 &&
+                    s->data.str[s->len] == 0) {
+                    char* name = g_strdup(s->data.str);
 
-                /* Now we expect n buffers containing the actual data */
-                for (i=0; i<n &&
-                    (sbuf = gbinder_reader_read_buffer(reader)); i++) {
-                    const GBinderHidlString* s = strings + i;
-                    if (sbuf->size == s->len + 1 &&
-                        sbuf->data == s->data.str &&
-                        s->data.str[s->len] == 0) {
-                        char* name = g_strdup(s->data.str);
-
-                        g_ptr_array_add(list, name);
-                        GVERBOSE_("%u. %s", i + 1, name);
-                        gbinder_buffer_free(sbuf);
-                    } else {
-                        GWARN("Unexpected hidl_string buffer %p/%u vs %p/%u",
-                            sbuf->data, (guint)sbuf->size, s->data.str, s->len);
-                        gbinder_buffer_free(sbuf);
-                        break;
-                    }
+                    g_ptr_array_add(list, name);
+                    GVERBOSE_("%u. %s", i + 1, name);
+                } else {
+                    GWARN("Unexpected hidl_string buffer %p/%u vs %p/%u",
+                        obj.data, (guint)obj.size, s->data.str, s->len);
+                    break;
                 }
-
-                if (i == n) {
-                    gbinder_buffer_free(buf);
-                    g_ptr_array_add(list, NULL);
-                    return (char**)g_ptr_array_free(list, FALSE);
-                }
-
-                g_ptr_array_set_free_func(list, g_free);
-                g_ptr_array_free(list, TRUE);
             }
+
+            if (i == n) {
+                g_ptr_array_add(list, NULL);
+                return (char**)g_ptr_array_free(list, FALSE);
+            }
+
+            g_ptr_array_set_free_func(list, g_free);
+            g_ptr_array_free(list, TRUE);
         }
     }
     GWARN("Invalid hidl_vec<string>");
-    gbinder_buffer_free(buf);
     return NULL;
 }
 
@@ -562,7 +566,7 @@ gboolean
 gbinder_reader_read_nullable_string16_utf16(
     GBinderReader* reader,
     gunichar2** out,
-    gsize* out_len) /* since 1.0.17 */
+    gsize* out_len) /* Since 1.0.17 */
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
@@ -638,7 +642,7 @@ gbinder_reader_skip_string16(
 const void*
 gbinder_reader_read_byte_array(
     GBinderReader* reader,
-    gsize* len) /* since 1.0.12 */
+    gsize* len) /* Since 1.0.12 */
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
     const void* data = NULL;
