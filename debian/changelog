@@ -1,3 +1,9 @@
+libgbinder (1.0.24) unstable; urgency=low
+
+  * Revert "Make sure NULL objects are passed as BINDER_TYPE_WEAK_HANDLE"
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 18 Jan 2019 21:36:32 +0200
+
 libgbinder (1.0.23) unstable; urgency=low
 
   * Added gbinder_reader_read_hidl_string_c()
