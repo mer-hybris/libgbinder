@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -52,6 +52,14 @@
 
 static
 void
+gbinder_rpc_protocol_binder_write_ping(
+    GBinderWriter* writer)
+{
+    /* No payload */
+}
+
+static
+void
 gbinder_rpc_protocol_binder_write_rpc_header(
     GBinderWriter* writer,
     const char* iface)
@@ -100,6 +108,15 @@ gbinder_rpc_protocol_hwbinder_write_rpc_header(
 }
 
 static
+void
+gbinder_rpc_protocol_hwbinder_write_ping(
+    GBinderWriter* writer)
+{
+    gbinder_rpc_protocol_hwbinder_write_rpc_header(writer,
+        "android.hidl.base@1.0::IBase");
+}
+
+static
 const char*
 gbinder_rpc_protocol_hwbinder_read_rpc_header(
     GBinderReader* reader,
@@ -115,13 +132,17 @@ gbinder_rpc_protocol_hwbinder_read_rpc_header(
  *==========================================================================*/
 
 const GBinderRpcProtocol gbinder_rpc_protocol_binder = {
-    .read_rpc_header = gbinder_rpc_protocol_binder_read_rpc_header,
-    .write_rpc_header = gbinder_rpc_protocol_binder_write_rpc_header
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_binder_write_ping,
+    .write_rpc_header = gbinder_rpc_protocol_binder_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_binder_read_rpc_header
 };
 
 const GBinderRpcProtocol gbinder_rpc_protocol_hwbinder = {
-    .read_rpc_header = gbinder_rpc_protocol_hwbinder_read_rpc_header,
-    .write_rpc_header = gbinder_rpc_protocol_hwbinder_write_rpc_header
+    .ping_tx = HIDL_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_hwbinder_write_ping,
+    .write_rpc_header = gbinder_rpc_protocol_hwbinder_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_hwbinder_read_rpc_header
 };
 
 const GBinderRpcProtocol*

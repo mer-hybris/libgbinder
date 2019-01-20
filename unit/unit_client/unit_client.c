@@ -183,10 +183,10 @@ test_sync_reply_tx(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_transaction_complete(fd));
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply(fd, handle, code, data->bytes));
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_noop(fd);
+    test_binder_br_reply(fd, handle, code, data->bytes);
 
     tx_reply = gbinder_client_transact_sync_reply(client, 0, req, &status);
     g_assert(tx_reply);
@@ -284,10 +284,10 @@ test_reply_tx(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_transaction_complete(fd));
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply(fd, handle, code, data->bytes));
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_noop(fd);
+    test_binder_br_reply(fd, handle, code, data->bytes);
 
     id = gbinder_client_transact(client, 0, 0, req, done, destroy, loop);
     g_assert(id);

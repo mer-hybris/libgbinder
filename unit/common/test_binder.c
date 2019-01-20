@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -45,6 +45,7 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 
 static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
+static GPrivate test_looper;
 
 #define public_fd  fd[0]
 #define private_fd fd[1]
@@ -58,6 +59,22 @@ static GHashTable* test_node_map = NULL;
 #define TF_ACCEPT_FDS  0x10
 
 typedef struct test_binder_io TestBinderIo;
+typedef struct test_binder TestBinder;
+
+typedef
+void
+(*TestBinderPushDataFunc)(
+    int fd,
+    const void* data);
+
+typedef struct test_binder_submit_thread {
+    GThread* thread;
+    GCond cond;
+    GMutex mutex;
+    gboolean run;
+    GSList* queue;
+    TestBinder* binder;
+} TestBinderSubmitThread;
 
 typedef struct test_binder_node {
     char* path;
@@ -68,6 +85,8 @@ typedef struct test_binder_node {
 
 typedef struct test_binder {
     TestBinderNode* node;
+    TestBinderSubmitThread* submit_thread;
+    gboolean looper_enabled;
     int fd[2];
 } TestBinder;
 
@@ -104,6 +123,11 @@ typedef struct binder_pre_cookie_64 {
     guint64 cookie;
 } BinderPtrCookie64;
 
+typedef struct binder_handle_cookie_64 {
+  guint32 handle;
+  guint64 cookie;
+} __attribute__((packed)) BinderHandleCookie64;
+
 #define BC_TRANSACTION_64       _IOW('c', 0, BinderTransactionData64)
 #define BC_REPLY_64             _IOW('c', 1, BinderTransactionData64)
 #define BC_FREE_BUFFER_64       _IOW('c', 3, guint64)
@@ -113,6 +137,8 @@ typedef struct binder_pre_cookie_64 {
 #define BC_DECREFS              _IOW('c', 7, guint32)
 #define BC_ENTER_LOOPER          _IO('c', 12)
 #define BC_EXIT_LOOPER           _IO('c', 13)
+#define BC_REQUEST_DEATH_NOTIFICATION_64 _IOW('c', 14, BinderHandleCookie64)
+#define BC_CLEAR_DEATH_NOTIFICATION_64   _IOW('c', 15, BinderHandleCookie64)
 
 #define BR_TRANSACTION_64       _IOR('r', 2, BinderTransactionData64)
 #define BR_REPLY_64             _IOR('r', 3, BinderTransactionData64)
@@ -125,6 +151,110 @@ typedef struct binder_pre_cookie_64 {
 #define BR_NOOP                  _IO('r', 12)
 #define BR_DEAD_BINDER_64       _IOR('r', 15, guint64)
 #define BR_FAILED_REPLY          _IO('r', 17)
+
+static
+gpointer
+test_binder_submit_thread_proc(
+    gpointer data)
+{
+    TestBinderSubmitThread* submit = data;
+    TestBinder* binder = submit->binder;
+    GMutex* mutex = &submit->mutex;
+    GCond* cond = &submit->cond;
+
+    GDEBUG("Submit thread started");
+    g_mutex_lock(mutex);
+    while (submit->run) {
+        GBytes* next = NULL;
+
+        while (submit->run && !next) {
+            if (submit->queue) {
+                next = submit->queue->data;
+                submit->queue = g_slist_remove(submit->queue, next);
+                break;
+            } else {
+                g_cond_wait(cond, mutex);
+            }
+        }
+
+        if (next) {
+            int bytes_available = 0;
+            int err = ioctl(binder->public_fd, FIONREAD, &bytes_available);
+
+            /* Wait until the queue is empty */
+            g_assert(err >= 0);
+            while (bytes_available > 0 && submit->run) {
+                /* Wait a bit between polls */
+                g_cond_wait_until(cond, mutex, g_get_monotonic_time () +
+                    100 * G_TIME_SPAN_MILLISECOND);
+                err = ioctl(binder->public_fd, FIONREAD, &bytes_available);
+                g_assert(err >= 0);
+            }
+
+            if (submit->run) {
+                gsize len;
+                gconstpointer data = g_bytes_get_data(next, &len);
+
+                GDEBUG("Submitting command 0x%08x", *(guint32*)data);
+                g_assert(write(binder->private_fd, data, len) == len);
+            }
+            g_bytes_unref(next);
+        }
+    }
+    g_mutex_unlock(mutex);
+    GDEBUG("Submit thread exiting");
+    return NULL;
+}
+
+static
+TestBinderSubmitThread*
+test_binder_submit_thread_new(
+    TestBinder* binder)
+{
+    TestBinderSubmitThread* submit = g_new0(TestBinderSubmitThread, 1);
+
+    submit->run = TRUE;
+    submit->binder = binder;
+    g_cond_init(&submit->cond);
+    g_mutex_init(&submit->mutex);
+    submit->thread = g_thread_new(binder->node->path,
+        test_binder_submit_thread_proc, submit);
+    return submit;
+}
+
+static
+void
+test_binder_submit_thread_free(
+    TestBinderSubmitThread* submit)
+{
+    if (submit) {
+        g_mutex_lock(&submit->mutex);
+        submit->run = FALSE;
+        g_cond_signal(&submit->cond);
+        g_mutex_unlock(&submit->mutex);
+        g_thread_join(submit->thread);
+
+        g_slist_free_full(submit->queue, (GDestroyNotify) g_bytes_unref);
+        g_cond_clear(&submit->cond);
+        g_mutex_clear(&submit->mutex);
+        g_free(submit);
+    }
+}
+
+static
+void
+test_binder_submit_later(
+    TestBinderSubmitThread* submit,
+    const void* data)
+{
+    const guint32* cmd = data;
+
+    g_mutex_lock(&submit->mutex);
+    submit->queue = g_slist_append(submit->queue,
+        g_bytes_new(cmd, sizeof(*cmd) + _IOC_SIZE(*cmd)));
+    g_cond_signal(&submit->cond);
+    g_mutex_unlock(&submit->mutex);
+}
 
 static
 void
@@ -151,11 +281,11 @@ test_io_handle_write_read_64(
     TestBinder* binder,
     void* data)
 {
-    int err, bytes_available = 0;
     BinderWriteRead64* wr = data;
     gssize bytes_left = wr->write_size - wr->write_consumed;
     const guint8* write_ptr = (void*)(gsize)
         (wr->write_buffer + wr->write_consumed);
+    gboolean is_looper;
 
     while (bytes_left >= sizeof(guint32)) {
         const guint cmd = *(guint32*)write_ptr;
@@ -176,12 +306,18 @@ test_io_handle_write_read_64(
                 test_io_free_buffer(binder,
                     GSIZE_TO_POINTER(*(guint64*)write_ptr));
                 break;
+            case BC_ENTER_LOOPER:
+                 g_private_set(&test_looper, GINT_TO_POINTER(TRUE));
+                 break;
+            case BC_EXIT_LOOPER:
+                 g_private_set(&test_looper, NULL);
+                 break;
+            case BC_REQUEST_DEATH_NOTIFICATION_64:
+            case BC_CLEAR_DEATH_NOTIFICATION_64:
             case BC_INCREFS:
             case BC_ACQUIRE:
             case BC_RELEASE:
             case BC_DECREFS:
-            case BC_ENTER_LOOPER:
-            case BC_EXIT_LOOPER:
                 break;
             default:
 #pragma message("TODO: implement more BINDER_WRITE_READ commands")
@@ -198,24 +334,45 @@ test_io_handle_write_read_64(
         }
     }
 
-    /* Now read the data from the socket */
-    err = ioctl(binder->public_fd, FIONREAD, &bytes_available);
-    if (err >= 0) {
-        int bytes_read = 0;
-        if (bytes_available > 0) {
-            bytes_read = read(binder->public_fd,
-                (void*)(gsize)(wr->read_buffer + wr->read_consumed),
-                wr->read_size - wr->read_consumed);
-        }
+    is_looper = g_private_get(&test_looper) ? TRUE : FALSE;
+    if (binder->looper_enabled || !is_looper) {
+        /* Now read the data from the socket */
+        int bytes_available = 0;
+        int err = ioctl(binder->public_fd, FIONREAD, &bytes_available);
 
-        if (bytes_read >= 0) {
-            wr->read_consumed += bytes_read;
-            return 0;
-        } else {
-            err = bytes_read;
+        if (err >= 0) {
+            int bytes_read = 0;
+
+            if (bytes_available >= 4) {
+                bytes_read = read(binder->public_fd,
+                    (void*)(gsize)(wr->read_buffer + wr->read_consumed),
+                    wr->read_size - wr->read_consumed);
+            } else {
+                struct timespec wait;
+
+                wait.tv_sec = 0;
+                wait.tv_nsec = 10 * 1000000; /* 10 ms */
+                nanosleep(&wait, &wait);
+            }
+
+            if (bytes_read >= 0) {
+                wr->read_consumed += bytes_read;
+                return 0;
+            } else {
+                err = bytes_read;
+            }
         }
+        return err;
+    } else {
+        if (wr->read_size > 0) {
+            struct timespec wait;
+
+            wait.tv_sec = 0;
+            wait.tv_nsec = 100 * 1000000; /* 100 ms */
+            nanosleep(&wait, &wait);
+        }
+        return 0;
     }
-    return err;
 }
 
 static const TestBinderIo test_io_64 = {
@@ -275,6 +432,17 @@ test_io_destroy_none(
 }
 
 void
+test_binder_set_looper_enabled(
+    int fd,
+    gboolean enabled)
+{
+    TestBinder* binder = test_binder_from_fd(fd);
+
+    g_assert(binder);
+    binder->looper_enabled = enabled;
+}
+
+void
 test_binder_set_destroy(
     int fd,
     gpointer ptr,
@@ -291,43 +459,35 @@ test_binder_set_destroy(
 }
 
 static
-gboolean
+void
 test_binder_push_data(
+    int fd,
+    const void* data)
+{
+    const guint32* cmd = data;
+    const int len = sizeof(*cmd) + _IOC_SIZE(*cmd);
+    TestBinder* binder = test_binder_from_fd(fd);
+
+    g_assert(binder);
+    g_assert(write(binder->private_fd, data, len) == len);
+}
+
+static
+void
+test_binder_push_data_later(
     int fd,
     const void* data)
 {
     TestBinder* binder = test_binder_from_fd(fd);
 
-    if (binder) {
-        const guint32* cmd = data;
-        const int len = sizeof(*cmd) + _IOC_SIZE(*cmd);
-
-        return write(binder->private_fd, data, len) == len;
+    g_assert(binder);
+    if (!binder->submit_thread) {
+        binder->submit_thread = test_binder_submit_thread_new(binder);
     }
-    return FALSE;
+    test_binder_submit_later(binder->submit_thread, data);
 }
 
-static
 void
-test_binder_fill_transaction_data(
-    BinderTransactionData64* tr,
-    guint64 handle,
-    guint32 code,
-    const GByteArray* bytes)
-{
-    g_assert(bytes);
-
-    memset(tr, 0, sizeof(*tr));
-    tr->handle = handle;
-    tr->code = code;
-    tr->data_size = bytes->len;
-    tr->sender_pid = getpid();
-    tr->sender_euid = geteuid();
-    /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
-    tr->data_buffer = (gsize)g_memdup(bytes->data, bytes->len);
-}
-
-gboolean
 test_binder_push_ptr_cookie(
     int fd,
     guint32 cmd,
@@ -339,60 +499,69 @@ test_binder_push_ptr_cookie(
     memcpy(buf, &cmd, sizeof(cmd));
     memset(data, 0, sizeof(*data));
     data->ptr = (gsize)ptr;
-    return test_binder_push_data(fd, buf);
+    test_binder_push_data(fd, buf);
 }
 
-gboolean
+void
 test_binder_br_noop(
     int fd)
 {
     guint32 cmd = BR_NOOP;
 
-    return test_binder_push_data(fd, &cmd);
+    test_binder_push_data(fd, &cmd);
 }
 
-gboolean
+void
 test_binder_br_increfs(
     int fd,
     void* ptr)
 {
-    return test_binder_push_ptr_cookie(fd, BR_INCREFS_64, ptr);
+    test_binder_push_ptr_cookie(fd, BR_INCREFS_64, ptr);
 }
 
-gboolean
+void
 test_binder_br_acquire(
     int fd,
     void* ptr)
 {
-    return test_binder_push_ptr_cookie(fd, BR_ACQUIRE_64, ptr);
+    test_binder_push_ptr_cookie(fd, BR_ACQUIRE_64, ptr);
 }
 
-gboolean
+void
 test_binder_br_release(
     int fd,
     void* ptr)
 {
-    return test_binder_push_ptr_cookie(fd, BR_RELEASE_64, ptr);
+    test_binder_push_ptr_cookie(fd, BR_RELEASE_64, ptr);
 }
 
-gboolean
+void
 test_binder_br_decrefs(
     int fd,
     void* ptr)
 {
-    return test_binder_push_ptr_cookie(fd, BR_DECREFS_64, ptr);
+    test_binder_push_ptr_cookie(fd, BR_DECREFS_64, ptr);
 }
 
-gboolean
+void
 test_binder_br_transaction_complete(
     int fd)
 {
     guint32 cmd = BR_TRANSACTION_COMPLETE;
 
-    return test_binder_push_data(fd, &cmd);
+    test_binder_push_data(fd, &cmd);
 }
 
-gboolean
+void
+test_binder_br_transaction_complete_later(
+    int fd)
+{
+    guint32 cmd = BR_TRANSACTION_COMPLETE;
+
+    test_binder_push_data_later(fd, &cmd);
+}
+
+void
 test_binder_br_dead_binder(
     int fd,
     guint handle)
@@ -403,28 +572,47 @@ test_binder_br_dead_binder(
     buf[0] = BR_DEAD_BINDER_64;
     memcpy(buf + 1, &handle64, sizeof(handle64));
 
-    return test_binder_push_data(fd, buf);
+    test_binder_push_data(fd, buf);
 }
 
-gboolean
+void
 test_binder_br_dead_reply(
     int fd)
 {
     guint32 cmd = BR_DEAD_REPLY;
 
-    return test_binder_push_data(fd, &cmd);
+    test_binder_push_data(fd, &cmd);
 }
 
-gboolean
+void
 test_binder_br_failed_reply(
     int fd)
 {
     guint32 cmd = BR_FAILED_REPLY;
 
-    return test_binder_push_data(fd, &cmd);
+    test_binder_push_data(fd, &cmd);
 }
 
-gboolean
+static
+void
+test_binder_fill_transaction_data(
+    BinderTransactionData64* tr,
+    guint64 handle,
+    guint32 code,
+    const GByteArray* bytes)
+{
+    memset(tr, 0, sizeof(*tr));
+    tr->handle = handle;
+    tr->code = code;
+    tr->data_size = bytes ? bytes->len : 0;
+    tr->sender_pid = getpid();
+    tr->sender_euid = geteuid();
+    /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
+    tr->data_buffer = (gsize)g_memdup(bytes ? (void*)bytes->data : (void*)"",
+        tr->data_size);
+}
+
+void
 test_binder_br_transaction(
     int fd,
     void* target,
@@ -438,15 +626,17 @@ test_binder_br_transaction(
     test_binder_fill_transaction_data((void*)(buf + sizeof(cmd)),
         (gsize)target, code, bytes);
 
-    return test_binder_push_data(fd, buf);
+    test_binder_push_data(fd, buf);
 }
 
-gboolean
-test_binder_br_reply(
+static
+void
+test_binder_br_reply1(
     int fd,
     guint32 handle,
     guint32 code,
-    const GByteArray* bytes)
+    const GByteArray* bytes,
+    TestBinderPushDataFunc push)
 {
     guint32 cmd = BR_REPLY_64;
     guint8 buf[sizeof(guint32) + sizeof(BinderTransactionData64)];
@@ -455,13 +645,34 @@ test_binder_br_reply(
     test_binder_fill_transaction_data((void*)(buf + sizeof(cmd)),
         handle, code, bytes);
 
-    return test_binder_push_data(fd, buf);
+    push(fd, buf);
 }
 
-gboolean
-test_binder_br_reply_status(
+void
+test_binder_br_reply(
     int fd,
-    gint32 status)
+    guint32 handle,
+    guint32 code,
+    const GByteArray* bytes)
+{
+    test_binder_br_reply1(fd, handle, code, bytes, test_binder_push_data);
+}
+
+void
+test_binder_br_reply_later(
+    int fd,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* bytes)
+{
+    test_binder_br_reply1(fd, handle, code, bytes, test_binder_push_data_later);
+}
+
+void
+test_binder_br_reply_status1(
+    int fd,
+    gint32 status,
+    TestBinderPushDataFunc push)
 {
     guint8 buf[sizeof(guint32) + sizeof(BinderTransactionData64)];
     guint32* cmd = (void*)buf;
@@ -473,7 +684,24 @@ test_binder_br_reply_status(
     tr->data_size = sizeof(status);
     /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
     tr->data_buffer = (gsize)g_memdup(&status, sizeof(status));
-    return test_binder_push_data(fd, buf);
+
+    push(fd, buf);
+}
+
+void
+test_binder_br_reply_status(
+    int fd,
+    gint32 status)
+{
+    test_binder_br_reply_status1(fd, status, test_binder_push_data);
+}
+
+void
+test_binder_br_reply_status_later(
+    int fd,
+    gint32 status)
+{
+    test_binder_br_reply_status1(fd, status, test_binder_push_data_later);
 }
 
 int
@@ -532,6 +760,7 @@ gbinder_system_close(
             g_hash_table_unref(test_fd_map);
             test_fd_map = NULL;
         }
+        test_binder_submit_thread_free(binder->submit_thread);
         test_binder_node_unref(binder->node);
         close(binder->public_fd);
         close(binder->private_fd);

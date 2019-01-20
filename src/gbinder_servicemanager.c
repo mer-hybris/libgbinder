@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,8 +41,13 @@
 #include <gbinder_client.h>
 
 #include <gutil_idlepool.h>
+#include <gutil_misc.h>
 
 #include <errno.h>
+
+#define PRESENSE_WAIT_MS_MIN  (100)
+#define PRESENSE_WAIT_MS_MAX  (1000)
+#define PRESENSE_WAIT_MS_STEP (100)
 
 typedef struct gbinder_servicemanager_watch {
     char* name;
@@ -53,6 +58,10 @@ typedef struct gbinder_servicemanager_watch {
 
 struct gbinder_servicemanager_priv {
     GHashTable* watch_table;
+    gulong death_id;
+    gboolean present;
+    guint presence_check_id;
+    guint presence_check_delay_ms;
 };
 
 G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
@@ -72,10 +81,12 @@ G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
     G_TYPE_CHECK_CLASS_TYPE(klass, GBINDER_TYPE_SERVICEMANAGER)
 
 enum gbinder_servicemanager_signal {
+    SIGNAL_PRESENCE,
     SIGNAL_REGISTRATION,
     SIGNAL_COUNT
 };
 
+static const char SIGNAL_PRESENCE_NAME[] = "servicemanager-presence";
 static const char SIGNAL_REGISTRATION_NAME[] = "servicemanager-registration";
 #define DETAIL_LEN 32
 
@@ -253,6 +264,90 @@ gbinder_servicemanager_add_service_tx_free(
     g_slice_free(GBinderServiceManagerAddServiceTxData, data);
 }
 
+static
+gboolean
+gbinder_servicemanager_presense_check_timer(
+    gpointer user_data)
+{
+    GBinderServiceManager* self = GBINDER_SERVICEMANAGER(user_data);
+    GBinderRemoteObject* remote = self->client->remote;
+    GBinderServiceManagerPriv* priv = self->priv;
+    gboolean result;
+
+    GASSERT(remote->dead);
+    gbinder_servicemanager_ref(self);
+    if (gbinder_remote_object_reanimate(remote)) {
+        /* Done */
+        priv->presence_check_id = 0;
+        GINFO("Service manager %s has appeared", self->dev);
+        g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
+        result = G_SOURCE_REMOVE;
+    } else if (priv->presence_check_delay_ms < PRESENSE_WAIT_MS_MAX) {
+        priv->presence_check_delay_ms += PRESENSE_WAIT_MS_STEP;
+        priv->presence_check_id = g_timeout_add(priv->presence_check_delay_ms,
+            gbinder_servicemanager_presense_check_timer, self);
+        result = G_SOURCE_REMOVE;
+    } else {
+        result = G_SOURCE_CONTINUE;
+    }
+    gbinder_servicemanager_unref(self);
+    return result;
+}
+
+static
+void
+gbinder_servicemanager_presence_check_start(
+    GBinderServiceManager* self)
+{
+    GBinderServiceManagerPriv* priv = self->priv;
+
+    GASSERT(!priv->presence_check_id);
+    priv->presence_check_delay_ms = PRESENSE_WAIT_MS_MIN;
+    priv->presence_check_id = g_timeout_add(PRESENSE_WAIT_MS_MIN,
+        gbinder_servicemanager_presense_check_timer, self);
+}
+
+static
+void
+gbinder_servicemanager_died(
+    GBinderRemoteObject* remote,
+    void* user_data)
+{
+    GBinderServiceManager* self = GBINDER_SERVICEMANAGER(user_data);
+
+    GWARN("Service manager %s has died", self->dev);
+    gbinder_servicemanager_presence_check_start(self);
+    g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
+}
+
+static
+void
+gbinder_servicemanager_sleep_ms(
+    gulong ms)
+{
+    struct timespec wait;
+
+    wait.tv_sec = ms/1000;                /* seconds */
+    wait.tv_nsec = (ms % 1000) * 1000000; /* nanoseconds */
+    while (nanosleep(&wait, &wait) == -1 && errno == EINTR &&
+        (wait.tv_sec > 0 || wait.tv_nsec > 0));
+}
+
+static
+void
+gbinder_servicemanager_reanimated(
+    GBinderServiceManager* self)
+{
+    GBinderServiceManagerPriv* priv = self->priv;
+
+    if (priv->presence_check_id) {
+        g_source_remove(priv->presence_check_id);
+        priv->presence_check_id = 0;
+    }
+    GINFO("Service manager %s has appeared", self->dev);
+    g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -271,21 +366,25 @@ gbinder_servicemanager_new_with_type(
         if (!dev) dev = klass->default_device;
         ipc = gbinder_ipc_new(dev, klass->rpc_protocol);
         if (ipc) {
+            /* Create a possible dead remote object */
             GBinderRemoteObject* object = gbinder_ipc_get_remote_object
-                (ipc, klass->handle);
+                (ipc, klass->handle, TRUE);
 
             if (object) {
+                gboolean first_ref;
+
                 /* Lock */
                 g_mutex_lock(&klass->mutex);
                 if (klass->table) {
                     self = g_hash_table_lookup(klass->table, dev);
                 }
                 if (self) {
+                    first_ref = FALSE;
                     gbinder_servicemanager_ref(self);
                 } else {
                     char* key = g_strdup(dev); /* Owned by the hashtable */
 
-                    GVERBOSE_("%s", dev);
+                    first_ref = TRUE;
                     self = g_object_new(type, NULL);
                     self->client = gbinder_client_new(object, klass->iface);
                     self->dev = gbinder_remote_object_dev(object);
@@ -297,6 +396,20 @@ gbinder_servicemanager_new_with_type(
                 }
                 g_mutex_unlock(&klass->mutex);
                 /* Unlock */
+                if (first_ref) {
+                    GBinderServiceManagerPriv* priv = self->priv;
+
+                    priv->death_id =
+                        gbinder_remote_object_add_death_handler(object,
+                            gbinder_servicemanager_died, self);
+                    /* Query the actual state if necessary */
+                    gbinder_remote_object_reanimate(object);
+                    if (object->dead) {
+                        gbinder_servicemanager_presence_check_start(self);
+                    }
+                    GDEBUG("%s has %sservice manager", dev,
+                        object->dead ? "no " : "");
+                }
                 gbinder_remote_object_unref(object);
             }
             gbinder_ipc_unref(ipc);
@@ -382,6 +495,58 @@ gbinder_servicemanager_unref(
     if (G_LIKELY(self)) {
         g_object_unref(GBINDER_SERVICEMANAGER(self));
     }
+}
+
+gboolean
+gbinder_servicemanager_is_present(
+    GBinderServiceManager* self) /* Since 1.0.25 */
+{
+    return G_LIKELY(self) && !self->client->remote->dead;
+}
+
+gboolean
+gbinder_servicemanager_wait(
+    GBinderServiceManager* self,
+    long max_wait_ms) /* Since 1.0.25 */
+{
+    if (G_LIKELY(self)) {
+        GBinderRemoteObject* remote = self->client->remote;
+
+        if (!remote->dead) {
+            return TRUE;
+        } else if (gbinder_remote_object_reanimate(remote)) {
+            gbinder_servicemanager_reanimated(self);
+            return TRUE;
+        } else if (max_wait_ms != 0) {
+            /* Zero timeout means a singe check and it's already done */
+            long delay_ms = PRESENSE_WAIT_MS_MIN;
+
+            while (max_wait_ms != 0) {
+                if (max_wait_ms > 0) {
+                    if (max_wait_ms < delay_ms) {
+                        delay_ms = max_wait_ms;
+                        max_wait_ms = 0;
+                    } else {
+                        max_wait_ms -= delay_ms;
+                    }
+                }
+                gbinder_servicemanager_sleep_ms(delay_ms);
+                if (gbinder_remote_object_reanimate(remote)) {
+                    gbinder_servicemanager_reanimated(self);
+                    return TRUE;
+                }
+                if (delay_ms < PRESENSE_WAIT_MS_MAX) {
+                    delay_ms += PRESENSE_WAIT_MS_STEP;
+                    if (delay_ms > PRESENSE_WAIT_MS_MAX) {
+                        delay_ms = PRESENSE_WAIT_MS_MAX;
+                    }
+                }
+            }
+            /* Timeout */
+            GWARN("Timeout waiting for service manager %s", self->dev);
+        }
+    }
+    return FALSE;
 }
 
 gulong
@@ -514,6 +679,16 @@ gbinder_servicemanager_cancel(
 }
 
 gulong
+gbinder_servicemanager_add_presence_handler(
+    GBinderServiceManager* self,
+    GBinderServiceManagerFunc func,
+    void* user_data) /* Since 1.0.25 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_PRESENCE_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
 gbinder_servicemanager_add_registration_handler(
     GBinderServiceManager* self,
     const char* name,
@@ -570,26 +745,46 @@ gbinder_servicemanager_remove_handler(
     GBinderServiceManager* self,
     gulong id) /* Since 1.0.13 */
 {
-    if (G_LIKELY(self) && G_LIKELY(id)) {
-        GBinderServiceManagerClass* klass =
-            GBINDER_SERVICEMANAGER_GET_CLASS(self);
-        GBinderServiceManagerPriv* priv = self->priv;
-        GHashTableIter it;
-        gpointer value;
+    gbinder_servicemanager_remove_handlers(self, &id, 1);
+}
 
-        g_signal_handler_disconnect(self, id);
-        g_hash_table_iter_init(&it, priv->watch_table);
-        while (g_hash_table_iter_next(&it, NULL, &value)) {
-            GBinderServiceManagerWatch* watch = value;
+void
+gbinder_servicemanager_remove_handlers(
+    GBinderServiceManager* self,
+    gulong* ids,
+    guint count) /* Since 1.0.25 */
+{
+    if (G_LIKELY(self) && G_LIKELY(ids) && G_LIKELY(count)) {
+        guint i, disconnected = 0;
 
-            if (watch->watched && !g_signal_has_handler_pending(self,
-                gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
-                watch->quark, TRUE)) {
-                /* This must be the one we have just removed */
-                GDEBUG("Unwatching %s", watch->name);
-                watch->watched = FALSE;
-                klass->unwatch(self, watch->name);
-                break;
+        for (i = 0; i < count; i++) {
+            if (ids[i]) {
+                g_signal_handler_disconnect(self, ids[i]);
+                disconnected++;
+                ids[i] = 0;
+            }
+        }
+
+        if (disconnected) {
+            GBinderServiceManagerClass* klass =
+                GBINDER_SERVICEMANAGER_GET_CLASS(self);
+            GBinderServiceManagerPriv* priv = self->priv;
+            GHashTableIter it;
+            gpointer value;
+
+            g_hash_table_iter_init(&it, priv->watch_table);
+            while (g_hash_table_iter_next(&it, NULL, &value) && disconnected) {
+                GBinderServiceManagerWatch* watch = value;
+
+                if (watch->watched && !g_signal_has_handler_pending(self,
+                    gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
+                    watch->quark, TRUE)) {
+                    /* This must be one of those we have just removed */
+                    GDEBUG("Unwatching %s", watch->name);
+                    watch->watched = FALSE;
+                    klass->unwatch(self, watch->name);
+                    disconnected--;
+                }
             }
         }
     }
@@ -662,6 +857,10 @@ gbinder_servicemanager_finalize(
     GBinderServiceManager* self = GBINDER_SERVICEMANAGER(object);
     GBinderServiceManagerPriv* priv = self->priv;
 
+    if (priv->presence_check_id) {
+        g_source_remove(priv->presence_check_id);
+    }
+    gbinder_remote_object_remove_handler(self->client->remote, priv->death_id);
     g_hash_table_destroy(priv->watch_table);
     gutil_idle_pool_destroy(self->pool);
     gbinder_client_unref(self->client);
@@ -674,13 +873,18 @@ gbinder_servicemanager_class_init(
     GBinderServiceManagerClass* klass)
 {
     GObjectClass* object_class = G_OBJECT_CLASS(klass);
+    GType type = G_OBJECT_CLASS_TYPE(klass);
 
     g_mutex_init(&klass->mutex);
     g_type_class_add_private(klass, sizeof(GBinderServiceManagerPriv));
     object_class->dispose = gbinder_servicemanager_dispose;
     object_class->finalize = gbinder_servicemanager_finalize;
+    gbinder_servicemanager_signals[SIGNAL_PRESENCE] =
+        g_signal_new(SIGNAL_PRESENCE_NAME, type,
+            G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL,
+            G_TYPE_NONE, 0);
     gbinder_servicemanager_signals[SIGNAL_REGISTRATION] =
-        g_signal_new(SIGNAL_REGISTRATION_NAME, G_OBJECT_CLASS_TYPE(klass),
+        g_signal_new(SIGNAL_REGISTRATION_NAME, type,
             G_SIGNAL_RUN_FIRST | G_SIGNAL_DETAILED, 0, NULL, NULL, NULL,
             G_TYPE_NONE, 1, G_TYPE_STRING);
 }

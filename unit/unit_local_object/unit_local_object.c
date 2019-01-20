@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -525,7 +525,7 @@ test_increfs(
     /* ipc is not an object, will be ignored */
     test_binder_br_increfs(fd, ipc);
     test_binder_br_increfs(fd, obj);
-
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 1);
@@ -568,7 +568,7 @@ test_decrefs(
     test_binder_br_decrefs(fd, ipc);
     test_binder_br_increfs(fd, obj);
     test_binder_br_decrefs(fd, obj);
-
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 0);
@@ -609,7 +609,7 @@ test_acquire(
     /* ipc is not an object, will be ignored */
     test_binder_br_acquire(fd, ipc);
     test_binder_br_acquire(fd, obj);
-
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 1);
@@ -652,7 +652,7 @@ test_release(
     test_binder_br_release(fd, ipc);
     test_binder_br_acquire(fd, obj);
     test_binder_br_release(fd, obj);
-
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 0);

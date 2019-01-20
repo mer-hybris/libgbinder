@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -65,9 +65,16 @@ void
 gbinder_remote_object_died_on_main_thread(
     GBinderRemoteObject* self)
 {
+    GBinderIpc* ipc = self->ipc;
+    GBinderDriver* driver = ipc->driver;
+
     GASSERT(!self->dead);
-    self->dead = TRUE;
-    g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
+    if (!self->dead) {
+        self->dead = TRUE;
+        gbinder_driver_clear_death_notification(driver, self);
+        gbinder_driver_release(driver, self->handle);
+        g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
+    }
 }
 
 static
@@ -80,21 +87,65 @@ gbinder_remote_object_died_handle(
 }
 
 /*==========================================================================*
+ * Internal interface
+ *==========================================================================*/
+
+gboolean
+gbinder_remote_object_reanimate(
+    GBinderRemoteObject* self)
+{
+    /*
+     * Don't try to reanimate those who hasn't died yet. Reanimation is
+     * kind of a special case and should only be used for servicemanager
+     * objects.
+     */
+    if (self->dead) {
+        GBinderIpc* ipc = self->ipc;
+        GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+
+        /* Kick the horse */
+        if (gbinder_driver_ping(ipc->driver, reg, self->handle) == 0) {
+            /* Wow, it's alive! */
+            self->dead = FALSE;
+            gbinder_driver_acquire(ipc->driver, self->handle);
+            gbinder_driver_request_death_notification(ipc->driver, self);
+        }
+    }
+    return !self->dead;
+}
+
+void
+gbinder_remote_object_handle_death_notification(
+    GBinderRemoteObject* self)
+{
+    /* This function is invoked from the looper thread, the caller has
+     * checked the object pointer */
+    GVERBOSE_("%p %u", self, self->handle);
+    g_main_context_invoke_full(self->priv->context, G_PRIORITY_DEFAULT,
+        gbinder_remote_object_died_handle, gbinder_remote_object_ref(self),
+        g_object_unref);
+}
+
+/*==========================================================================*
  * Interface
  *==========================================================================*/
 
 GBinderRemoteObject*
 gbinder_remote_object_new(
     GBinderIpc* ipc,
-    guint32 handle)
+    guint32 handle,
+    gboolean dead)
 {
-    if (G_LIKELY(ipc) && gbinder_driver_acquire(ipc->driver, handle)) {
+    if (G_LIKELY(ipc)) {
         GBinderRemoteObject* self = g_object_new
             (GBINDER_TYPE_REMOTE_OBJECT, NULL);
 
         self->ipc = gbinder_ipc_ref(ipc);
         self->handle = handle;
-        gbinder_driver_request_death_notification(ipc->driver, self);
+        if (!(self->dead = dead)) {
+            gbinder_driver_acquire(ipc->driver, handle);
+            gbinder_driver_request_death_notification(ipc->driver, self);
+        }
         return self;
     }
     return NULL;
@@ -152,18 +203,6 @@ gbinder_remote_object_remove_handler(
     }
 }
 
-void
-gbinder_remote_object_handle_death_notification(
-    GBinderRemoteObject* self)
-{
-    /* This function is invoked from the looper thread, the caller has
-     * checked the object pointer */
-    GVERBOSE_("%p %u", self, self->handle);
-    g_main_context_invoke_full(self->priv->context, G_PRIORITY_DEFAULT,
-        gbinder_remote_object_died_handle, gbinder_remote_object_ref(self),
-        g_object_unref);
-}
-
 /*==========================================================================*
  * Internals
  *==========================================================================*/
@@ -200,8 +239,10 @@ gbinder_remote_object_finalize(
     GBinderIpc* ipc = self->ipc;
     GBinderDriver* driver = ipc->driver;
 
-    gbinder_driver_clear_death_notification(driver, self);
-    gbinder_driver_release(driver, self->handle);
+    if (!self->dead) {
+        gbinder_driver_clear_death_notification(driver, self);
+        gbinder_driver_release(driver, self->handle);
+    }
     gbinder_ipc_unref(ipc);
     G_OBJECT_CLASS(gbinder_remote_object_parent_class)->finalize(remote);
 }

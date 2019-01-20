@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -36,6 +36,12 @@
 #include <gbinder_types.h>
 
 G_BEGIN_DECLS
+
+typedef
+void
+(*GBinderServiceManagerFunc)(
+    GBinderServiceManager* sm,
+    void* user_data);
 
 /* GBinderServiceManagerListFunc callback returns TRUE to keep the services
  * list, otherwise the caller will deallocate it. */
@@ -95,6 +101,15 @@ void
 gbinder_servicemanager_unref(
     GBinderServiceManager* sm);
 
+gboolean
+gbinder_servicemanager_is_present(
+    GBinderServiceManager* sm); /* Since 1.0.25 */
+
+gboolean
+gbinder_servicemanager_wait(
+    GBinderServiceManager* sm,
+    long max_wait_ms); /* Since 1.0.25 */
+
 gulong
 gbinder_servicemanager_list(
     GBinderServiceManager* sm,
@@ -138,6 +153,12 @@ gbinder_servicemanager_cancel(
     gulong id);
 
 gulong
+gbinder_servicemanager_add_presence_handler(
+    GBinderServiceManager* sm,
+    GBinderServiceManagerFunc func,
+    void* user_data); /* Since 1.0.25 */
+
+gulong
 gbinder_servicemanager_add_registration_handler(
     GBinderServiceManager* sm,
     const char* name,
@@ -148,6 +169,15 @@ void
 gbinder_servicemanager_remove_handler(
     GBinderServiceManager* sm,
     gulong id); /* Since 1.0.13 */
+
+void
+gbinder_servicemanager_remove_handlers(
+    GBinderServiceManager* sm,
+    gulong* ids,
+    guint count); /* Since 1.0.25 */
+
+#define gbinder_servicemanager_remove_all_handlers(r,ids) \
+    gbinder_servicemanager_remove_handlers(sm, ids, G_N_ELEMENTS(ids))
 
 G_END_DECLS
 

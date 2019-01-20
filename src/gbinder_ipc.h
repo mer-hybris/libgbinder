@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -99,7 +99,8 @@ gbinder_ipc_new_local_object(
 GBinderRemoteObject*
 gbinder_ipc_get_remote_object(
     GBinderIpc* ipc,
-    guint32 handle);
+    guint32 handle,
+    gboolean maybe_dead);
 
 GBinderRemoteReply*
 gbinder_ipc_transact_sync_reply(
