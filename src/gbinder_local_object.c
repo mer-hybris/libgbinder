@@ -53,6 +53,13 @@ G_DEFINE_TYPE(GBinderLocalObject, gbinder_local_object, G_TYPE_OBJECT)
     G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_LOCAL_OBJECT, \
     GBinderLocalObjectClass)
 
+typedef
+GBinderLocalReply*
+(*GBinderLocalObjectTxHandler)(
+    GBinderLocalObject* self,
+    GBinderRemoteRequest* req,
+    int* status);
+
 enum gbinder_local_object_signal {
     SIGNAL_WEAK_REFS_CHANGED,
     SIGNAL_STRONG_REFS_CHANGED,
@@ -78,6 +85,9 @@ gbinder_local_object_default_can_handle_transaction(
     guint code)
 {
     switch (code) {
+    case GBINDER_PING_TRANSACTION:
+    case GBINDER_INTERFACE_TRANSACTION:
+        return GBINDER_LOCAL_TRANSACTION_LOOPER;
     case HIDL_PING_TRANSACTION:
     case HIDL_GET_DESCRIPTOR_TRANSACTION:
     case HIDL_DESCRIPTOR_CHAIN_TRANSACTION:
@@ -112,6 +122,38 @@ gbinder_local_object_default_handle_transaction(
 
 static
 GBinderLocalReply*
+gbinder_local_object_ping_transaction(
+    GBinderLocalObject* self,
+    GBinderRemoteRequest* req,
+    int* status)
+{
+    const GBinderIo* io = gbinder_local_object_io(self);
+    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+
+    GVERBOSE("  PING_TRANSACTION");
+    gbinder_local_reply_append_int32(reply, GBINDER_STATUS_OK);
+    *status = GBINDER_STATUS_OK;
+    return reply;
+}
+
+static
+GBinderLocalReply*
+gbinder_local_object_interface_transaction(
+    GBinderLocalObject* self,
+    GBinderRemoteRequest* req,
+    int* status)
+{
+    const GBinderIo* io = gbinder_local_object_io(self);
+    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+
+    GVERBOSE("  INTERFACE_TRANSACTION");
+    gbinder_local_reply_append_string16(reply, self->iface);
+    *status = GBINDER_STATUS_OK;
+    return reply;
+}
+
+static
+GBinderLocalReply*
 gbinder_local_object_hidl_ping_transaction(
     GBinderLocalObject* self,
     GBinderRemoteRequest* req,
@@ -120,12 +162,10 @@ gbinder_local_object_hidl_ping_transaction(
     /*android.hidl.base@1.0::IBase interfaceDescriptor() */
     const GBinderIo* io = gbinder_local_object_io(self);
     GBinderLocalReply* reply = gbinder_local_reply_new(io);
-    GBinderWriter writer;
 
     GVERBOSE("  HIDL_PING_TRANSACTION \"%s\"",
         gbinder_remote_request_interface(req));
-    gbinder_local_reply_init_writer(reply, &writer);
-    gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
+    gbinder_local_reply_append_int32(reply, GBINDER_STATUS_OK);
     *status = GBINDER_STATUS_OK;
     return reply;
 }
@@ -187,23 +227,31 @@ gbinder_local_object_default_handle_looper_transaction(
     guint flags,
     int* status)
 {
+    GBinderLocalObjectTxHandler handler = NULL;
+
     switch (code) {
+    case GBINDER_PING_TRANSACTION:
+        handler = gbinder_local_object_ping_transaction;
+        break;
+    case GBINDER_INTERFACE_TRANSACTION:
+        handler = gbinder_local_object_interface_transaction;
+        break;
     case HIDL_PING_TRANSACTION:
-        GASSERT(!(flags & GBINDER_TX_FLAG_ONEWAY));
-        return gbinder_local_object_hidl_ping_transaction
-            (self, req, status);
+        handler = gbinder_local_object_hidl_ping_transaction;
+        break;
     case HIDL_GET_DESCRIPTOR_TRANSACTION:
-        GASSERT(!(flags & GBINDER_TX_FLAG_ONEWAY));
-        return gbinder_local_object_hidl_get_descriptor_transaction
-            (self, req, status);
+        handler = gbinder_local_object_hidl_get_descriptor_transaction;
+        break;
     case HIDL_DESCRIPTOR_CHAIN_TRANSACTION:
-        GASSERT(!(flags & GBINDER_TX_FLAG_ONEWAY));
-        return gbinder_local_object_hidl_descriptor_chain_transaction
-            (self, req, status);
+        handler = gbinder_local_object_hidl_descriptor_chain_transaction;
+        break;
     default:
         if (status) *status = (-EBADMSG);
         return NULL;
     }
+
+    GASSERT(!(flags & GBINDER_TX_FLAG_ONEWAY));
+    return handler(self, req, status);
 }
 
 static
