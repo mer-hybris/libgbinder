@@ -42,6 +42,7 @@
 
 #include <gutil_strv.h>
 #include <gutil_macros.h>
+#include <gutil_log.h>
 
 #include <errno.h>
 
@@ -99,6 +100,17 @@ test_inc(
     GBinderServiceManager* sm,
     void* user_data)
 {
+    (*((int*)user_data))++;
+}
+
+static
+void
+test_reg_inc(
+    GBinderServiceManager* sm,
+    const char* name,
+    void* user_data)
+{
+    GVERBOSE_("\"%s\"", name);
     (*((int*)user_data))++;
 }
 
@@ -656,8 +668,8 @@ test_death(
     const int fd = gbinder_driver_fd(ipc->driver);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
-    gulong id[2];
-    int count = 0;
+    gulong id[3];
+    int count = 0, reg_count = 0;
 
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
@@ -667,17 +679,94 @@ test_death(
     /* Register the listeners */
     id[0] = gbinder_servicemanager_add_presence_handler(sm, test_inc, &count);
     id[1] = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
+    id[2] = gbinder_servicemanager_add_registration_handler(sm, "foo",
+        test_reg_inc, &reg_count);
     g_assert(id[0]);
     g_assert(id[1]);
+    g_assert(id[2]);
 
     /* Generate death notification (need looper for that) */
     test_binder_br_dead_binder(fd, 0);
     test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
+    /* No registrations must have occured */
+    g_assert(!reg_count);
+
     /* The listener must have been invoked exactly once */
     g_assert(count == 1);
     g_assert(!gbinder_servicemanager_is_present(sm));
+    gbinder_servicemanager_remove_all_handlers(sm, id);
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * reanimate
+ *==========================================================================*/
+
+static
+void
+test_reanimate_quit(
+    GBinderServiceManager* sm,
+    void* user_data)
+{
+    if (gbinder_servicemanager_is_present(sm)) {
+        GDEBUG("Service manager is back");
+        test_quit_later((GMainLoop*)user_data);
+    } else {
+        const int fd = gbinder_driver_fd(sm->client->remote->ipc->driver);
+
+        /* Disable looper and reanimate the object */
+        GDEBUG("Reanimating...");
+        test_binder_set_looper_enabled(fd, FALSE);
+        test_binder_br_transaction_complete(fd);
+        test_binder_br_reply(fd, 0, 0, NULL);
+    }
+}
+
+static
+void
+test_reanimate(
+    void)
+{
+    const char* dev = GBINDER_DEFAULT_HWBINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderServiceManager* sm;
+    gulong id[3];
+    int count = 0, reg_count = 0;
+
+    /* Create live service manager */
+    test_setup_ping(ipc);
+    sm = gbinder_servicemanager_new(dev);
+    g_assert(sm);
+    g_assert(gbinder_servicemanager_is_present(sm));
+
+    /* Register the listeners */
+    id[0] = gbinder_servicemanager_add_presence_handler(sm, test_inc, &count);
+    id[1] = gbinder_servicemanager_add_presence_handler(sm,
+        test_reanimate_quit, loop);
+    id[2] = gbinder_servicemanager_add_registration_handler(sm, "foo",
+        test_reg_inc, &reg_count);
+    g_assert(id[0]);
+    g_assert(id[1]);
+    g_assert(id[2]);
+
+    /* Generate death notification (need looper for that) */
+    test_binder_br_dead_binder(fd, 0);
+    test_binder_set_looper_enabled(fd, TRUE);
+    test_run(&test_opt, loop);
+
+    /* No registrations must have occured */
+    g_assert(!reg_count);
+
+    /* Presence must have changed twice */
+    g_assert(count == 2);
+    g_assert(gbinder_servicemanager_is_present(sm));
+
     gbinder_servicemanager_remove_all_handlers(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
@@ -968,6 +1057,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("wait_long"), test_wait_long);
     g_test_add_func(TEST_("wait_async"), test_wait_async);
     g_test_add_func(TEST_("death"), test_death);
+    g_test_add_func(TEST_("reanimate"), test_reanimate);
     g_test_add_func(TEST_("reuse"), test_reuse);
     g_test_add_func(TEST_("notify"), test_notify);
     g_test_add_func(TEST_("list"), test_list);

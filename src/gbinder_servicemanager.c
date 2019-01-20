@@ -265,6 +265,41 @@ gbinder_servicemanager_add_service_tx_free(
 }
 
 static
+void
+gbinder_servicemanager_reanimated(
+    GBinderServiceManager* self)
+{
+    GBinderServiceManagerPriv* priv = self->priv;
+
+    if (priv->presence_check_id) {
+        g_source_remove(priv->presence_check_id);
+        priv->presence_check_id = 0;
+    }
+    GINFO("Service manager %s has appeared", self->dev);
+    /* Re-arm the watches */
+    if (g_hash_table_size(priv->watch_table) > 0) {
+        gpointer value;
+        GHashTableIter it;
+        GBinderServiceManagerClass* klass =
+            GBINDER_SERVICEMANAGER_GET_CLASS(self);
+
+        g_hash_table_iter_init(&it, priv->watch_table);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            GBinderServiceManagerWatch* watch = value;
+
+            GASSERT(!watch->watched);
+            watch->watched = klass->watch(self, watch->name);
+            if (watch->watched) {
+                GDEBUG("Watching %s", watch->name);
+            } else {
+                GWARN("Failed to watch %s", watch->name);
+            }
+        }
+    }
+    g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
+}
+
+static
 gboolean
 gbinder_servicemanager_presense_check_timer(
     gpointer user_data)
@@ -279,8 +314,7 @@ gbinder_servicemanager_presense_check_timer(
     if (gbinder_remote_object_reanimate(remote)) {
         /* Done */
         priv->presence_check_id = 0;
-        GINFO("Service manager %s has appeared", self->dev);
-        g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
+        gbinder_servicemanager_reanimated(self);
         result = G_SOURCE_REMOVE;
     } else if (priv->presence_check_delay_ms < PRESENSE_WAIT_MS_MAX) {
         priv->presence_check_delay_ms += PRESENSE_WAIT_MS_STEP;
@@ -314,9 +348,29 @@ gbinder_servicemanager_died(
     void* user_data)
 {
     GBinderServiceManager* self = GBINDER_SERVICEMANAGER(user_data);
+    GBinderServiceManagerPriv* priv = self->priv;
 
     GWARN("Service manager %s has died", self->dev);
     gbinder_servicemanager_presence_check_start(self);
+
+    /* Will re-arm watches after servicemanager gets restarted */
+    if (g_hash_table_size(priv->watch_table) > 0) {
+        gpointer value;
+        GHashTableIter it;
+        GBinderServiceManagerClass* klass =
+            GBINDER_SERVICEMANAGER_GET_CLASS(self);
+
+        g_hash_table_iter_init(&it, priv->watch_table);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            GBinderServiceManagerWatch* watch = value;
+
+            if (watch->watched) {
+                GDEBUG("Unwatching %s", watch->name);
+                watch->watched = FALSE;
+                klass->unwatch(self, watch->name);
+            }
+        }
+    }
     g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
 }
 
@@ -331,21 +385,6 @@ gbinder_servicemanager_sleep_ms(
     wait.tv_nsec = (ms % 1000) * 1000000; /* nanoseconds */
     while (nanosleep(&wait, &wait) == -1 && errno == EINTR &&
         (wait.tv_sec > 0 || wait.tv_nsec > 0));
-}
-
-static
-void
-gbinder_servicemanager_reanimated(
-    GBinderServiceManager* self)
-{
-    GBinderServiceManagerPriv* priv = self->priv;
-
-    if (priv->presence_check_id) {
-        g_source_remove(priv->presence_check_id);
-        priv->presence_check_id = 0;
-    }
-    GINFO("Service manager %s has appeared", self->dev);
-    g_signal_emit(self, gbinder_servicemanager_signals[SIGNAL_PRESENCE], 0);
 }
 
 /*==========================================================================*
@@ -721,8 +760,8 @@ gbinder_servicemanager_add_registration_handler(
                 watch = gbinder_servicemanager_watch_new(name);
                 g_hash_table_insert(priv->watch_table, watch->name, watch);
             }
-            if (!watch->watched) {
-                watch->watched = klass->watch(self, name);
+            if (!watch->watched && !self->client->remote->dead) {
+                watch->watched = klass->watch(self, watch->name);
                 if (watch->watched) {
                     GDEBUG("Watching %s", watch->name);
                 } else {
@@ -773,7 +812,7 @@ gbinder_servicemanager_remove_handlers(
             gpointer value;
 
             g_hash_table_iter_init(&it, priv->watch_table);
-            while (g_hash_table_iter_next(&it, NULL, &value) && disconnected) {
+            while (disconnected && g_hash_table_iter_next(&it, NULL, &value)) {
                 GBinderServiceManagerWatch* watch = value;
 
                 if (watch->watched && !g_signal_has_handler_pending(self,
