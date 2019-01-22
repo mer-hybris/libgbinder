@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Jolla Ltd.
+ * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,25 +30,36 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_H
-#define GBINDER_H
+#ifndef GBINDER_SERVICENAME_H
+#define GBINDER_SERVICENAME_H
 
-/* Convenience header to pull in everything at once */
+#include "gbinder_types.h"
 
-#include "gbinder_buffer.h"
-#include "gbinder_client.h"
-#include "gbinder_local_object.h"
-#include "gbinder_local_reply.h"
-#include "gbinder_local_request.h"
-#include "gbinder_reader.h"
-#include "gbinder_remote_object.h"
-#include "gbinder_remote_reply.h"
-#include "gbinder_remote_request.h"
-#include "gbinder_servicename.h"
-#include "gbinder_servicemanager.h"
-#include "gbinder_writer.h"
+G_BEGIN_DECLS
 
-#endif /* GBINDER_H */
+/* Since 1.0.26 */
+
+struct gbinder_servicename {
+    const char* name;
+};
+
+GBinderServiceName*
+gbinder_servicename_new(
+    GBinderServiceManager* sm,
+    GBinderLocalObject* object,
+    const char* name);
+
+GBinderServiceName*
+gbinder_servicename_ref(
+    GBinderServiceName* name);
+
+void
+gbinder_servicename_unref(
+    GBinderServiceName* name);
+
+G_END_DECLS
+
+#endif /* GBINDER_SERVICENAME_H */
 
 /*
  * Local Variables:
