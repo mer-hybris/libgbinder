@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,65 +35,86 @@
 
 #include "test_common.h"
 
-gboolean
+void
 test_binder_br_noop(
     int fd);
 
-gboolean
+void
 test_binder_br_increfs(
     int fd,
     void* ptr);
 
-gboolean
+void
 test_binder_br_acquire(
     int fd,
     void* ptr);
 
-gboolean
+void
 test_binder_br_release(
     int fd,
     void* ptr);
 
-gboolean
+void
 test_binder_br_decrefs(
     int fd,
     void* ptr);
 
-gboolean
+void
 test_binder_br_transaction_complete(
     int fd);
 
-gboolean
+void
+test_binder_br_transaction_complete_later(
+    int fd);
+
+void
 test_binder_br_dead_binder(
     int fd,
     guint handle);
 
-gboolean
+void
 test_binder_br_dead_reply(
     int fd);
 
-gboolean
+void
 test_binder_br_failed_reply(
     int fd);
 
-gboolean
+void
 test_binder_br_transaction(
     int fd,
     void* target,
     guint32 code,
     const GByteArray* bytes);
 
-gboolean
+void
 test_binder_br_reply(
     int fd,
     guint32 handle,
     guint32 code,
     const GByteArray* bytes);
 
-gboolean
+void
 test_binder_br_reply_status(
     int fd,
     gint32 status);
+
+void
+test_binder_br_reply_later(
+    int fd,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* bytes);
+
+void
+test_binder_br_reply_status_later(
+    int fd,
+    gint32 status);
+
+void
+test_binder_set_looper_enabled(
+    int fd,
+    gboolean enabled);
 
 void
 test_binder_set_destroy(

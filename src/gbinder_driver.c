@@ -288,19 +288,15 @@ gbinder_driver_death_notification(
     guint32 cmd,
     GBinderRemoteObject* obj)
 {
-    if (G_LIKELY(obj)) {
-        GBinderIoBuf write;
-        guint8 buf[4 + GBINDER_MAX_DEATH_NOTIFICATION_SIZE];
-        guint32* data = (guint32*)buf;
+    GBinderIoBuf write;
+    guint8 buf[4 + GBINDER_MAX_DEATH_NOTIFICATION_SIZE];
+    guint32* data = (guint32*)buf;
 
-        data[0] = cmd;
-        memset(&write, 0, sizeof(write));
-        write.ptr = (uintptr_t)buf;
-        write.size = 4 + self->io->encode_death_notification(data + 1, obj);
-
-        return gbinder_driver_write(self, &write) >= 0;
-    }
-    return FALSE;
+    data[0] = cmd;
+    memset(&write, 0, sizeof(write));
+    write.ptr = (uintptr_t)buf;
+    write.size = 4 + self->io->encode_death_notification(data + 1, obj);
+    return gbinder_driver_write(self, &write) >= 0;
 }
 
 static
@@ -535,6 +531,7 @@ gbinder_driver_handle_command(
     } else if (cmd == io->br.transaction) {
         gbinder_driver_handle_transaction(self, reg, handler, data);
     } else if (cmd == io->br.dead_binder) {
+        guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
         guint64 handle = 0;
         GBinderRemoteObject* obj;
 
@@ -545,6 +542,8 @@ gbinder_driver_handle_command(
             gbinder_remote_object_handle_death_notification(obj);
             gbinder_remote_object_unref(obj);
         }
+        GVERBOSE("< BC_DEAD_BINDER_DONE %llu", (long long unsigned int)handle);
+        gbinder_driver_cmd_data(self, io->bc.dead_binder_done, data, buf);
     } else if (cmd == io->br.clear_death_notification_done) {
         GVERBOSE("> BR_CLEAR_DEATH_NOTIFICATION_DONE");
     } else {
@@ -812,8 +811,13 @@ gbinder_driver_request_death_notification(
     GBinderDriver* self,
     GBinderRemoteObject* obj)
 {
-    return gbinder_driver_death_notification
-        (self, self->io->bc.request_death_notification, obj);
+    if (G_LIKELY(obj)) {
+        GVERBOSE("< BC_REQUEST_DEATH_NOTIFICATION 0x%08x", obj->handle);
+        return gbinder_driver_death_notification(self,
+            self->io->bc.request_death_notification, obj);
+    } else {
+        return FALSE;
+    }
 }
 
 gboolean
@@ -821,8 +825,13 @@ gbinder_driver_clear_death_notification(
     GBinderDriver* self,
     GBinderRemoteObject* obj)
 {
-    return gbinder_driver_death_notification
-        (self, self->io->bc.clear_death_notification, obj);
+    if (G_LIKELY(obj)) {
+        GVERBOSE("< BC_CLEAR_DEATH_NOTIFICATION 0x%08x", obj->handle);
+        return gbinder_driver_death_notification(self,
+            self->io->bc.clear_death_notification, obj);
+    } else {
+        return FALSE;
+    }
 }
 
 gboolean
@@ -1036,6 +1045,28 @@ gbinder_driver_transact(
 
     g_free(offsets_buf);
     return txstatus;
+}
+
+int
+gbinder_driver_ping(
+    GBinderDriver* self,
+    GBinderObjectRegistry* reg,
+    guint32 handle)
+{
+    const GBinderRpcProtocol* protocol = self->protocol;
+    GBinderLocalRequest* req = gbinder_local_request_new(self->io, NULL);
+    GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
+    GBinderWriter writer;
+    int ret;
+
+    gbinder_local_request_init_writer(req, &writer);
+    protocol->write_ping(&writer);
+    ret = gbinder_driver_transact(self, reg, handle, protocol->ping_tx,
+        req, reply);
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
+    return ret;
 }
 
 GBinderLocalRequest*

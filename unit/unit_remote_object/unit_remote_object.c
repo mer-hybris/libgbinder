@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -50,7 +50,7 @@ void
 test_null(
     void)
 {
-    g_assert(!gbinder_remote_object_new(NULL, 0));
+    g_assert(!gbinder_remote_object_new(NULL, 0, FALSE));
     g_assert(!gbinder_remote_object_ref(NULL));
     gbinder_remote_object_unref(NULL);
     g_assert(gbinder_remote_object_is_dead(NULL));
@@ -80,7 +80,7 @@ test_basic(
     g_assert(gbinder_remote_object_ref(obj1) == obj1);
     gbinder_remote_object_unref(obj1); /* Compensate the above reference */
     g_assert(!gbinder_remote_object_add_death_handler(obj1, NULL, NULL));
-    g_assert(gbinder_ipc_get_remote_object(ipc, 1) == obj1);
+    g_assert(gbinder_ipc_get_remote_object(ipc, 1, TRUE) == obj1);
     gbinder_remote_object_unref(obj1); /* Compensate the above reference */
     gbinder_remote_object_unref(obj1);
     gbinder_remote_object_unref(obj2);
@@ -109,11 +109,14 @@ test_dead(
     const guint handle = 1;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderRemoteObject* obj = gbinder_ipc_get_remote_object(ipc, handle);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderRemoteObject* obj = gbinder_ipc_get_remote_object
+        (ipc, handle, FALSE);
     gulong id = gbinder_remote_object_add_death_handler
         (obj, test_dead_done, loop);
 
-    test_binder_br_dead_binder(gbinder_driver_fd(ipc->driver), handle);
+    test_binder_br_dead_binder(fd, handle);
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
     g_assert(gbinder_remote_object_is_dead(obj));
 

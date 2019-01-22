@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
+#include "test_binder.h"
 
+#include "gbinder_driver.h"
+#include "gbinder_ipc.h"
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_servicepoll.h"
 #include "gbinder_rpc_protocol.h"
@@ -42,6 +44,18 @@
 #include <errno.h>
 
 static TestOpt test_opt;
+
+static
+void
+test_setup_ping(
+    GBinderIpc* ipc)
+{
+    const int fd = gbinder_driver_fd(ipc->driver);
+
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_reply(fd, 0, 0, NULL);
+}
 
 /*==========================================================================*
  * TestServiceManager
@@ -212,10 +226,15 @@ void
 test_basic(
     void)
 {
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderServicePoll* weakptr = NULL;
-    GBinderServiceManager* manager = gbinder_servicemanager_new(NULL);
-    GBinderServicePoll* poll = gbinder_servicepoll_new(manager, NULL);
+    GBinderServiceManager* manager;
+    GBinderServicePoll* poll;
 
+    test_setup_ping(ipc);
+    manager = gbinder_servicemanager_new(dev);
+    poll = gbinder_servicepoll_new(manager, NULL);
     g_assert(poll);
     g_assert(gbinder_servicepoll_manager(poll) == manager);
     g_assert(!gbinder_servicepoll_is_known_name(poll, "foo"));
@@ -230,6 +249,7 @@ test_basic(
     gbinder_servicepoll_unref(poll);
 
     gbinder_servicemanager_unref(manager);
+    gbinder_ipc_unref(ipc);
 }
 
 /*==========================================================================*
@@ -282,12 +302,18 @@ void
 test_notify1(
     void)
 {
-    GBinderServicePoll* weakptr = NULL;
-    GBinderServiceManager* manager = gbinder_servicemanager_new(NULL);
-    TestServiceManager* test = TEST_SERVICEMANAGER(manager);
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderServicePoll* weakptr = NULL;
+    GBinderServiceManager* manager;
+    TestServiceManager* test;
     GBinderServicePoll* poll;
     gulong id;
+
+    test_setup_ping(ipc);
+    manager = gbinder_servicemanager_new(dev);
+    test = TEST_SERVICEMANAGER(manager);
 
     gbinder_servicepoll_interval_ms = 100;
     poll = gbinder_servicepoll_new(manager, &weakptr);
@@ -307,6 +333,7 @@ test_notify1(
     gbinder_servicepoll_unref(poll);
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
+    gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
 }
 
@@ -349,12 +376,18 @@ void
 test_notify2(
     void)
 {
-    GBinderServicePoll* weakptr = NULL;
-    GBinderServiceManager* manager = gbinder_servicemanager_new(NULL);
-    TestServiceManager* test = TEST_SERVICEMANAGER(manager);
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderServicePoll* weakptr = NULL;
+    GBinderServiceManager* manager;
+    TestServiceManager* test;
     GBinderServicePoll* poll;
     gulong id;
+
+    test_setup_ping(ipc);
+    manager = gbinder_servicemanager_new(dev);
+    test = TEST_SERVICEMANAGER(manager);
 
     gbinder_servicepoll_interval_ms = 100;
     poll = gbinder_servicepoll_new(manager, &weakptr);
@@ -378,6 +411,7 @@ test_notify2(
     gbinder_servicepoll_unref(poll);
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
+    gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
 }
 
@@ -401,12 +435,19 @@ void
 test_already_there(
     void)
 {
-    GBinderServicePoll* weakptr = NULL;
-    GBinderServiceManager* manager = gbinder_servicemanager_new(NULL);
-    GBinderServicePoll* poll = gbinder_servicepoll_new(manager, &weakptr);
-    TestServiceManager* test = TEST_SERVICEMANAGER(manager);
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderServicePoll* weakptr = NULL;
+    GBinderServiceManager* manager;
+    TestServiceManager* test;
+    GBinderServicePoll* poll;
     gulong id;
+
+    test_setup_ping(ipc);
+    manager = gbinder_servicemanager_new(dev);
+    poll = gbinder_servicepoll_new(manager, &weakptr);
+    test = TEST_SERVICEMANAGER(manager);
 
     test->services = gutil_strv_add(test->services, "foo");
     id = gbinder_servicepoll_add_handler(poll, test_already_there_proc, loop);
@@ -418,6 +459,7 @@ test_already_there(
     gbinder_servicepoll_unref(poll);
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
+    gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
 }
 

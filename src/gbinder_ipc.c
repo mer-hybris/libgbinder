@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -986,7 +986,8 @@ static
 GBinderRemoteObject*
 gbinder_ipc_priv_get_remote_object(
     GBinderIpcPriv* priv,
-    guint32 handle)
+    guint32 handle,
+    gboolean maybe_dead)
 {
     GBinderRemoteObject* obj = NULL;
     void* key = GINT_TO_POINTER(handle);
@@ -999,7 +1000,11 @@ gbinder_ipc_priv_get_remote_object(
     if (obj) {
         gbinder_remote_object_ref(obj);
     } else {
-        obj = gbinder_remote_object_new(priv->self, handle);
+        /*
+         * If maybe_dead is TRUE, the caller is supposed to try reanimating
+         * the object on the main thread not holding any global locks.
+         */
+        obj = gbinder_remote_object_new(priv->self, handle, maybe_dead);
         if (!priv->remote_objects) {
             priv->remote_objects = g_hash_table_new
                 (g_direct_hash, g_direct_equal);
@@ -1015,10 +1020,11 @@ gbinder_ipc_priv_get_remote_object(
 GBinderRemoteObject*
 gbinder_ipc_get_remote_object(
     GBinderIpc* self,
-    guint32 handle)
+    guint32 handle,
+    gboolean maybe_dead)
 {
     /* GBinderServiceManager makes sure that GBinderIpc pointer is not NULL */
-    return gbinder_ipc_priv_get_remote_object(self->priv, handle);
+    return gbinder_ipc_priv_get_remote_object(self->priv, handle, maybe_dead);
 }
 
 GBINDER_INLINE_FUNC
@@ -1070,7 +1076,7 @@ gbinder_ipc_object_registry_get_remote(
     guint32 handle)
 {
     return gbinder_ipc_priv_get_remote_object
-        (gbinder_ipc_priv_from_object_registry(reg), handle);
+        (gbinder_ipc_priv_from_object_registry(reg), handle, FALSE);
 }
 
 /*==========================================================================*

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -130,6 +130,12 @@ gbinder_driver_transact(
     guint32 code,
     GBinderLocalRequest* request,
     GBinderRemoteReply* reply);
+
+int
+gbinder_driver_ping(
+    GBinderDriver* driver,
+    GBinderObjectRegistry* reg,
+    guint32 handle);
 
 GBinderLocalRequest*
 gbinder_driver_local_request_new(

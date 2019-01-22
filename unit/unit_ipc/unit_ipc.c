@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -143,7 +143,7 @@ test_sync_oneway(
     const int fd = gbinder_driver_fd(ipc->driver);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
 
-    g_assert(test_binder_br_transaction_complete(fd));
+    test_binder_br_transaction_complete(fd);
     g_assert(gbinder_ipc_transact_sync_oneway(ipc, 0, 1, req) ==
         GBINDER_STATUS_OK);
     gbinder_local_request_unref(req);
@@ -175,10 +175,10 @@ test_sync_reply_ok_status(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_transaction_complete(fd));
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply(fd, handle, code, data->bytes));
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_noop(fd);
+    test_binder_br_reply(fd, handle, code, data->bytes);
 
     tx_reply = gbinder_ipc_transact_sync_reply(ipc, handle, code, req, status);
     g_assert(tx_reply);
@@ -223,10 +223,10 @@ test_sync_reply_error(
     const gint expected_status = GBINDER_STATUS_FAILED;
     int status = INT_MAX;
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_transaction_complete(fd));
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply_status(fd, expected_status));
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_noop(fd);
+    test_binder_br_reply_status(fd, expected_status);
 
     g_assert(!gbinder_ipc_transact_sync_reply(ipc, handle, code, req, &status));
     g_assert(status == expected_status);
@@ -286,10 +286,10 @@ test_transact_ok(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_transaction_complete(fd));
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply(fd, handle, code, data->bytes));
+    test_binder_br_noop(fd);
+    test_binder_br_transaction_complete(fd);
+    test_binder_br_noop(fd);
+    test_binder_br_reply(fd, handle, code, data->bytes);
 
     id = gbinder_ipc_transact(ipc, handle, code, 0, req,
         test_transact_ok_done, test_transact_ok_destroy, loop);
@@ -335,8 +335,8 @@ test_transact_dead(
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     gulong id;
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_dead_reply(fd));
+    test_binder_br_noop(fd);
+    test_binder_br_dead_reply(fd);
 
     id = gbinder_ipc_transact(ipc, 1, 2, 0, req, test_transact_dead_done,
         NULL, loop);
@@ -381,8 +381,8 @@ test_transact_failed(
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     gulong id;
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_failed_reply(fd));
+    test_binder_br_noop(fd);
+    test_binder_br_failed_reply(fd);
 
     id = gbinder_ipc_transact(ipc, 1, 2, 0, req, test_transact_failed_done,
         NULL, loop);
@@ -429,8 +429,8 @@ test_transact_status(
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     gulong id;
 
-    g_assert(test_binder_br_noop(fd));
-    g_assert(test_binder_br_reply_status(fd, EXPECTED_STATUS));
+    test_binder_br_noop(fd);
+    test_binder_br_reply_status(fd, EXPECTED_STATUS);
 
     id = gbinder_ipc_transact(ipc, 1, 2, 0, req, test_transact_status_done,
         NULL, loop);
@@ -647,6 +647,7 @@ test_transact_incoming(
     data = gbinder_local_request_data(req);
 
     test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     /* Now we need to wait until GBinderIpc is destroyed */
@@ -708,6 +709,7 @@ test_transact_status_reply(
     data = gbinder_local_request_data(req);
 
     test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     /* Now we need to wait until GBinderIpc is destroyed */
@@ -812,6 +814,7 @@ test_transact_async(
     data = gbinder_local_request_data(req);
 
     test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     /* Now we need to wait until GBinderIpc is destroyed */
@@ -882,6 +885,7 @@ test_transact_async_sync(
     data = gbinder_local_request_data(req);
 
     test_binder_br_transaction(fd, obj, 1, data->bytes);
+    test_binder_set_looper_enabled(fd, TRUE);
     test_run(&test_opt, loop);
 
     /* Now we need to wait until GBinderIpc is destroyed */

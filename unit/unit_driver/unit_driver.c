@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -91,7 +91,7 @@ test_noop(
 
     g_assert(driver);
     g_assert(fd >= 0);
-    g_assert(test_binder_br_noop(fd));
+    test_binder_br_noop(fd);
     g_assert(gbinder_driver_poll(driver, NULL) == POLLIN);
     g_assert(gbinder_driver_read(driver, NULL, NULL) == 0);
 

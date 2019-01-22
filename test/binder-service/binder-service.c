@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -183,12 +183,31 @@ app_add_service_done(
 
 static
 void
+app_sm_presence_handler(
+    GBinderServiceManager* sm,
+    void* user_data)
+{
+    App* app = user_data;
+
+    if (gbinder_servicemanager_is_present(app->sm)) {
+        GINFO("Service manager has reappeared");
+        gbinder_servicemanager_add_service(app->sm, app->opt->name, app->obj,
+            app_add_service_done, app);
+    } else {
+        GINFO("Service manager has died");
+    }
+}
+
+static
+void
 app_run(
    App* app)
 {
     const char* name = app->opt->name;
     guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, app);
     guint sigint = g_unix_signal_add(SIGINT, app_signal, app);
+    gulong presence_id = gbinder_servicemanager_add_presence_handler
+        (app->sm, app_sm_presence_handler, app);
 
     app->loop = g_main_loop_new(NULL, TRUE);
 
@@ -199,6 +218,7 @@ app_run(
 
     if (sigtrm) g_source_remove(sigtrm);
     if (sigint) g_source_remove(sigint);
+    gbinder_servicemanager_remove_handler(app->sm, presence_id);
     g_main_loop_unref(app->loop);
     app->loop = NULL;
 }
@@ -297,7 +317,7 @@ int main(int argc, char* argv[])
     app.opt = &opt;
     if (app_init(&opt, argc, argv)) {
         app.sm = gbinder_servicemanager_new(opt.dev);
-        if (app.sm) {
+        if (gbinder_servicemanager_wait(app.sm, -1)) {
             app.obj = gbinder_servicemanager_new_local_object
                 (app.sm, opt.iface, app_reply, &app);
             app_run(&app);

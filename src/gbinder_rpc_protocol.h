@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,9 +42,11 @@
  */
 
 struct gbinder_rpc_protocol {
+    guint32 ping_tx;
+    void (*write_ping)(GBinderWriter* writer);
+    void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
     const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
         char** iface);
-    void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
 };
 
 extern const GBinderRpcProtocol gbinder_rpc_protocol_binder;
