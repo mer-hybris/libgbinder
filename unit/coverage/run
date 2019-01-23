@@ -18,6 +18,7 @@ unit_remote_object \
 unit_remote_reply \
 unit_remote_request \
 unit_servicemanager \
+unit_servicename \
 unit_servicepoll \
 unit_writer"
 
