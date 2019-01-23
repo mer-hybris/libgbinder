@@ -550,7 +550,7 @@ gbinder_reader_read_nullable_string16(
     GBinderReader* reader,
     char** out)
 {
-    gunichar2* str;
+    const gunichar2* str;
     gsize len;
 
     if (gbinder_reader_read_nullable_string16_utf16(reader, &str, &len)) {
@@ -565,7 +565,7 @@ gbinder_reader_read_nullable_string16(
 gboolean
 gbinder_reader_read_nullable_string16_utf16(
     GBinderReader* reader,
-    gunichar2** out,
+    const gunichar2** out,
     gsize* out_len) /* Since 1.0.17 */
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
@@ -586,7 +586,7 @@ gbinder_reader_read_nullable_string16_utf16(
             return TRUE;
         } else if (len >= 0) {
             const guint32 padded_len = G_ALIGN4((len + 1)*2);
-            gunichar2* utf16 = (gunichar2*)(p->ptr + 4);
+            const gunichar2* utf16 = (gunichar2*)(p->ptr + 4);
 
             if ((p->ptr + padded_len + 4) <= p->end) {
                 p->ptr += padded_len + 4;
@@ -601,6 +601,21 @@ gbinder_reader_read_nullable_string16_utf16(
         }
     }
     return FALSE;
+}
+
+const gunichar2*
+gbinder_reader_read_string16_utf16(
+    GBinderReader* reader,
+    gsize* len) /* Since 1.0.26 */
+{
+    const gunichar2* str;
+
+    /*
+     * Use gbinder_reader_read_nullable_string16_utf16 to distinguish
+     * NULL string from a parsing failure.
+     */
+    return gbinder_reader_read_nullable_string16_utf16(reader, &str, len) ?
+        str : NULL;
 }
 
 char*
