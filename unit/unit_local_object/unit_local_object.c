@@ -196,6 +196,101 @@ void
 test_ping(
     void)
 {
+    int status = INT_MAX;
+    const char* dev = GBINDER_DEFAULT_HWBINDER;
+    const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
+    GBinderLocalObject* obj =
+        gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
+    GBinderLocalReply* reply;
+    GBinderOutputData* out_data;
+    static const guint8 result[] = { 0x00, 0x00, 0x00, 0x00 };
+
+    g_assert(gbinder_local_object_can_handle_transaction(obj, NULL,
+        GBINDER_PING_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
+
+    /* If can_handle_transaction() returns TRANSACTION_LOOPER then it must be
+     * handled by handle_looper_transaction() */
+    g_assert(!gbinder_local_object_handle_transaction(obj, req,
+        GBINDER_PING_TRANSACTION, 0, &status));
+    g_assert(status == (-EBADMSG));
+    reply = gbinder_local_object_handle_looper_transaction(obj, req,
+        GBINDER_PING_TRANSACTION, 0, &status);
+    g_assert(reply);
+    g_assert(status == GBINDER_STATUS_OK);
+
+    out_data = gbinder_local_reply_data(reply);
+    g_assert(out_data);
+    g_assert(out_data->bytes);
+    g_assert(out_data->bytes->len == sizeof(result));
+    g_assert(!memcmp(out_data->bytes->data, result, sizeof(result)));
+
+    gbinder_ipc_unref(ipc);
+    gbinder_local_object_unref(obj);
+    gbinder_local_reply_unref(reply);
+    gbinder_remote_request_unref(req);
+}
+
+/*==========================================================================*
+ * interface
+ *==========================================================================*/
+
+static
+void
+test_interface(
+    void)
+{
+    int status = INT_MAX;
+    const char* dev = GBINDER_DEFAULT_HWBINDER;
+    const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
+    GBinderLocalObject* obj =
+        gbinder_ipc_new_local_object(ipc, "x", NULL, NULL);
+    GBinderLocalReply* reply;
+    GBinderOutputData* out_data;
+    static const guint8 result[] = {
+        TEST_INT32_BYTES(1),
+        TEST_INT16_BYTES('x'), 0x00, 0x00
+    };
+
+    g_assert(gbinder_local_object_can_handle_transaction(obj, NULL,
+        GBINDER_INTERFACE_TRANSACTION) == GBINDER_LOCAL_TRANSACTION_LOOPER);
+
+    /* If can_handle_transaction() returns TRANSACTION_LOOPER then it must be
+     * handled by handle_looper_transaction() */
+    g_assert(!gbinder_local_object_handle_transaction(obj, req,
+        GBINDER_INTERFACE_TRANSACTION, 0, &status));
+    g_assert(status == (-EBADMSG));
+    reply = gbinder_local_object_handle_looper_transaction(obj, req,
+        GBINDER_INTERFACE_TRANSACTION, 0, &status);
+    g_assert(reply);
+    g_assert(status == GBINDER_STATUS_OK);
+
+    out_data = gbinder_local_reply_data(reply);
+    g_assert(out_data);
+    g_assert(out_data->bytes);
+    g_assert(out_data->bytes->len == sizeof(result));
+    g_assert(!memcmp(out_data->bytes->data, result, sizeof(result)));
+
+    gbinder_ipc_unref(ipc);
+    gbinder_local_object_unref(obj);
+    gbinder_local_reply_unref(reply);
+    gbinder_remote_request_unref(req);
+}
+
+/*==========================================================================*
+ * hidl_ping
+ *==========================================================================*/
+
+static
+void
+test_hidl_ping(
+    void)
+{
     static const guint8 req_data [] = { TEST_BASE_INTERFACE_HEADER_BYTES };
     int status = INT_MAX;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
@@ -206,6 +301,8 @@ test_ping(
     GBinderLocalObject* obj =
         gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
+    GBinderOutputData* out_data;
+    static const guint8 result[] = { 0x00, 0x00, 0x00, 0x00 };
 
     gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
         gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
@@ -223,6 +320,12 @@ test_ping(
         HIDL_PING_TRANSACTION, 0, &status);
     g_assert(reply);
     g_assert(status == GBINDER_STATUS_OK);
+
+    out_data = gbinder_local_reply_data(reply);
+    g_assert(out_data);
+    g_assert(out_data->bytes);
+    g_assert(out_data->bytes->len == sizeof(result));
+    g_assert(!memcmp(out_data->bytes->data, result, sizeof(result)));
 
     gbinder_ipc_unref(ipc);
     gbinder_local_object_unref(obj);
@@ -674,6 +777,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "ping", test_ping);
+    g_test_add_func(TEST_PREFIX "interface", test_interface);
+    g_test_add_func(TEST_PREFIX "hidl_ping", test_hidl_ping);
     g_test_add_func(TEST_PREFIX "get_descriptor", test_get_descriptor);
     g_test_add_func(TEST_PREFIX "descriptor_chain", test_descriptor_chain);
     g_test_add_func(TEST_PREFIX "custom_iface", test_custom_iface);
