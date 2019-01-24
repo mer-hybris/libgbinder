@@ -1170,14 +1170,19 @@ gbinder_ipc_tx_internal_exec(
     GBinderObjectRegistry* reg = &self->priv->object_registry;
 
     /* Perform synchronous transaction */
-    tx->reply = gbinder_remote_reply_new(&self->priv->object_registry);
-    tx->status = gbinder_driver_transact(self->driver, reg,
-        tx->handle, tx->code, tx->req, tx->reply);
-    if (tx->status != GBINDER_STATUS_OK &&
-        gbinder_remote_reply_is_empty(tx->reply)) {
-        /* Drop useless reply */
-        gbinder_remote_reply_unref(tx->reply);
-        tx->reply = NULL;
+    if (tx->flags & GBINDER_TX_FLAG_ONEWAY) {
+        tx->status = gbinder_driver_transact(self->driver, reg, tx->handle,
+            tx->code, tx->req, NULL);
+    } else {
+        tx->reply = gbinder_remote_reply_new(&self->priv->object_registry);
+        tx->status = gbinder_driver_transact(self->driver, reg, tx->handle,
+            tx->code, tx->req, tx->reply);
+        if (tx->status != GBINDER_STATUS_OK &&
+            gbinder_remote_reply_is_empty(tx->reply)) {
+            /* Drop useless reply */
+            gbinder_remote_reply_unref(tx->reply);
+            tx->reply = NULL;
+        }
     }
 }
 

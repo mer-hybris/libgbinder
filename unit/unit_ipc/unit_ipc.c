@@ -130,6 +130,45 @@ test_basic(
 }
 
 /*==========================================================================*
+ * async_oneway
+ *==========================================================================*/
+
+static
+void
+test_async_oneway_done(
+    GBinderIpc* ipc,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    g_assert(!status);
+    g_assert(!reply);
+    test_quit_later((GMainLoop*)user_data);
+}
+
+static
+void
+test_async_oneway(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const GBinderIo* io = gbinder_driver_io(ipc->driver);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    gulong id;
+
+    test_binder_br_transaction_complete(fd);
+    id = gbinder_ipc_transact(ipc, 0, 1, GBINDER_TX_FLAG_ONEWAY,
+        req, test_async_oneway_done, NULL, loop);
+    g_assert(id);
+    test_run(&test_opt, loop);
+
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
  * sync_oneway
  *==========================================================================*/
 
@@ -911,6 +950,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("async_oneway"), test_async_oneway);
     g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
     g_test_add_func(TEST_("sync_reply_ok"), test_sync_reply_ok);
     g_test_add_func(TEST_("sync_reply_error"), test_sync_reply_error);
