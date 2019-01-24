@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -44,6 +44,7 @@ typedef GObjectClass GBinderServicePollClass;
 struct gbinder_servicepoll {
     GObject object;
     GBinderServiceManager* manager;
+    gulong presence_id;
     char** list;
     gulong list_id;
     guint timer_id;
@@ -131,6 +132,35 @@ gbinder_servicepoll_timer(
 }
 
 static
+void
+gbinder_servicepoll_manager_presence_check(
+    GBinderServicePoll* self)
+{
+    if (gbinder_servicemanager_is_present(self->manager)) {
+        if (!self->timer_id) {
+            self->timer_id = g_timeout_add(gbinder_servicepoll_interval_ms,
+                gbinder_servicepoll_timer, self);
+            self->list_id = gbinder_servicemanager_list(self->manager,
+                gbinder_servicepoll_list, self);
+        }
+    } else if (self->timer_id) {
+        g_source_remove(self->timer_id);
+        gbinder_servicemanager_cancel(self->manager, self->list_id);
+        self->timer_id = 0;
+        self->list_id = 0;
+    }
+}
+
+static
+void
+gbinder_servicepoll_manager_presence_handler(
+    GBinderServiceManager* manager,
+    void* user_data)
+{
+    gbinder_servicepoll_manager_presence_check(GBINDER_SERVICEPOLL(user_data));
+}
+
+static
 GBinderServicePoll*
 gbinder_servicepoll_create(
     GBinderServiceManager* manager)
@@ -138,8 +168,9 @@ gbinder_servicepoll_create(
     GBinderServicePoll* self = g_object_new(GBINDER_TYPE_SERVICEPOLL, NULL);
 
     self->manager = gbinder_servicemanager_ref(manager);
-    self->list_id = gbinder_servicemanager_list(manager,
-        gbinder_servicepoll_list, self);
+    self->presence_id = gbinder_servicemanager_add_presence_handler(manager,
+        gbinder_servicepoll_manager_presence_handler, self);
+    gbinder_servicepoll_manager_presence_check(self);
     return self;
 }
 
@@ -230,8 +261,6 @@ void
 gbinder_servicepoll_init(
     GBinderServicePoll* self)
 {
-    self->timer_id = g_timeout_add(gbinder_servicepoll_interval_ms,
-        gbinder_servicepoll_timer, self);
 }
 
 static
@@ -241,7 +270,10 @@ gbinder_servicepoll_finalize(
 {
     GBinderServicePoll* self = GBINDER_SERVICEPOLL(object);
 
-    g_source_remove(self->timer_id);
+    if (self->timer_id) {
+        g_source_remove(self->timer_id);
+    }
+    gbinder_servicemanager_remove_handler(self->manager, self->presence_id);
     gbinder_servicemanager_cancel(self->manager, self->list_id);
     gbinder_servicemanager_unref(self->manager);
     g_strfreev(self->list);
