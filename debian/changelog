@@ -1,3 +1,9 @@
+libgbinder (1.0.28) unstable; urgency=low
+
+  * Set type for local nulls to BINDER_TYPE_WEAK_BINDER
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 29 Jan 2019 02:49:10 +0200
+
 libgbinder (1.0.27) unstable; urgency=low
 
   * Fixed outgoing oneway transactions
