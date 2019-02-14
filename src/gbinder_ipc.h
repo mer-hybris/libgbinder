@@ -92,7 +92,7 @@ gbinder_ipc_object_registry(
 GBinderLocalObject*
 gbinder_ipc_new_local_object(
     GBinderIpc* ipc,
-    const char* iface,
+    const char* const* ifaces,
     GBinderLocalTransactFunc txproc,
     void* data);
 

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -400,8 +400,9 @@ test_local_object(
     GBinderOutputData* data;
     GUtilIntArray* offsets;
     GBinderIpc* ipc = gbinder_ipc_new(NULL, NULL);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, "foo", NULL, NULL);
+    const char* const ifaces[] = { "android.hidl.base@1.0::IBase", NULL };
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+        (ipc, ifaces, NULL, NULL);
 
     /* Append a real object (64-bit I/O is used by test_binder.c) */
     reply = gbinder_local_object_new_reply(obj);

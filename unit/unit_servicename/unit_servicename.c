@@ -264,6 +264,7 @@ test_basic(
 {
     const char* obj_name = "test";
     const char* dev = GBINDER_DEFAULT_BINDER;
+    const char* const ifaces[] = { "interface", NULL };
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj;
@@ -272,7 +273,7 @@ test_basic(
 
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
-    obj = gbinder_ipc_new_local_object(ipc, "interface", NULL, NULL);
+    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
     g_assert(!gbinder_servicename_new(sm, obj, NULL));
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
@@ -305,6 +306,7 @@ test_present(
     int add_result)
 {
     const char* obj_name = "test";
+    const char* const ifaces[] = { "interface", NULL };
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -317,7 +319,7 @@ test_present(
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
     TEST_SERVICEMANAGER(sm)->add_result = add_result;
-    obj = gbinder_ipc_new_local_object(ipc, "interface", NULL, NULL);
+    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
@@ -369,6 +371,7 @@ test_not_present(
     void)
 {
     const char* obj_name = "test";
+    const char* const ifaces[] = { "interface", NULL };
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -383,8 +386,7 @@ test_not_present(
     sm = gbinder_servicemanager_new(dev);
     g_assert(!gbinder_servicemanager_is_present(sm));
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
-
-    obj = gbinder_ipc_new_local_object(ipc, "interface", NULL, NULL);
+    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
@@ -419,6 +421,7 @@ test_cancel(
     void)
 {
     const char* obj_name = "test";
+    const char* const ifaces[] = { "interface", NULL };
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -431,7 +434,7 @@ test_cancel(
 
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
-    obj = gbinder_ipc_new_local_object(ipc, "interface", NULL, NULL);
+    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
 
     /* Block name add calls */
     test = TEST_SERVICEMANAGER(sm);

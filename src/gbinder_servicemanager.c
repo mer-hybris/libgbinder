@@ -510,9 +510,24 @@ gbinder_servicemanager_new_local_object(
     GBinderLocalTransactFunc txproc,
     void* user_data)
 {
+    const char* ifaces[2];
+
+    ifaces[0] = iface;
+    ifaces[1] = NULL;
+    return gbinder_servicemanager_new_local_object2
+        (self, ifaces, txproc, user_data);
+}
+
+GBinderLocalObject*
+gbinder_servicemanager_new_local_object2(
+    GBinderServiceManager* self,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc txproc,
+    void* user_data)
+{
     if (G_LIKELY(self)) {
         return gbinder_ipc_new_local_object(gbinder_client_ipc(self->client),
-            iface, txproc, user_data);
+            ifaces, txproc, user_data);
     }
     return NULL;
 }
