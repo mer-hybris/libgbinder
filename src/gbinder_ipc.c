@@ -932,13 +932,13 @@ gbinder_ipc_remote_object_disposed(
 GBinderLocalObject*
 gbinder_ipc_new_local_object(
     GBinderIpc* self,
-    const char* iface,
+    const char* const* ifaces,
     GBinderLocalTransactFunc txproc,
     void* data)
 {
     GBinderIpcPriv* priv = self->priv;
     GBinderLocalObject* obj = gbinder_local_object_new
-        (self, iface, txproc, data);
+        (self, ifaces, txproc, data);
 
     /* Lock */
     g_mutex_lock(&priv->local_objects_mutex);

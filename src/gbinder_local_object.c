@@ -38,11 +38,13 @@
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
+#include <gutil_strv.h>
+
 #include <errno.h>
 
 struct gbinder_local_object_priv {
     GMainContext* context;
-    char* iface;
+    char** ifaces;
     GBinderLocalTransactFunc txproc;
     void* user_data;
 };
@@ -144,10 +146,11 @@ gbinder_local_object_interface_transaction(
     int* status)
 {
     const GBinderIo* io = gbinder_local_object_io(self);
+    GBinderLocalObjectPriv* priv = self->priv;
     GBinderLocalReply* reply = gbinder_local_reply_new(io);
 
     GVERBOSE("  INTERFACE_TRANSACTION");
-    gbinder_local_reply_append_string16(reply, self->iface);
+    gbinder_local_reply_append_string16(reply, priv->ifaces[0]);
     *status = GBINDER_STATUS_OK;
     return reply;
 }
@@ -179,6 +182,7 @@ gbinder_local_object_hidl_get_descriptor_transaction(
 {
     /*android.hidl.base@1.0::IBase interfaceDescriptor() */
     const GBinderIo* io = gbinder_local_object_io(self);
+    GBinderLocalObjectPriv* priv = self->priv;
     GBinderLocalReply* reply = gbinder_local_reply_new(io);
     GBinderWriter writer;
 
@@ -186,8 +190,7 @@ gbinder_local_object_hidl_get_descriptor_transaction(
         gbinder_remote_request_interface(req));
     gbinder_local_reply_init_writer(reply, &writer);
     gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
-    gbinder_writer_append_hidl_string(&writer, self->iface ? self->iface :
-        hidl_base_interface);
+    gbinder_writer_append_hidl_string(&writer, priv->ifaces[0]);
     *status = GBINDER_STATUS_OK;
     return reply;
 }
@@ -203,17 +206,14 @@ gbinder_local_object_hidl_descriptor_chain_transaction(
     const GBinderIo* io = gbinder_local_object_io(self);
     GBinderLocalReply* reply = gbinder_local_reply_new(io);
     GBinderWriter writer;
-    const char* chain[2];
-    int n = 0;
 
     GVERBOSE("  HIDL_DESCRIPTOR_CHAIN_TRANSACTION \"%s\"",
         gbinder_remote_request_interface(req));
-    if (self->iface) chain[n++] = self->iface;
-    chain[n++] = hidl_base_interface;
 
     gbinder_local_reply_init_writer(reply, &writer);
     gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
-    gbinder_writer_append_hidl_string_vec(&writer, chain, n);
+    gbinder_writer_append_hidl_string_vec(&writer, (const char**)
+        self->ifaces, -1);
     *status = GBINDER_STATUS_OK;
     return reply;
 }
@@ -330,7 +330,7 @@ gbinder_local_object_handle_release_proc(
 GBinderLocalObject*
 gbinder_local_object_new(
     GBinderIpc* ipc,
-    const char* iface,
+    const char* const* ifaces,
     GBinderLocalTransactFunc txproc,
     void* user_data)
 {
@@ -339,9 +339,29 @@ gbinder_local_object_new(
         GBinderLocalObject* self = g_object_new
             (GBINDER_TYPE_LOCAL_OBJECT, NULL);
         GBinderLocalObjectPriv* priv = self->priv;
+        guint i = 0, n = gutil_strv_length((char**)ifaces);
+        gboolean append_base_interface;
+
+        if (g_strcmp0(gutil_strv_last((char**)ifaces), hidl_base_interface)) {
+            append_base_interface = TRUE;
+            n++;
+        } else {
+            append_base_interface = FALSE;
+        }
+
+        priv->ifaces = g_new(char*, n + 1);
+        if (ifaces) {
+            while (*ifaces) {
+                priv->ifaces[i++] = g_strdup(*ifaces++);
+            }
+        }
+        if (append_base_interface) {
+            priv->ifaces[i++] = g_strdup(hidl_base_interface);
+        }
+        priv->ifaces[i] = NULL;
 
         self->ipc = gbinder_ipc_ref(ipc);
-        self->iface = priv->iface = g_strdup(iface);
+        self->ifaces = (const char**)priv->ifaces;
         priv->txproc = txproc;
         priv->user_data = user_data;
         return self;
@@ -539,7 +559,7 @@ gbinder_local_object_finalize(
 
     GASSERT(!self->strong_refs);
     gbinder_ipc_unref(self->ipc);
-    g_free(priv->iface);
+    g_strfreev(priv->ifaces);
     G_OBJECT_CLASS(gbinder_local_object_parent_class)->finalize(local);
 }
 

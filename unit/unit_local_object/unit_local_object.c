@@ -150,6 +150,8 @@ void
 test_basic(
     void)
 {
+    const char* const ifaces_foo[] = { "foo", NULL };
+    const char* const ifaces_bar[] = { "bar", NULL };
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderLocalObject* foo;
@@ -159,8 +161,8 @@ test_basic(
     g_assert(!gbinder_object_registry_get_local(reg, ipc));
 
     /* Create a new local objects */
-    foo = gbinder_ipc_new_local_object(ipc, "foo", NULL, NULL);
-    bar = gbinder_ipc_new_local_object(ipc, "bar", NULL, NULL);
+    foo = gbinder_ipc_new_local_object(ipc, ifaces_foo, NULL, NULL);
+    bar = gbinder_ipc_new_local_object(ipc, ifaces_bar, NULL, NULL);
 
     /* But ipc is still not a local object! */
     g_assert(!gbinder_object_registry_get_local(reg, ipc));
@@ -245,11 +247,12 @@ test_interface(
     int status = INT_MAX;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    const char* const ifaces[] = { "x", NULL };
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, "x", NULL, NULL);
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+        (ipc, ifaces, NULL, NULL);
     GBinderLocalReply* reply;
     GBinderOutputData* out_data;
     static const guint8 result[] = {
@@ -401,15 +404,17 @@ test_descriptor_chain(
     };
     int status = INT_MAX;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
+    const char* const ifaces[] = { "android.hidl.base@1.0::IBase", NULL };
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+        (ipc, ifaces, NULL, NULL);
     GBinderLocalReply* reply;
+    GBinderOutputData* reply_data;
 
-    gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
+    gbinder_remote_request_set_data(req, HIDL_DESCRIPTOR_CHAIN_TRANSACTION,
         gbinder_buffer_new(ipc->driver, g_memdup(req_data, sizeof(req_data)),
         sizeof(req_data), NULL));
     g_assert(!g_strcmp0(gbinder_remote_request_interface(req), base_interface));
@@ -425,6 +430,11 @@ test_descriptor_chain(
         HIDL_DESCRIPTOR_CHAIN_TRANSACTION, 0, &status);
     g_assert(reply);
     g_assert(status == GBINDER_STATUS_OK);
+
+    /* Should get 3 buffers - vector, string and its contents */
+    reply_data = gbinder_local_reply_data(reply);
+    g_assert(gbinder_output_data_offsets(reply_data)->count == 3);
+    g_assert(gbinder_output_data_buffers_size(reply_data) == 64);
 
     gbinder_ipc_unref(ipc);
     gbinder_local_object_unref(obj);
@@ -467,13 +477,14 @@ test_custom_iface(
     void)
 {
     static const guint8 req_data [] = { CUSTOM_INTERFACE_HEADER_BYTES };
+    const char* const ifaces[] = { custom_iface, NULL };
     int count = 0, status = INT_MAX;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, custom_iface,
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, ifaces,
         test_custom_iface_handler, &count);
     GBinderLocalReply* reply;
     GBinderReaderData reader_data;
@@ -573,13 +584,14 @@ test_reply_status(
     void)
 {
     static const guint8 req_data [] = { CUSTOM_INTERFACE_HEADER_BYTES };
+    const char* const ifaces[] = { custom_iface, NULL };
     int count = 0, status = 0;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, custom_iface,
+    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, ifaces,
         test_reply_status_handler, &count);
 
     gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,

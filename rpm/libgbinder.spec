@@ -6,9 +6,9 @@ Group: Development/Libraries
 License: BSD
 URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
-Requires: libglibutil >= 1.0.34
+Requires: libglibutil >= 1.0.35
 BuildRequires: pkgconfig(glib-2.0)
-BuildRequires: pkgconfig(libglibutil) >= 1.0.34
+BuildRequires: pkgconfig(libglibutil) >= 1.0.35
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 

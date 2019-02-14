@@ -166,6 +166,7 @@ test_async_oneway(
 
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    g_main_loop_unref(loop);
 }
 
 /*==========================================================================*
@@ -673,9 +674,10 @@ test_transact_incoming(
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* dev = gbinder_driver_dev(ipc->driver);
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    const char* const ifaces[] = { "test", NULL };
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, "test", test_transact_incoming_proc, loop);
+        (ipc, ifaces, test_transact_incoming_proc, loop);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -735,9 +737,10 @@ test_transact_status_reply(
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* dev = gbinder_driver_dev(ipc->driver);
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    const char* const ifaces[] = { "test", NULL };
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, "test", test_transact_status_reply_proc, loop);
+        (ipc, ifaces, test_transact_status_reply_proc, loop);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -840,9 +843,10 @@ test_transact_async(
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* dev = gbinder_driver_dev(ipc->driver);
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    const char* const ifaces[] = { "test", NULL };
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, "test", test_transact_async_proc, loop);
+        (ipc, ifaces, test_transact_async_proc, loop);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -911,9 +915,10 @@ test_transact_async_sync(
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* dev = gbinder_driver_dev(ipc->driver);
     const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    const char* const ifaces[] = { "test", NULL };
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, "test", test_transact_async_sync_proc, loop);
+        (ipc, ifaces, test_transact_async_sync_proc, loop);
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
     GBinderOutputData* data;
     GBinderWriter writer;

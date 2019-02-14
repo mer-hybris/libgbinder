@@ -93,6 +93,13 @@ gbinder_servicemanager_new_local_object(
     GBinderLocalTransactFunc handler,
     void* user_data);
 
+GBinderLocalObject*
+gbinder_servicemanager_new_local_object2(
+    GBinderServiceManager* sm,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc handler,
+    void* user_data); /* Since 1.0.29 */
+
 GBinderServiceManager*
 gbinder_servicemanager_ref(
     GBinderServiceManager* sm);
