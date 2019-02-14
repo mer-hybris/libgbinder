@@ -1,3 +1,9 @@
+libgbinder (1.0.29) unstable; urgency=low
+
+  * Added gbinder_servicemanager_new_local_object2()
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 14 Feb 2019 18:17:53 +0300
+
 libgbinder (1.0.28) unstable; urgency=low
 
   * Set type for local nulls to BINDER_TYPE_WEAK_BINDER
