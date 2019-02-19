@@ -61,6 +61,7 @@ G_BEGIN_DECLS
 
 typedef struct gbinder_buffer GBinderBuffer;
 typedef struct gbinder_client GBinderClient;
+typedef struct gbinder_ipc GBinderIpc;
 typedef struct gbinder_local_object GBinderLocalObject;
 typedef struct gbinder_local_reply GBinderLocalReply;
 typedef struct gbinder_local_request GBinderLocalRequest;

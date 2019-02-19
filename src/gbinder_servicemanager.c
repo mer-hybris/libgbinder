@@ -526,7 +526,7 @@ gbinder_servicemanager_new_local_object2(
     void* user_data)
 {
     if (G_LIKELY(self)) {
-        return gbinder_ipc_new_local_object(gbinder_client_ipc(self->client),
+        return gbinder_local_object_new(gbinder_client_ipc(self->client),
             ifaces, txproc, user_data);
     }
     return NULL;

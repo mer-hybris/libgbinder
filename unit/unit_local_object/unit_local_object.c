@@ -161,8 +161,8 @@ test_basic(
     g_assert(!gbinder_object_registry_get_local(reg, ipc));
 
     /* Create a new local objects */
-    foo = gbinder_ipc_new_local_object(ipc, ifaces_foo, NULL, NULL);
-    bar = gbinder_ipc_new_local_object(ipc, ifaces_bar, NULL, NULL);
+    foo = gbinder_local_object_new(ipc, ifaces_foo, NULL, NULL);
+    bar = gbinder_local_object_new(ipc, ifaces_bar, NULL, NULL);
 
     /* But ipc is still not a local object! */
     g_assert(!gbinder_object_registry_get_local(reg, ipc));
@@ -204,8 +204,7 @@ test_ping(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
     GBinderOutputData* out_data;
     static const guint8 result[] = { 0x00, 0x00, 0x00, 0x00 };
@@ -251,8 +250,7 @@ test_interface(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, ifaces, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
     GBinderLocalReply* reply;
     GBinderOutputData* out_data;
     static const guint8 result[] = {
@@ -301,8 +299,7 @@ test_hidl_ping(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
     GBinderOutputData* out_data;
     static const guint8 result[] = { 0x00, 0x00, 0x00, 0x00 };
@@ -352,8 +349,7 @@ test_get_descriptor(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj =
-        gbinder_ipc_new_local_object(ipc, NULL, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     GBinderLocalReply* reply;
 
     gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
@@ -409,8 +405,7 @@ test_descriptor_chain(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, ifaces, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
     GBinderLocalReply* reply;
     GBinderOutputData* reply_data;
 
@@ -484,7 +479,7 @@ test_custom_iface(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, ifaces,
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces,
         test_custom_iface_handler, &count);
     GBinderLocalReply* reply;
     GBinderReaderData reader_data;
@@ -591,7 +586,7 @@ test_reply_status(
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteRequest* req = gbinder_remote_request_new(reg, prot, 0, 0);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object(ipc, ifaces,
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces,
         test_reply_status_handler, &count);
 
     gbinder_remote_request_set_data(req, HIDL_PING_TRANSACTION,
@@ -630,7 +625,7 @@ test_increfs(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+    GBinderLocalObject* obj = gbinder_local_object_new
         (ipc, NULL, NULL, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     int fd = gbinder_driver_fd(ipc->driver);
@@ -672,7 +667,7 @@ test_decrefs(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+    GBinderLocalObject* obj = gbinder_local_object_new
         (ipc, NULL, NULL, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     int fd = gbinder_driver_fd(ipc->driver);
@@ -714,7 +709,7 @@ test_acquire(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
+    GBinderLocalObject* obj = gbinder_local_object_new
         (ipc, NULL, NULL, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     int fd = gbinder_driver_fd(ipc->driver);
@@ -756,8 +751,7 @@ test_release(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
-    GBinderLocalObject* obj = gbinder_ipc_new_local_object
-        (ipc, NULL, NULL, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     int fd = gbinder_driver_fd(ipc->driver);
     gulong id = gbinder_local_object_add_strong_refs_changed_handler(obj,

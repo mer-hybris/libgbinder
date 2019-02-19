@@ -332,9 +332,8 @@ gbinder_local_object_new(
     GBinderIpc* ipc,
     const char* const* ifaces,
     GBinderLocalTransactFunc txproc,
-    void* user_data)
+    void* user_data) /* Since 1.0.30 */
 {
-    /* Should only be called from gbinder_ipc_new_local_object() */
     if (G_LIKELY(ipc)) {
         GBinderLocalObject* self = g_object_new
             (GBINDER_TYPE_LOCAL_OBJECT, NULL);
@@ -364,6 +363,7 @@ gbinder_local_object_new(
         self->ifaces = (const char**)priv->ifaces;
         priv->txproc = txproc;
         priv->user_data = user_data;
+        gbinder_ipc_register_local_object(ipc, self);
         return self;
     }
     return NULL;
