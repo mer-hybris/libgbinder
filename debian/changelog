@@ -1,3 +1,10 @@
+libgbinder (1.0.30) unstable; urgency=low
+
+  * Added gbinder_local_object_new()
+  * Added gbinder_remote_object_ipc()
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 20 Feb 2019 11:59:08 +0200
+
 libgbinder (1.0.29) unstable; urgency=low
 
   * Added gbinder_servicemanager_new_local_object2()
