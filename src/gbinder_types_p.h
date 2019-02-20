@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -40,7 +40,6 @@ typedef struct gbinder_cleanup GBinderCleanup;
 typedef struct gbinder_driver GBinderDriver;
 typedef struct gbinder_handler GBinderHandler;
 typedef struct gbinder_io GBinderIo;
-typedef struct gbinder_ipc GBinderIpc;
 typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;
 typedef struct gbinder_rpc_protocol GBinderRpcProtocol;

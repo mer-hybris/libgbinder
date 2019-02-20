@@ -273,7 +273,7 @@ test_basic(
 
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
-    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
+    obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
     g_assert(!gbinder_servicename_new(sm, obj, NULL));
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
@@ -319,7 +319,7 @@ test_present(
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
     TEST_SERVICEMANAGER(sm)->add_result = add_result;
-    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
+    obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
@@ -386,7 +386,7 @@ test_not_present(
     sm = gbinder_servicemanager_new(dev);
     g_assert(!gbinder_servicemanager_is_present(sm));
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
-    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
+    obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
@@ -434,7 +434,7 @@ test_cancel(
 
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
-    obj = gbinder_ipc_new_local_object(ipc, ifaces, NULL, NULL);
+    obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
 
     /* Block name add calls */
     test = TEST_SERVICEMANAGER(sm);

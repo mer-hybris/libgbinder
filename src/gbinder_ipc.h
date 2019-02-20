@@ -89,12 +89,10 @@ GBinderObjectRegistry*
 gbinder_ipc_object_registry(
     GBinderIpc* ipc);
 
-GBinderLocalObject*
-gbinder_ipc_new_local_object(
+void
+gbinder_ipc_register_local_object(
     GBinderIpc* ipc,
-    const char* const* ifaces,
-    GBinderLocalTransactFunc txproc,
-    void* data);
+    GBinderLocalObject* obj);
 
 GBinderRemoteObject*
 gbinder_ipc_get_remote_object(

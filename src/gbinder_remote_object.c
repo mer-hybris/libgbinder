@@ -172,6 +172,13 @@ gbinder_remote_object_unref(
     }
 }
 
+GBinderIpc*
+gbinder_remote_object_ipc(
+    GBinderRemoteObject* self) /* Since 1.0.30 */
+{
+    return G_LIKELY(self) ? self->ipc : NULL;
+}
+
 gboolean
 gbinder_remote_object_is_dead(
     GBinderRemoteObject* self)

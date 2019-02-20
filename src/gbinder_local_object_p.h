@@ -87,14 +87,6 @@ GType gbinder_local_object_get_type(void);
 #define gbinder_local_object_dev(obj) (gbinder_driver_dev((obj)->ipc->driver))
 #define gbinder_local_object_io(obj) (gbinder_driver_io((obj)->ipc->driver))
 
-/* Should only be called from gbinder_ipc_new_local_object() */
-GBinderLocalObject*
-gbinder_local_object_new(
-    GBinderIpc* ipc,
-    const char* const* ifaces,
-    GBinderLocalTransactFunc handler,
-    void* user_data);
-
 gulong
 gbinder_local_object_add_weak_refs_changed_handler(
     GBinderLocalObject* obj,

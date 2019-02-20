@@ -52,6 +52,7 @@ test_null(
 {
     g_assert(!gbinder_remote_object_new(NULL, 0, FALSE));
     g_assert(!gbinder_remote_object_ref(NULL));
+    g_assert(!gbinder_remote_object_ipc(NULL));
     gbinder_remote_object_unref(NULL);
     g_assert(gbinder_remote_object_is_dead(NULL));
     g_assert(!gbinder_remote_object_add_death_handler(NULL, NULL, NULL));
@@ -76,7 +77,10 @@ test_basic(
     g_assert(obj2);
     g_assert(obj1->handle == 1u);
     g_assert(obj2->handle == 2u);
+    g_assert(gbinder_remote_object_ipc(obj1) == ipc);
+    g_assert(gbinder_remote_object_ipc(obj2) == ipc);
     g_assert(!gbinder_remote_object_is_dead(obj1));
+    g_assert(gbinder_remote_object_reanimate(obj1));
     g_assert(gbinder_remote_object_ref(obj1) == obj1);
     gbinder_remote_object_unref(obj1); /* Compensate the above reference */
     g_assert(!gbinder_remote_object_add_death_handler(obj1, NULL, NULL));

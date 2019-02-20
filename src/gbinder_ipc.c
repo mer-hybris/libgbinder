@@ -929,16 +929,12 @@ gbinder_ipc_remote_object_disposed(
     /* Unlock */
 }
 
-GBinderLocalObject*
-gbinder_ipc_new_local_object(
+void
+gbinder_ipc_register_local_object(
     GBinderIpc* self,
-    const char* const* ifaces,
-    GBinderLocalTransactFunc txproc,
-    void* data)
+    GBinderLocalObject* obj)
 {
     GBinderIpcPriv* priv = self->priv;
-    GBinderLocalObject* obj = gbinder_local_object_new
-        (self, ifaces, txproc, data);
 
     /* Lock */
     g_mutex_lock(&priv->local_objects_mutex);
@@ -951,7 +947,6 @@ gbinder_ipc_new_local_object(
 
     GVERBOSE_("%p", obj);
     gbinder_ipc_looper_check(self);
-    return obj;
 }
 
 static
