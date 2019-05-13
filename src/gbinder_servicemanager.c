@@ -407,7 +407,7 @@ gbinder_servicemanager_new_with_type(
         if (ipc) {
             /* Create a possible dead remote object */
             GBinderRemoteObject* object = gbinder_ipc_get_remote_object
-                (ipc, klass->handle, TRUE);
+                (ipc, GBINDER_SERVICEMANAGER_HANDLE, TRUE);
 
             if (object) {
                 gboolean first_ref;

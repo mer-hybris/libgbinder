@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -80,8 +80,6 @@ enum gbinder_hwservicemanager_notifications {
     ON_REGISTRATION_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION
 };
 
-/* As a special case, ServiceManager's handle is zero */
-#define HWSERVICEMANAGER_HANDLE (0)
 #define HWSERVICEMANAGER_IFACE  "android.hidl.manager@1.0::IServiceManager"
 #define HWSERVICEMANAGER_NOTIFICATION_IFACE \
     "android.hidl.manager@1.0::IServiceNotification"
@@ -378,7 +376,6 @@ void
 gbinder_hwservicemanager_class_init(
     GBinderHwServiceManagerClass* klass)
 {
-    klass->handle = HWSERVICEMANAGER_HANDLE;
     klass->iface = HWSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
     klass->rpc_protocol = &gbinder_rpc_protocol_hwbinder;

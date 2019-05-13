@@ -93,7 +93,6 @@ typedef struct test_servicemanager {
 G_DEFINE_TYPE(TestServiceManager, test_servicemanager,
     GBINDER_TYPE_SERVICEMANAGER)
 
-#define TEST_SERVICEMANAGER_HANDLE (0)
 #define TEST_SERVICEMANAGER_IFACE "android.os.IServiceManager"
 #define TEST_TYPE_SERVICEMANAGER (test_servicemanager_get_type())
 #define TEST_SERVICEMANAGER(obj) G_TYPE_CHECK_INSTANCE_CAST((obj), \
@@ -201,7 +200,6 @@ void
 test_servicemanager_class_init(
     TestServiceManagerClass* klass)
 {
-    klass->handle = TEST_SERVICEMANAGER_HANDLE;
     klass->iface = TEST_SERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
     klass->rpc_protocol = &gbinder_rpc_protocol_binder;

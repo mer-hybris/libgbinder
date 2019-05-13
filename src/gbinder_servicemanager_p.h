@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -39,6 +39,9 @@
 
 #include <glib-object.h>
 
+/* As a special case, ServiceManager's handle is zero */
+#define GBINDER_SERVICEMANAGER_HANDLE (0)
+
 typedef struct gbinder_servicemanager_priv GBinderServiceManagerPriv;
 
 typedef struct gbinder_servicemanager {
@@ -60,7 +63,6 @@ typedef struct gbinder_servicemanager_class {
     GMutex mutex;
     GHashTable* table;
 
-    guint32 handle;
     const char* iface;
     const char* default_device;
     const GBinderRpcProtocol* rpc_protocol;
