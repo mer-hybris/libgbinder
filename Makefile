@@ -2,7 +2,7 @@
 
 .PHONY: clean all debug release test
 .PHONY: print_debug_so print_release_so
-.PHONY: print_debug_lib print_release_lib
+.PHONY: print_debug_lib print_release_lib print_coverage_lib
 .PHONY: print_debug_link print_release_link
 .PHONY: print_debug_path print_release_path
 
@@ -24,7 +24,7 @@ all: debug release pkgconfig
 
 VERSION_MAJOR = 1
 VERSION_MINOR = 0
-VERSION_RELEASE = 30
+VERSION_RELEASE = 31
 
 # Version for pkg-config
 PCVERSION = $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_RELEASE)

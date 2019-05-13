@@ -1,3 +1,9 @@
+libgbinder (1.0.31) unstable; urgency=low
+
+  * Invalidate handle when remote object dies
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 13 May 2019 18:05:35 +0300
+
 libgbinder (1.0.30) unstable; urgency=low
 
   * Added gbinder_local_object_new()
