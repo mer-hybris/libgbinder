@@ -71,6 +71,10 @@ gbinder_remote_object_died_on_main_thread(
     GASSERT(!self->dead);
     if (!self->dead) {
         self->dead = TRUE;
+        /* Zero handle is servicemanager, it can be reanimated. */
+        if (self->handle) {
+            gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
+        }
         gbinder_driver_clear_death_notification(driver, self);
         gbinder_driver_release(driver, self->handle);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);

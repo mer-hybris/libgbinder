@@ -100,6 +100,11 @@ gbinder_ipc_get_remote_object(
     guint32 handle,
     gboolean maybe_dead);
 
+void
+gbinder_ipc_invalidate_remote_handle(
+    GBinderIpc* ipc,
+    guint32 handle);
+
 GBinderRemoteReply*
 gbinder_ipc_transact_sync_reply(
     GBinderIpc* ipc,

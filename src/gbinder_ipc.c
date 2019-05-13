@@ -865,8 +865,39 @@ gbinder_ipc_looper_join(
  * GBinderObjectRegistry
  *==========================================================================*/
 
+static
+void
+gbinder_ipc_invalidate_remote_handle_locked(
+    GBinderIpcPriv* priv,
+    guint32 handle)
+{
+    /* Caller holds priv->remote_objects_mutex */
+    if (priv->remote_objects) {
+        GVERBOSE_("handle %u", handle);
+        g_hash_table_remove(priv->remote_objects, GINT_TO_POINTER(handle));
+        if (g_hash_table_size(priv->remote_objects) == 0) {
+            g_hash_table_unref(priv->remote_objects);
+            priv->remote_objects = NULL;
+        }
+    }
+}
+
+void
+gbinder_ipc_invalidate_remote_handle(
+    GBinderIpc* self,
+    guint32 handle)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    /* Lock */
+    g_mutex_lock(&priv->remote_objects_mutex);
+    gbinder_ipc_invalidate_remote_handle_locked(priv, handle);
+    g_mutex_unlock(&priv->remote_objects_mutex);
+    /* Unlock */
+}
+
 /**
- * Internal function called by gbinder_object_dispose(). Among other things,
+ * Internal functions called by gbinder_object_dispose(). Among other things,
  * it means that it doesn't have to check GBinderIpc pointer for NULL.
  *
  * Note the following scenario (where object may be either local or remote):
@@ -914,16 +945,8 @@ gbinder_ipc_remote_object_disposed(
 
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
-    if (obj->object.ref_count == 1 && priv->remote_objects) {
-        void* key = GINT_TO_POINTER(obj->handle);
-
-        GVERBOSE_("handle %u", obj->handle);
-        GASSERT(g_hash_table_contains(priv->remote_objects, key));
-        g_hash_table_remove(priv->remote_objects, key);
-        if (g_hash_table_size(priv->remote_objects) == 0) {
-            g_hash_table_unref(priv->remote_objects);
-            priv->remote_objects = NULL;
-        }
+    if (obj->object.ref_count == 1) {
+        gbinder_ipc_invalidate_remote_handle_locked(priv, obj->handle);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
