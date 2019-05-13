@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -76,8 +76,6 @@ enum gbinder_defaultservicemanager_calls {
     LIST_SERVICES_TRANSACTION
 };
 
-/* As a special case, ServiceManager's handle is zero */
-#define DEFAULTSERVICEMANAGER_HANDLE (0)
 #define DEFAULTSERVICEMANAGER_IFACE  "android.os.IServiceManager"
 
 GBinderServiceManager*
@@ -301,7 +299,6 @@ void
 gbinder_defaultservicemanager_class_init(
     GBinderDefaultServiceManagerClass* klass)
 {
-    klass->handle = DEFAULTSERVICEMANAGER_HANDLE;
     klass->iface = DEFAULTSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_BINDER;
     klass->rpc_protocol = &gbinder_rpc_protocol_binder;

@@ -33,6 +33,7 @@
 #include "gbinder_driver.h"
 #include "gbinder_ipc.h"
 #include "gbinder_remote_object_p.h"
+#include "gbinder_servicemanager_p.h"
 #include "gbinder_log.h"
 
 struct gbinder_remote_object_priv {
@@ -71,6 +72,10 @@ gbinder_remote_object_died_on_main_thread(
     GASSERT(!self->dead);
     if (!self->dead) {
         self->dead = TRUE;
+        /* ServiceManager always has the same handle, and can be reanimated. */
+        if (self->handle != GBINDER_SERVICEMANAGER_HANDLE) {
+            gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
+        }
         gbinder_driver_clear_death_notification(driver, self);
         gbinder_driver_release(driver, self->handle);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
@@ -104,6 +109,7 @@ gbinder_remote_object_reanimate(
         GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
 
         /* Kick the horse */
+        GASSERT(self->handle == GBINDER_SERVICEMANAGER_HANDLE);
         if (gbinder_driver_ping(ipc->driver, reg, self->handle) == 0) {
             /* Wow, it's alive! */
             self->dead = FALSE;

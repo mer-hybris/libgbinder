@@ -209,7 +209,6 @@ typedef TestServiceManager TestHwServiceManager;
 G_DEFINE_TYPE(TestHwServiceManager, test_hwservicemanager,
     GBINDER_TYPE_SERVICEMANAGER)
 
-#define TEST_HWSERVICEMANAGER_HANDLE (0)
 #define TEST_HWSERVICEMANAGER_IFACE "android.hidl.manager@1.0::IServiceManager"
 #define TEST_TYPE_HWSERVICEMANAGER (test_hwservicemanager_get_type())
 #define TEST_IS_HWSERVICEMANAGER(obj) \
@@ -280,7 +279,6 @@ void
 test_hwservicemanager_class_init(
     TestHwServiceManagerClass* klass)
 {
-    klass->handle = TEST_HWSERVICEMANAGER_HANDLE;
     klass->iface = TEST_HWSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
     klass->rpc_protocol = &gbinder_rpc_protocol_hwbinder;
@@ -312,7 +310,6 @@ typedef TestServiceManager TestDefServiceManager;
 G_DEFINE_TYPE(TestDefServiceManager, test_defservicemanager,
     GBINDER_TYPE_SERVICEMANAGER)
 
-#define TEST_DEFSERVICEMANAGER_HANDLE (0)
 #define TEST_DEFSERVICEMANAGER_IFACE "android.os.IServiceManager"
 #define TEST_TYPE_DEFSERVICEMANAGER (test_defservicemanager_get_type())
 #define TEST_IS_DEFSERVICEMANAGER(obj) \
@@ -366,7 +363,6 @@ void
 test_defservicemanager_class_init(
     TestDefServiceManagerClass* klass)
 {
-    klass->handle = TEST_DEFSERVICEMANAGER_HANDLE;
     klass->iface = TEST_DEFSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_BINDER;
     klass->rpc_protocol = &gbinder_rpc_protocol_binder;
