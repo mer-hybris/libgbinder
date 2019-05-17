@@ -1,3 +1,9 @@
+libgbinder (1.0.32) unstable; urgency=low
+
+  * Refuse to perform transactions with dead objects
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 17 May 2019 15:57:30 +0300
+
 libgbinder (1.0.31) unstable; urgency=low
 
   * Invalidate handle when remote object dies
