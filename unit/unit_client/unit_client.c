@@ -131,6 +131,44 @@ test_no_header(
 }
 
 /*==========================================================================*
+ * dead
+ *==========================================================================*/
+
+static
+void
+test_dead_done(
+    GBinderRemoteObject* obj,
+    void* user_data)
+{
+    GVERBOSE_("");
+    test_quit_later((GMainLoop*)user_data);
+}
+
+static
+void
+test_dead(
+    void)
+{
+    const guint handle = 1;
+    GBinderClient* client = test_client_new(handle, "foo");
+    GBinderRemoteObject* obj = client->remote;
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    const int fd = gbinder_driver_fd(gbinder_client_ipc(client)->driver);
+    gbinder_remote_object_add_death_handler(obj, test_dead_done, loop);
+
+    test_binder_br_dead_binder(fd, handle);
+    test_binder_set_looper_enabled(fd, TRUE);
+    test_run(&test_opt, loop);
+    g_assert(gbinder_remote_object_is_dead(obj));
+
+    g_assert(!gbinder_client_transact_sync_reply(client, 0, NULL, NULL));
+    g_assert(gbinder_client_transact_sync_oneway(client, 0, NULL) == -ESTALE);
+    g_assert(!gbinder_client_transact(client, 0, 0, NULL, NULL, NULL, NULL));
+
+    gbinder_client_unref(client);
+}
+
+/*==========================================================================*
  * sync_oneway
  *==========================================================================*/
 
@@ -352,6 +390,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("dead"), test_dead);
     g_test_add_func(TEST_("no_header"), test_no_header);
     g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
     g_test_add_func(TEST_("sync_reply"), test_sync_reply);

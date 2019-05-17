@@ -205,12 +205,15 @@ gbinder_client_transact_sync_reply(
     if (G_LIKELY(self)) {
         GBinderRemoteObject* obj = self->remote;
 
-        if (!req) {
-            /* Default empty request (just the header, no parameters) */
-            req = gbinder_client_cast(self)->basic_req;
+        if (G_LIKELY(!obj->dead)) {
+            if (!req) {
+                /* Default empty request (just the header, no parameters) */
+                req = gbinder_client_cast(self)->basic_req;
+            }
+            return gbinder_ipc_transact_sync_reply(obj->ipc, obj->handle,
+                code, req, status);
         }
-        return gbinder_ipc_transact_sync_reply(obj->ipc, obj->handle,
-            code, req, status);
+        GDEBUG("Refusing to perform transaction with a dead object");
     }
     return NULL;
 }
@@ -224,15 +227,18 @@ gbinder_client_transact_sync_oneway(
     if (G_LIKELY(self)) {
         GBinderRemoteObject* obj = self->remote;
 
-        if (!req) {
-            /* Default empty request (just the header, no parameters) */
-            req = gbinder_client_cast(self)->basic_req;
+        if (G_LIKELY(!obj->dead)) {
+            if (!req) {
+                /* Default empty request (just the header, no parameters) */
+                req = gbinder_client_cast(self)->basic_req;
+            }
+            return gbinder_ipc_transact_sync_oneway(obj->ipc, obj->handle,
+                code, req);
         }
-        return gbinder_ipc_transact_sync_oneway(obj->ipc, obj->handle,
-            code, req);
-    } else {
-        return (-EINVAL);
+        GDEBUG("Refusing to perform transaction with a dead object");
+        return (-ESTALE);
     }
+    return (-EINVAL);
 }
 
 gulong
@@ -247,23 +253,27 @@ gbinder_client_transact(
 {
     if (G_LIKELY(self)) {
         GBinderRemoteObject* obj = self->remote;
-        GBinderClientTx* tx = g_slice_new0(GBinderClientTx);
 
-        tx->client = gbinder_client_ref(self);
-        tx->reply = reply;
-        tx->destroy = destroy;
-        tx->user_data = user_data;
+        if (G_LIKELY(!obj->dead)) {
+            GBinderClientTx* tx = g_slice_new0(GBinderClientTx);
 
-        if (!req) {
-            /* Default empty request (just the header, no parameters) */
-            req = gbinder_client_cast(self)->basic_req;
+            tx->client = gbinder_client_ref(self);
+            tx->reply = reply;
+            tx->destroy = destroy;
+            tx->user_data = user_data;
+
+            if (!req) {
+                /* Default empty request (just the header, no parameters) */
+                req = gbinder_client_cast(self)->basic_req;
+            }
+
+            return gbinder_ipc_transact(obj->ipc, obj->handle, code,
+                flags, req, gbinder_client_transact_reply,
+                gbinder_client_transact_destroy, tx);
         }
-
-        return gbinder_ipc_transact(obj->ipc, obj->handle, code, flags, req,
-            gbinder_client_transact_reply, gbinder_client_transact_destroy, tx);
-    } else {
-        return 0;
+        GDEBUG("Refusing to perform transaction with a dead object");
     }
+    return 0;
 }
 
 void
