@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -87,7 +87,7 @@ static GHashTable* gbinder_ipc_table = NULL;
 static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define GBINDER_IPC_MAX_TX_THREADS (15)
-#define GBINDER_IPC_MAX_LOOPERS (15)
+#define GBINDER_IPC_MAX_PRIMARY_LOOPERS (5)
 #define GBINDER_IPC_LOOPER_START_TIMEOUT_SEC (2)
 
 /*
@@ -359,6 +359,48 @@ gbinder_remote_request_complete(
  *==========================================================================*/
 
 static
+void
+gbinder_ipc_looper_free(
+    GBinderIpcLooper* looper)
+{
+    if (looper->thread) {
+        g_thread_unref(looper->thread);
+    }
+    close(looper->pipefd[0]);
+    close(looper->pipefd[1]);
+    if (looper->txfd[0] >= 0) {
+        close(looper->txfd[0]);
+        close(looper->txfd[1]);
+    }
+    gbinder_driver_unref(looper->driver);
+    g_free(looper->name);
+    g_cond_clear(&looper->start_cond);
+    g_mutex_clear(&looper->mutex);
+    g_slice_free(GBinderIpcLooper, looper);
+}
+
+static
+GBinderIpcLooper*
+gbinder_ipc_looper_ref(
+    GBinderIpcLooper* looper)
+{
+    GASSERT(looper->refcount > 0);
+    g_atomic_int_inc(&looper->refcount);
+    return looper;
+}
+
+static
+void
+gbinder_ipc_looper_unref(
+    GBinderIpcLooper* looper)
+{
+    GASSERT(looper->refcount > 0);
+    if (g_atomic_int_dec_and_test(&looper->refcount)) {
+        gbinder_ipc_looper_free(looper);
+    }
+}
+
+static
 gboolean
 gbinder_ipc_looper_tx_handle(
     gpointer data)
@@ -443,6 +485,25 @@ gbinder_ipc_looper_tx_done(
 }
 
 static
+void
+gbinder_ipc_looper_start(
+    GBinderIpcLooper* looper)
+{
+    if (!g_atomic_int_get(&looper->started)) {
+        /* Lock */
+        g_mutex_lock(&looper->mutex);
+        if (!g_atomic_int_get(&looper->started)) {
+            g_cond_wait_until(&looper->start_cond, &looper->mutex,
+                g_get_monotonic_time() + GBINDER_IPC_LOOPER_START_TIMEOUT_SEC *
+                    G_TIME_SPAN_SECOND);
+            GASSERT(g_atomic_int_get(&looper->started));
+        }
+        g_mutex_unlock(&looper->mutex);
+        /* Unlock */
+    }
+}
+
+static
 gboolean
 gbinder_ipc_looper_remove_from_list(
     GBinderIpcLooper* looper,
@@ -489,6 +550,18 @@ gbinder_ipc_looper_remove_blocked(
 }
 
 static
+guint
+gbinder_ipc_looper_count_primary(
+    GBinderIpcLooper* looper)
+{
+    const GBinderIpcLooper* ptr = looper->ipc->priv->primary_loopers;
+    guint n = 0;
+
+    for (n = 0; ptr; ptr = ptr->next) n++;
+    return n;
+}
+
+static
 GBinderLocalReply*
 gbinder_ipc_looper_transact(
     GBinderHandler* handler,
@@ -514,6 +587,7 @@ gbinder_ipc_looper_transact(
         struct pollfd fds[2];
         guint8 done = 0;
         GSource* source = g_idle_source_new();
+        gboolean was_blocked = FALSE;
 
         /* Let GBinderLocalObject handle the transaction on the main thread */
         g_source_set_callback(source, gbinder_ipc_looper_tx_handle,
@@ -543,28 +617,34 @@ gbinder_ipc_looper_transact(
                  * moved to the blocked_loopers list.
                  */
                 GBinderIpcPriv* priv = looper->ipc->priv;
+                GBinderIpcLooper* new_looper = NULL;
 
                 /* Lock */
                 g_mutex_lock(&priv->looper_mutex);
                 if (gbinder_ipc_looper_remove_primary(looper)) {
-                    GBinderIpcLooper* new_looper;
-
                     GDEBUG("Primary looper %s is blocked", looper->name);
                     looper->next = priv->blocked_loopers;
                     priv->blocked_loopers = looper;
+                    was_blocked = TRUE;
 
-                    /* Looper will exit once transaction completes */
-                    g_atomic_int_set(&looper->exit, 1);
-
-                    /* Create new primary looper to replace this one */
-                    new_looper = gbinder_ipc_looper_new(ipc);
-                    if (new_looper) {
-                        new_looper->next = priv->primary_loopers;
-                        priv->primary_loopers = new_looper;
+                    /* If there's no more primary loopers left, create one */
+                    if (!priv->primary_loopers) {
+                        new_looper = gbinder_ipc_looper_new(ipc);
+                        if (new_looper) {
+                            /* Will unref it after it gets started */
+                            gbinder_ipc_looper_ref(new_looper);
+                            priv->primary_loopers = new_looper;
+                        }
                     }
                 }
                 g_mutex_unlock(&priv->looper_mutex);
                 /* Unlock */
+
+                if (new_looper) {
+                    /* Wait until it gets started */
+                    gbinder_ipc_looper_start(new_looper);
+                    gbinder_ipc_looper_unref(new_looper);
+                }
 
                 /* Block until asynchronous transaction gets completed. */
                 done = 0;
@@ -576,6 +656,7 @@ gbinder_ipc_looper_transact(
                 poll(fds, 2, -1);
                 if ((fds[1].revents & POLLIN) &&
                     read(fds[1].fd, &done, sizeof(done)) == 1) {
+                    GDEBUG("Looper %s is released", looper->name);
                     GASSERT(done == TX_DONE);
                 }
             }
@@ -596,51 +677,27 @@ gbinder_ipc_looper_transact(
         } else {
             gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
+
+        if (was_blocked) {
+            guint n;
+
+            g_mutex_lock(&priv->looper_mutex);
+            n = gbinder_ipc_looper_count_primary(looper);
+            if (n >= GBINDER_IPC_MAX_PRIMARY_LOOPERS) {
+                /* Looper will exit once transaction completes */
+                GDEBUG("Too many primary loopers (%u)", n);
+                g_atomic_int_set(&looper->exit, 1);
+            } else {
+                /* Move it back to the primary list */
+                gbinder_ipc_looper_remove_blocked(looper);
+                looper->next = priv->primary_loopers;
+                priv->primary_loopers = looper;
+            }
+            g_mutex_unlock(&priv->looper_mutex);
+        }
     }
     *result = status;
     return reply;
-}
-
-static
-void
-gbinder_ipc_looper_free(
-    GBinderIpcLooper* looper)
-{
-    if (looper->thread) {
-        g_thread_unref(looper->thread);
-    }
-    close(looper->pipefd[0]);
-    close(looper->pipefd[1]);
-    if (looper->txfd[0] >= 0) {
-        close(looper->txfd[0]);
-        close(looper->txfd[1]);
-    }
-    gbinder_driver_unref(looper->driver);
-    g_free(looper->name);
-    g_cond_clear(&looper->start_cond);
-    g_mutex_clear(&looper->mutex);
-    g_slice_free(GBinderIpcLooper, looper);
-}
-
-static
-GBinderIpcLooper*
-gbinder_ipc_looper_ref(
-    GBinderIpcLooper* looper)
-{
-    GASSERT(looper->refcount > 0);
-    g_atomic_int_inc(&looper->refcount);
-    return looper;
-}
-
-static
-void
-gbinder_ipc_looper_unref(
-    GBinderIpcLooper* looper)
-{
-    GASSERT(looper->refcount > 0);
-    if (g_atomic_int_dec_and_test(&looper->refcount)) {
-        gbinder_ipc_looper_free(looper);
-    }
 }
 
 static
@@ -787,27 +844,21 @@ gbinder_ipc_looper_check(
 
             /* Lock */
             g_mutex_lock(&priv->looper_mutex);
+            if (!priv->primary_loopers) {
+                priv->primary_loopers = gbinder_ipc_looper_new(self);
+            }
             looper = priv->primary_loopers;
-            if (!looper) {
-                looper = priv->primary_loopers = gbinder_ipc_looper_new(self);
+            if (looper) {
+                gbinder_ipc_looper_ref(looper);
             }
             g_mutex_unlock(&priv->looper_mutex);
             /* Unlock */
 
             /* We are not ready to accept incoming transactions until
              * looper has started. We may need to wait a bit. */
-            if (looper && !g_atomic_int_get(&looper->started)) {
-                /* Lock */
-                g_mutex_lock(&looper->mutex);
-                if (!g_atomic_int_get(&looper->started)) {
-                    g_cond_wait_until(&looper->start_cond, &looper->mutex,
-                        g_get_monotonic_time() +
-                        GBINDER_IPC_LOOPER_START_TIMEOUT_SEC *
-                        G_TIME_SPAN_SECOND);
-                    GASSERT(g_atomic_int_get(&looper->started));
-                }
-                g_mutex_unlock(&looper->mutex);
-                /* Unlock */
+            if (looper) {
+                gbinder_ipc_looper_start(looper);
+                gbinder_ipc_looper_unref(looper);
             }
         }
     }
@@ -1605,23 +1656,28 @@ gbinder_ipc_dispose(
     pthread_mutex_unlock(&gbinder_ipc_mutex);
     /* Unlock */
 
-    /* Lock */
-    g_mutex_lock(&priv->looper_mutex);
-    loopers = gbinder_ipc_looper_stop_all(loopers, priv->primary_loopers);
-    loopers = gbinder_ipc_looper_stop_all(loopers, priv->blocked_loopers);
-    priv->blocked_loopers = NULL;
-    priv->primary_loopers = NULL;
-    g_mutex_unlock(&priv->looper_mutex);
-    /* Unlock */
+    do {
+        GBinderIpcLooper* tmp;
 
-    while (loopers) {
-        GBinderIpcLooper* looper = loopers;
+        /* Lock */
+        g_mutex_lock(&priv->looper_mutex);
+        loopers = gbinder_ipc_looper_stop_all(gbinder_ipc_looper_stop_all(NULL,
+            priv->primary_loopers), priv->blocked_loopers);
+        priv->blocked_loopers = NULL;
+        priv->primary_loopers = NULL;
+        g_mutex_unlock(&priv->looper_mutex);
+        /* Unlock */
 
-        loopers = looper->next;
-        looper->next = NULL;
-        gbinder_ipc_looper_join(looper);
-        gbinder_ipc_looper_unref(looper);
-    }
+        tmp = loopers;
+        while (tmp) {
+            GBinderIpcLooper* looper = tmp;
+
+            tmp = looper->next;
+            looper->next = NULL;
+            gbinder_ipc_looper_join(looper);
+            gbinder_ipc_looper_unref(looper);
+        }
+    } while (loopers);
 
     G_OBJECT_CLASS(gbinder_ipc_parent_class)->finalize(object);
 }
