@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -546,6 +546,38 @@ test_transact_custom2(
 }
 
 /*==========================================================================*
+ * transact_custom3
+ *==========================================================================*/
+
+static
+void
+test_transact_custom3_exec(
+    const GBinderIpcTx* tx)
+{
+    GVERBOSE_("");
+    gbinder_ipc_unref(tx->ipc);
+    test_quit_later((GMainLoop*)tx->user_data);
+}
+
+static
+void
+test_transact_custom3(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    /* Reusing test_transact_cancel_done and test_transact_cancel_destroy */
+    gulong id = gbinder_ipc_transact_custom(ipc, test_transact_custom3_exec,
+        NULL, NULL, loop);
+
+    g_assert(id);
+    test_run(&test_opt, loop);
+
+    /* Reference to GBinderIpc is released by test_transact_custom3_exec */
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
  * transact_cancel
  *==========================================================================*/
 
@@ -965,6 +997,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transact_status"), test_transact_status);
     g_test_add_func(TEST_("transact_custom"), test_transact_custom);
     g_test_add_func(TEST_("transact_custom2"), test_transact_custom2);
+    g_test_add_func(TEST_("transact_custom3"), test_transact_custom3);
     g_test_add_func(TEST_("transact_cancel"), test_transact_cancel);
     g_test_add_func(TEST_("transact_cancel2"), test_transact_cancel2);
     g_test_add_func(TEST_("transact_incoming"), test_transact_incoming);
