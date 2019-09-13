@@ -1,3 +1,9 @@
+libgbinder (1.0.33) unstable; urgency=low
+
+  * Reuse loopers
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 13 Sep 2019 15:57:47 +0300
+
 libgbinder (1.0.32) unstable; urgency=low
 
   * Refuse to perform transactions with dead objects
