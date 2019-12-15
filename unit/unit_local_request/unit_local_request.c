@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -341,7 +341,7 @@ void
 test_string16(
     void)
 {
-    static const const char input[] = "x";
+    static const char input[] = "x";
     static const guint8 output[] = {
         TEST_INT32_BYTES(1),
         TEST_INT16_BYTES('x'), 0x00, 0x00

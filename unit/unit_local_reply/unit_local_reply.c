@@ -313,7 +313,7 @@ void
 test_string16(
     void)
 {
-    static const const char input[] = "x";
+    static const char input[] = "x";
     static const guint8 output[] = {
         TEST_INT32_BYTES(1),
         TEST_INT16_BYTES('x'), 0x00, 0x00
