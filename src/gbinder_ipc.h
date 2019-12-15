@@ -68,43 +68,52 @@ void
     int status,
     void* user_data);
 
+G_GNUC_INTERNAL
 GBinderIpc*
 gbinder_ipc_new(
    const char* dev,
    const GBinderRpcProtocol* protocol);
 
+G_GNUC_INTERNAL
 GBinderIpc*
 gbinder_ipc_ref(
     GBinderIpc* ipc);
 
+G_GNUC_INTERNAL
 void
 gbinder_ipc_unref(
     GBinderIpc* ipc);
 
+G_GNUC_INTERNAL
 void
 gbinder_ipc_looper_check(
    GBinderIpc* ipc);
 
+G_GNUC_INTERNAL
 GBinderObjectRegistry*
 gbinder_ipc_object_registry(
     GBinderIpc* ipc);
 
+G_GNUC_INTERNAL
 void
 gbinder_ipc_register_local_object(
     GBinderIpc* ipc,
     GBinderLocalObject* obj);
 
+G_GNUC_INTERNAL
 GBinderRemoteObject*
 gbinder_ipc_get_remote_object(
     GBinderIpc* ipc,
     guint32 handle,
     gboolean maybe_dead);
 
+G_GNUC_INTERNAL
 void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* ipc,
     guint32 handle);
 
+G_GNUC_INTERNAL
 GBinderRemoteReply*
 gbinder_ipc_transact_sync_reply(
     GBinderIpc* ipc,
@@ -113,6 +122,7 @@ gbinder_ipc_transact_sync_reply(
     GBinderLocalRequest* req,
     int* status);
 
+G_GNUC_INTERNAL
 int
 gbinder_ipc_transact_sync_oneway(
     GBinderIpc* ipc,
@@ -120,6 +130,7 @@ gbinder_ipc_transact_sync_oneway(
     guint32 code,
     GBinderLocalRequest* req);
 
+G_GNUC_INTERNAL
 gulong
 gbinder_ipc_transact(
     GBinderIpc* ipc,
@@ -131,6 +142,7 @@ gbinder_ipc_transact(
     GDestroyNotify destroy,
     void* user_data);
 
+G_GNUC_INTERNAL
 gulong
 gbinder_ipc_transact_custom(
     GBinderIpc* ipc,
@@ -139,22 +151,32 @@ gbinder_ipc_transact_custom(
     GDestroyNotify destroy,
     void* user_data);
 
+G_GNUC_INTERNAL
 void
 gbinder_ipc_cancel(
     GBinderIpc* ipc,
     gulong id);
 
 /* Internal for GBinderLocalObject */
+G_GNUC_INTERNAL
 void
 gbinder_ipc_local_object_disposed(
     GBinderIpc* self,
     GBinderLocalObject* obj);
 
 /* Internal for GBinderRemoteObject */
+G_GNUC_INTERNAL
 void
 gbinder_ipc_remote_object_disposed(
     GBinderIpc* self,
     GBinderRemoteObject* obj);
+
+/* Declared for unit tests */
+G_GNUC_INTERNAL
+__attribute__((destructor))
+void
+gbinder_ipc_exit(
+    void);
 
 #endif /* GBINDER_IPC_H */
 

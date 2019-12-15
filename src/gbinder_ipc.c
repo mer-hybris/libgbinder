@@ -593,7 +593,6 @@ gbinder_ipc_looper_transact(
         g_source_set_callback(source, gbinder_ipc_looper_tx_handle,
             gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
         g_source_attach(source, priv->context);
-        g_source_unref(source);
 
         /* Wait for either transaction completion or looper shutdown */
         memset(fds, 0, sizeof(fds));
@@ -661,6 +660,7 @@ gbinder_ipc_looper_transact(
                 }
             }
         }
+
         if (done) {
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
@@ -677,6 +677,9 @@ gbinder_ipc_looper_transact(
         } else {
             gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
+
+        g_source_destroy(source);
+        g_source_unref(source);
 
         if (was_blocked) {
             guint n;
@@ -1632,29 +1635,11 @@ gbinder_ipc_init(
 
 static
 void
-gbinder_ipc_dispose(
-    GObject* object)
+gbinder_ipc_stop_loopers(
+    GBinderIpc* self)
 {
-    GBinderIpc* self = GBINDER_IPC(object);
     GBinderIpcPriv* priv = self->priv;
     GBinderIpcLooper* loopers = NULL;
-
-    GVERBOSE_("%s", self->dev);
-    /* Lock */
-    pthread_mutex_lock(&gbinder_ipc_mutex);
-    GASSERT(gbinder_ipc_table);
-    if (gbinder_ipc_table) {
-        GBinderIpcPriv* priv = self->priv;
-
-        GASSERT(g_hash_table_lookup(gbinder_ipc_table, priv->key) == self);
-        g_hash_table_remove(gbinder_ipc_table, priv->key);
-        if (g_hash_table_size(gbinder_ipc_table) == 0) {
-            g_hash_table_unref(gbinder_ipc_table);
-            gbinder_ipc_table = NULL;
-        }
-    }
-    pthread_mutex_unlock(&gbinder_ipc_mutex);
-    /* Unlock */
 
     do {
         GBinderIpcLooper* tmp;
@@ -1678,7 +1663,33 @@ gbinder_ipc_dispose(
             gbinder_ipc_looper_unref(looper);
         }
     } while (loopers);
+}
 
+static
+void
+gbinder_ipc_dispose(
+    GObject* object)
+{
+    GBinderIpc* self = GBINDER_IPC(object);
+
+    GVERBOSE_("%s", self->dev);
+    /* Lock */
+    pthread_mutex_lock(&gbinder_ipc_mutex);
+    GASSERT(gbinder_ipc_table);
+    if (gbinder_ipc_table) {
+        GBinderIpcPriv* priv = self->priv;
+
+        GASSERT(g_hash_table_lookup(gbinder_ipc_table, priv->key) == self);
+        g_hash_table_remove(gbinder_ipc_table, priv->key);
+        if (g_hash_table_size(gbinder_ipc_table) == 0) {
+            g_hash_table_unref(gbinder_ipc_table);
+            gbinder_ipc_table = NULL;
+        }
+    }
+    pthread_mutex_unlock(&gbinder_ipc_mutex);
+    /* Unlock */
+
+    gbinder_ipc_stop_loopers(self);
     G_OBJECT_CLASS(gbinder_ipc_parent_class)->finalize(object);
 }
 
@@ -1714,6 +1725,66 @@ gbinder_ipc_class_init(
     g_type_class_add_private(klass, sizeof(GBinderIpcPriv));
     object_class->dispose = gbinder_ipc_dispose;
     object_class->finalize = gbinder_ipc_finalize;
+}
+
+/* Runs at exit */
+void
+gbinder_ipc_exit()
+{
+    GSList* ipcs = NULL;
+    GSList* i;
+
+    /* Lock */
+    pthread_mutex_lock(&gbinder_ipc_mutex);
+    if (gbinder_ipc_table) {
+        GHashTableIter it;
+        gpointer value;
+
+        g_hash_table_iter_init(&it, gbinder_ipc_table);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            ipcs = g_slist_append(ipcs, gbinder_ipc_ref(value));
+        }
+    }
+    pthread_mutex_unlock(&gbinder_ipc_mutex);
+    /* Unlock */
+
+    for (i = ipcs; i; i = i->next) {
+        GBinderIpc* ipc = GBINDER_IPC(i->data);
+        GBinderIpcPriv* priv = ipc->priv;
+        GSList* local_objs = NULL;
+        GSList* l;
+
+        /* Terminate looper threads */
+        GVERBOSE_("%s", ipc->dev);
+        gbinder_ipc_stop_loopers(ipc);
+
+        /* Lock */
+        g_mutex_lock(&priv->local_objects_mutex);
+        if (priv->local_objects) {
+            GHashTableIter it;
+            gpointer value;
+
+            g_hash_table_iter_init(&it, priv->local_objects);
+            while (g_hash_table_iter_next(&it, NULL, &value)) {
+                local_objs = g_slist_append(local_objs,
+                    gbinder_local_object_ref(value));
+            }
+        }
+        g_mutex_unlock(&priv->local_objects_mutex);
+        /* Unlock */
+
+        /* Drop remote references */
+        for (l = local_objs; l; l = l->next) {
+            GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(l->data);
+
+            while (obj->strong_refs > 0) {
+                obj->strong_refs--;
+                gbinder_local_object_unref(obj);
+            }
+        }
+        g_slist_free_full(local_objs, g_object_unref);
+    }
+    g_slist_free_full(ipcs, g_object_unref);
 }
 
 /*
