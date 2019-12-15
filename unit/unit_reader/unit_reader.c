@@ -716,7 +716,6 @@ static const BinderObject64 test_hidl_vec_short_buf [] = {
 };
 
 /* NULL buffer with size 1 */
-static const guint test_hidl_vec_badnull_offsets [] = {0};
 static const GBinderHidlVec test_hidl_vec_badnull = {{0}, 1, TRUE};
 static const BinderObject64 test_hidl_vec_badnull_buf [] = {
     {
