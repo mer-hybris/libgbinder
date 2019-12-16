@@ -165,6 +165,7 @@ gbinder_servicemanager_list_tx_done(
     if (!data->func(data->sm, data->result, data->user_data)) {
         g_strfreev(data->result);
     }
+    data->result = NULL;
 }
 
 static
@@ -174,6 +175,7 @@ gbinder_servicemanager_list_tx_free(
 {
     GBinderServiceManagerListTxData* data = user_data;
 
+    g_strfreev(data->result);
     gbinder_servicemanager_unref(data->sm);
     g_slice_free(GBinderServiceManagerListTxData, data);
 }
