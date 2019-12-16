@@ -34,7 +34,7 @@
 
 #include "gbinder_ipc.h"
 #include "gbinder_driver.h"
-#include "gbinder_local_object.h"
+#include "gbinder_local_object_p.h"
 #include "gbinder_local_reply_p.h"
 #include "gbinder_local_request_p.h"
 #include "gbinder_object_registry.h"
@@ -127,6 +127,8 @@ test_basic(
 
     /* Invalid path */
     g_assert(!gbinder_ipc_new("invalid path", NULL));
+
+    gbinder_ipc_exit();
 }
 
 /*==========================================================================*
@@ -188,6 +190,7 @@ test_sync_oneway(
         GBINDER_STATUS_OK);
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
 }
 
 /*==========================================================================*
@@ -231,6 +234,7 @@ test_sync_reply_ok_status(
     gbinder_local_request_unref(req);
     gbinder_local_reply_unref(reply);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
 }
 
 static
@@ -273,6 +277,7 @@ test_sync_reply_error(
 
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
 }
 
 /*==========================================================================*
@@ -342,6 +347,7 @@ test_transact_ok(
     gbinder_local_request_unref(req);
     gbinder_local_reply_unref(reply);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -388,6 +394,7 @@ test_transact_dead(
     gbinder_ipc_cancel(ipc, id);
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -434,6 +441,7 @@ test_transact_failed(
     gbinder_ipc_cancel(ipc, id);
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -482,6 +490,7 @@ test_transact_status(
     gbinder_ipc_cancel(ipc, id);
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -511,6 +520,7 @@ test_transact_custom(
     g_assert(id);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
     gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
 }
@@ -541,6 +551,7 @@ test_transact_custom2(
     g_assert(id);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
     gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
 }
@@ -574,6 +585,7 @@ test_transact_custom3(
     test_run(&test_opt, loop);
 
     /* Reference to GBinderIpc is released by test_transact_custom3_exec */
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -622,6 +634,7 @@ test_transact_cancel(
     test_run(&test_opt, loop);
 
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -666,6 +679,7 @@ test_transact_cancel2(
     test_run(&test_opt, loop);
 
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -731,6 +745,7 @@ test_transact_incoming(
     g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -794,6 +809,7 @@ test_transact_status_reply(
     g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -900,6 +916,7 @@ test_transact_async(
     g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -972,6 +989,86 @@ test_transact_async_sync(
     g_idle_add(test_unref_ipc, ipc);
     test_run(&test_opt, loop);
 
+    gbinder_ipc_exit();
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * drop_remote_refs
+ *==========================================================================*/
+
+static
+void
+test_drop_remote_refs_cb(
+    GBinderLocalObject* obj,
+    void* user_data)
+{
+    GVERBOSE_("%d", obj->strong_refs);
+    g_assert(obj->strong_refs == 1);
+    test_quit_later((GMainLoop*)user_data);
+}
+
+static
+void
+test_drop_remote_refs(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalObject* obj = gbinder_local_object_new
+        (ipc, NULL, NULL, NULL);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    int fd = gbinder_driver_fd(ipc->driver);
+    gulong id = gbinder_local_object_add_strong_refs_changed_handler(obj,
+        test_drop_remote_refs_cb, loop);
+
+    test_binder_br_acquire(fd, obj);
+    test_binder_set_looper_enabled(fd, TRUE);
+    test_run(&test_opt, loop);
+
+    g_assert(obj->strong_refs == 1);
+    gbinder_local_object_remove_handler(obj, id);
+    gbinder_local_object_unref(obj);
+
+    /* gbinder_ipc_exit will drop the remote reference */
+    gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * cancel_on_exit
+ *==========================================================================*/
+
+static
+void
+test_cancel_on_exit_not_reached(
+    GBinderIpc* ipc,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    g_assert_not_reached();
+}
+
+static
+void
+test_cancel_on_exit(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const GBinderIo* io = gbinder_driver_io(ipc->driver);
+    GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    int fd = gbinder_driver_fd(ipc->driver);
+
+    /* This transaction will be cancelled by gbinder_ipc_exit */
+    test_binder_br_transaction_complete(fd);
+    gbinder_ipc_transact(ipc, 0, 1, GBINDER_TX_FLAG_ONEWAY,
+        req, test_cancel_on_exit_not_reached, NULL, NULL);
+
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -1004,6 +1101,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transact_status_reply"), test_transact_status_reply);
     g_test_add_func(TEST_("transact_async"), test_transact_async);
     g_test_add_func(TEST_("transact_async_sync"), test_transact_async_sync);
+    g_test_add_func(TEST_("drop_remote_refs"), test_drop_remote_refs);
+    g_test_add_func(TEST_("cancel_on_exit"), test_cancel_on_exit);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
