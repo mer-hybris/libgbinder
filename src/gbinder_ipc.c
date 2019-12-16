@@ -173,6 +173,7 @@ typedef struct gbinder_ipc_tx_priv {
     GBinderIpcTxPrivFunc fn_exec;
     GBinderIpcTxPrivFunc fn_done;
     GBinderIpcTxPrivFunc fn_free;
+    GSource* completion;
 } GBinderIpcTxPriv;
 
 typedef struct gbinder_ipc_tx_internal {
@@ -1182,6 +1183,38 @@ gbinder_ipc_tx_get_id(
 
 static
 void
+gbinder_ipc_tx_free(
+    gpointer data)
+{
+    GBinderIpcTxPriv* tx = data;
+    GBinderIpcTx* pub = &tx->pub;
+    GBinderIpc* self = pub->ipc;
+    GBinderIpcPriv* priv = self->priv;
+
+    g_source_unref(tx->completion);
+    g_hash_table_remove(priv->tx_table, GINT_TO_POINTER(pub->id));
+    tx->fn_free(tx);
+
+    /* This may actually deallocate GBinderIpc object: */
+    gbinder_ipc_unref(self);
+}
+
+static
+gboolean
+gbinder_ipc_tx_done(
+    gpointer data)
+{
+    GBinderIpcTxPriv* tx = data;
+    GBinderIpcTx* pub = &tx->pub;
+
+    if (!pub->cancelled) {
+        tx->fn_done(tx);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
 gbinder_ipc_tx_pub_init(
     GBinderIpcTx* tx,
     GBinderIpc* self,
@@ -1191,6 +1224,26 @@ gbinder_ipc_tx_pub_init(
     tx->id = id;
     tx->ipc = gbinder_ipc_ref(self);
     tx->user_data = user_data;
+}
+
+static
+void
+gbinder_ipc_tx_priv_init(
+    GBinderIpcTxPriv* priv,
+    GBinderIpc* self,
+    gulong id,
+    void* user_data,
+    GBinderIpcTxPrivFunc fn_exec,
+    GBinderIpcTxPrivFunc fn_done,
+    GBinderIpcTxPrivFunc fn_free)
+{
+    gbinder_ipc_tx_pub_init(&priv->pub, self, id, user_data);
+    priv->fn_exec = fn_exec;
+    priv->fn_done = fn_done;
+    priv->fn_free = fn_free;
+    priv->completion = g_idle_source_new();
+    g_source_set_callback(priv->completion, gbinder_ipc_tx_done, priv,
+        gbinder_ipc_tx_free);
 }
 
 static
@@ -1274,10 +1327,9 @@ gbinder_ipc_tx_internal_new(
     GBinderIpcTxInternal* tx = g_slice_new0(GBinderIpcTxInternal);
     GBinderIpcTxPriv* priv = &tx->tx;
 
-    gbinder_ipc_tx_pub_init(&priv->pub, self, id, user_data);
-    priv->fn_exec = gbinder_ipc_tx_internal_exec;
-    priv->fn_done = gbinder_ipc_tx_internal_done;
-    priv->fn_free = gbinder_ipc_tx_internal_free;
+    gbinder_ipc_tx_priv_init(priv, self, id, user_data,
+        gbinder_ipc_tx_internal_exec, gbinder_ipc_tx_internal_done,
+        gbinder_ipc_tx_internal_free);
 
     tx->code = code;
     tx->flags = flags;
@@ -1348,51 +1400,15 @@ gbinder_ipc_tx_custom_new(
     GBinderIpcTxCustom* tx = g_slice_new0(GBinderIpcTxCustom);
     GBinderIpcTxPriv* priv = &tx->tx;
 
-    gbinder_ipc_tx_pub_init(&priv->pub, self, id, user_data);
-    priv->fn_exec = gbinder_ipc_tx_custom_exec;
-    priv->fn_done = gbinder_ipc_tx_custom_done;
-    priv->fn_free = gbinder_ipc_tx_custom_free;
+    gbinder_ipc_tx_priv_init(priv, self, id, user_data,
+        gbinder_ipc_tx_custom_exec, gbinder_ipc_tx_custom_done,
+        gbinder_ipc_tx_custom_free);
 
     tx->fn_custom_exec = exec;
     tx->fn_custom_done = done;
     tx->fn_custom_destroy = destroy;
 
     return priv;
-}
-
-static
-void
-gbinder_ipc_tx_free(
-    gpointer data)
-{
-    GBinderIpcTxPriv* tx = data;
-    GBinderIpcTx* pub = &tx->pub;
-    GBinderIpc* self = pub->ipc;
-    GBinderIpcPriv* priv = self->priv;
-
-    g_hash_table_remove(priv->tx_table, GINT_TO_POINTER(pub->id));
-    tx->fn_free(tx);
-
-    /* This may actually deallocate GBinderIpc object: */
-    gbinder_ipc_unref(self);
-}
-
-static
-gboolean
-gbinder_ipc_tx_done(
-    gpointer data)
-{
-    GBinderIpcTxPriv* tx = data;
-    GBinderIpcTx* pub = &tx->pub;
-    GBinderIpc* self = pub->ipc;
-    GBinderIpcPriv* priv = self->priv;
-
-    if (g_hash_table_remove(priv->tx_table, GINT_TO_POINTER(tx->pub.id))) {
-        GASSERT(!pub->cancelled);
-        tx->fn_done(tx);
-    }
-
-    return G_SOURCE_REMOVE;
 }
 
 /* Invoked on a thread from tx_pool */
@@ -1405,7 +1421,6 @@ gbinder_ipc_tx_proc(
     GBinderIpcTxPriv* tx = data;
     GBinderIpc* self = GBINDER_IPC(object);
     GBinderIpcPriv* priv = self->priv;
-    GSource* source = g_idle_source_new();
 
     if (!tx->pub.cancelled) {
         tx->fn_exec(tx);
@@ -1414,9 +1429,7 @@ gbinder_ipc_tx_proc(
     }
 
     /* The result is handled by the main thread */
-    g_source_set_callback(source, gbinder_ipc_tx_done, tx, gbinder_ipc_tx_free);
-    g_source_attach(source, priv->context);
-    g_source_unref(source);
+    g_source_attach(tx->completion, priv->context);
 }
 
 /*==========================================================================*
@@ -1593,7 +1606,6 @@ gbinder_ipc_cancel(
         GBinderIpcTx* tx = g_hash_table_lookup(priv->tx_table, key);
 
         if (tx) {
-            GVERIFY(g_hash_table_remove(priv->tx_table, key));
             tx->cancelled = TRUE;
             GVERBOSE_("%lu", id);
         } else {
@@ -1706,7 +1718,9 @@ gbinder_ipc_finalize(
     g_mutex_clear(&priv->looper_mutex);
     g_mutex_clear(&priv->local_objects_mutex);
     g_mutex_clear(&priv->remote_objects_mutex);
-    g_thread_pool_free(priv->tx_pool, FALSE, TRUE);
+    if (priv->tx_pool) {
+        g_thread_pool_free(priv->tx_pool, FALSE, TRUE);
+    }
     GASSERT(!g_hash_table_size(priv->tx_table));
     g_hash_table_unref(priv->tx_table);
     gutil_idle_pool_unref(self->pool);
@@ -1731,15 +1745,14 @@ gbinder_ipc_class_init(
 void
 gbinder_ipc_exit()
 {
+    GHashTableIter it;
+    gpointer key, value;
     GSList* ipcs = NULL;
     GSList* i;
 
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
     if (gbinder_ipc_table) {
-        GHashTableIter it;
-        gpointer value;
-
         g_hash_table_iter_init(&it, gbinder_ipc_table);
         while (g_hash_table_iter_next(&it, NULL, &value)) {
             ipcs = g_slist_append(ipcs, gbinder_ipc_ref(value));
@@ -1751,19 +1764,45 @@ gbinder_ipc_exit()
     for (i = ipcs; i; i = i->next) {
         GBinderIpc* ipc = GBINDER_IPC(i->data);
         GBinderIpcPriv* priv = ipc->priv;
+        GThreadPool* pool = priv->tx_pool;
         GSList* local_objs = NULL;
+        GSList* tx_keys = NULL;
+        GSList* k;
         GSList* l;
 
         /* Terminate looper threads */
         GVERBOSE_("%s", ipc->dev);
         gbinder_ipc_stop_loopers(ipc);
 
+        /* Make sure pooled transaction complete too */
+        priv->tx_pool = NULL;
+        g_thread_pool_free(pool, FALSE, TRUE);
+
+        /*
+         * Since this function is supposed to be invoked on the main thread,
+         * there's no need to synchronize access to priv->tx_table. In any
+         * case, this must be the last thread associated with this object.
+         */
+        g_hash_table_iter_init(&it, priv->tx_table);
+        while (g_hash_table_iter_next(&it, &key, NULL)) {
+            tx_keys = g_slist_append(tx_keys, key);
+        }
+        for (k = tx_keys; k; k = k->next) {
+            GBinderIpcTxPriv* tx = g_hash_table_lookup(priv->tx_table, k->data);
+            GSource* source = g_source_ref(tx->completion);
+
+            GVERBOSE_("tx %lu", tx->pub.id);
+            g_source_destroy(source);
+            g_source_unref(source);
+        }
+
+        /* The above loop must destroy all uncompleted transactions */
+        GASSERT(!g_hash_table_size(priv->tx_table));
+        g_slist_free(tx_keys);
+
         /* Lock */
         g_mutex_lock(&priv->local_objects_mutex);
         if (priv->local_objects) {
-            GHashTableIter it;
-            gpointer value;
-
             g_hash_table_iter_init(&it, priv->local_objects);
             while (g_hash_table_iter_next(&it, NULL, &value)) {
                 local_objs = g_slist_append(local_objs,
