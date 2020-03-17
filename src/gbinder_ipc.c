@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,6 +29,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "gbinder_ipc.h"
 #include "gbinder_driver.h"
@@ -341,7 +343,9 @@ gbinder_remote_request_complete(
                 tx->reply = gbinder_local_reply_ref(reply);
                 tx->state = GBINDER_IPC_LOOPER_TX_COMPLETE;
                 /* Wake up the looper */
-                (void)write(tx->pipefd[1], &done, sizeof(done));
+                if (write(tx->pipefd[1], &done, sizeof(done)) <= 0) {
+                    GWARN("Failed to wake up the looper");
+                }
                 break;
             default:
                 GWARN("Unexpected state %d in request completion", tx->state);
@@ -473,7 +477,9 @@ gbinder_ipc_looper_tx_handle(
     }
 
     /* And wake up the looper */
-    (void)write(tx->pipefd[1], &done, sizeof(done));
+    if (write(tx->pipefd[1], &done, sizeof(done)) <= 0) {
+        GWARN("Failed to wake up the looper");
+    }
     return G_SOURCE_REMOVE;
 }
 
