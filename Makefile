@@ -11,6 +11,17 @@
 .PHONY: print_debug_path print_release_path
 
 #
+# Library version
+#
+
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
+VERSION_RELEASE = 37
+
+# Version for pkg-config
+PCVERSION = $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_RELEASE)
+
+#
 # Default target
 #
 
@@ -45,17 +56,6 @@ libglibutil_release:
 	make -C $(LIBGLIBUTIL_PATH) release
 
 endif
-
-#
-# Library version
-#
-
-VERSION_MAJOR = 1
-VERSION_MINOR = 0
-VERSION_RELEASE = 36
-
-# Version for pkg-config
-PCVERSION = $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_RELEASE)
 
 #
 # Library name
