@@ -1,4 +1,8 @@
 # -*- Mode: makefile-gmake -*-
+#
+# LIBGLIBUTIL_PATH can be defined to point to libglibutil root directory
+# for side-by-side build.
+#
 
 .PHONY: clean all debug release test
 .PHONY: print_debug_so print_release_so
@@ -7,16 +11,40 @@
 .PHONY: print_debug_path print_release_path
 
 #
-# Required packages
-#
-
-PKGS = libglibutil glib-2.0 gobject-2.0
-
-#
 # Default target
 #
 
 all: debug release pkgconfig
+
+#
+# Required packages
+#
+
+PKGS = glib-2.0 gobject-2.0
+
+ifeq ($(LIBGLIBUTIL_PATH),)
+
+# Assume that libglibutil devel package is installed
+PKGS += libglibutil
+
+else
+
+# Side-by-side build
+INCLUDES += -I$(LIBGLIBUTIL_PATH)/include
+DEBUG_LIBS = -L$(LIBGLIBUTIL_PATH)/build/debug -lglibutil
+RELEASE_LIBS = -L$(LIBGLIBUTIL_PATH)/build/release -lglibutil
+DEBUG_DEPS = libglibutil_debug
+RELEASE_DEPS = libglibutil_release
+
+.PHONY: libglibutil_debug libglibutil_release
+
+libglibutil_debug:
+	make -C $(LIBGLIBUTIL_PATH) debug
+
+libglibutil_release:
+	make -C $(LIBGLIBUTIL_PATH) release
+
+endif
 
 #
 # Library version
@@ -92,7 +120,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 CC ?= $(CROSS_COMPILE)gcc
 LD = $(CC)
 WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
-INCLUDES = -I$(INCLUDE_DIR)
+INCLUDES += -I$(INCLUDE_DIR)
 BASE_FLAGS = -fPIC
 FULL_CFLAGS = $(BASE_FLAGS) $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
@@ -110,8 +138,8 @@ ifneq ($(KEEP_SYMBOLS),0)
 RELEASE_FLAGS += -g
 endif
 
-DEBUG_LDFLAGS = $(FULL_LDFLAGS) $(DEBUG_FLAGS)
-RELEASE_LDFLAGS = $(FULL_LDFLAGS) $(RELEASE_FLAGS)
+DEBUG_LDFLAGS = $(FULL_LDFLAGS) $(DEBUG_LIBS) $(DEBUG_FLAGS)
+RELEASE_LDFLAGS = $(FULL_LDFLAGS) $(RELEASE_LIBS) $(RELEASE_FLAGS)
 DEBUG_CFLAGS = $(FULL_CFLAGS) $(DEBUG_FLAGS) -DDEBUG
 RELEASE_CFLAGS = $(FULL_CFLAGS) $(RELEASE_FLAGS) -O2
 COVERAGE_CFLAGS = $(FULL_CFLAGS) $(COVERAGE_FLAGS) --coverage
@@ -137,8 +165,8 @@ endif
 endif
 
 $(PKGCONFIG): | $(BUILD_DIR)
-$(DEBUG_OBJS) $(DEBUG_SO): | $(DEBUG_BUILD_DIR)
-$(RELEASE_OBJS) $(RELEASE_SO): | $(RELEASE_BUILD_DIR)
+$(DEBUG_OBJS) $(DEBUG_SO): | $(DEBUG_BUILD_DIR) $(DEBUG_DEPS)
+$(RELEASE_OBJS) $(RELEASE_SO): | $(RELEASE_BUILD_DIR) $(RELEASE_DEPS)
 $(COVERAGE_OBJS) $(COVERAGE_LIB): | $(COVERAGE_BUILD_DIR)
 
 #
