@@ -1,3 +1,9 @@
+libgbinder (1.0.38) unstable; urgency=low
+
+  * Allow to configure log level via environment
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 02 Apr 2020 00:12:01 +0300
+
 libgbinder (1.0.37) unstable; urgency=low
 
   * Allow side-by-side linking with libglibutil
