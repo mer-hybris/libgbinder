@@ -10,6 +10,7 @@ all:
 	@$(MAKE) -C unit_local_object $*
 	@$(MAKE) -C unit_local_reply $*
 	@$(MAKE) -C unit_local_request $*
+	@$(MAKE) -C unit_log $*
 	@$(MAKE) -C unit_protocol $*
 	@$(MAKE) -C unit_reader $*
 	@$(MAKE) -C unit_remote_object $*

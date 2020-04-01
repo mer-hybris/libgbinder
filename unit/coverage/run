@@ -12,6 +12,7 @@ unit_ipc \
 unit_local_object \
 unit_local_reply \
 unit_local_request \
+unit_log \
 unit_protocol \
 unit_reader \
 unit_remote_object \
