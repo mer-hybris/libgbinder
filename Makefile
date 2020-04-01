@@ -85,6 +85,7 @@ SRC = \
   gbinder_local_object.c \
   gbinder_local_reply.c \
   gbinder_local_request.c \
+  gbinder_log.c \
   gbinder_reader.c \
   gbinder_remote_object.c \
   gbinder_remote_reply.c \
