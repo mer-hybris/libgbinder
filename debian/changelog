@@ -1,3 +1,9 @@
+libgbinder (1.0.39) unstable; urgency=low
+
+  * Adapted to side-by-side linking
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 02 Apr 2020 18:07:16 +0300
+
 libgbinder (1.0.38) unstable; urgency=low
 
   * Allow to configure log level via environment
