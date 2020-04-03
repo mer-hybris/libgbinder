@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -32,6 +32,7 @@
 
 #include "gbinder_servicepoll.h"
 #include "gbinder_servicemanager.h"
+#include "gbinder_eventloop_p.h"
 
 #include <gutil_strv.h>
 
@@ -46,7 +47,7 @@ struct gbinder_servicepoll {
     GBinderServiceManager* manager;
     char** list;
     gulong list_id;
-    guint timer_id;
+    GBinderEventLoopTimeout* timer;
 };
 
 G_DEFINE_TYPE(GBinderServicePoll, gbinder_servicepoll, G_TYPE_OBJECT)
@@ -230,7 +231,7 @@ void
 gbinder_servicepoll_init(
     GBinderServicePoll* self)
 {
-    self->timer_id = g_timeout_add(gbinder_servicepoll_interval_ms,
+    self->timer = gbinder_timeout_add(gbinder_servicepoll_interval_ms,
         gbinder_servicepoll_timer, self);
 }
 
@@ -241,7 +242,7 @@ gbinder_servicepoll_finalize(
 {
     GBinderServicePoll* self = GBINDER_SERVICEPOLL(object);
 
-    g_source_remove(self->timer_id);
+    gbinder_timeout_remove(self->timer);
     gbinder_servicemanager_cancel(self->manager, self->list_id);
     gbinder_servicemanager_unref(self->manager);
     g_strfreev(self->list);

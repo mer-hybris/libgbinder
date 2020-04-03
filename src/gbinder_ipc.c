@@ -43,6 +43,7 @@
 #include "gbinder_remote_object_p.h"
 #include "gbinder_remote_reply_p.h"
 #include "gbinder_remote_request_p.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
@@ -60,7 +61,6 @@ struct gbinder_ipc_priv {
     GBinderIpc* self;
     GThreadPool* tx_pool;
     GHashTable* tx_table;
-    GMainContext* context;
     char* key;
     GBinderObjectRegistry object_registry;
 
@@ -175,7 +175,7 @@ typedef struct gbinder_ipc_tx_priv {
     GBinderIpcTxPrivFunc fn_exec;
     GBinderIpcTxPrivFunc fn_done;
     GBinderIpcTxPrivFunc fn_free;
-    GSource* completion;
+    GBinderEventLoopCallback* completion;
 } GBinderIpcTxPriv;
 
 typedef struct gbinder_ipc_tx_internal {
@@ -406,7 +406,7 @@ gbinder_ipc_looper_unref(
 }
 
 static
-gboolean
+void
 gbinder_ipc_looper_tx_handle(
     gpointer data)
 {
@@ -480,7 +480,6 @@ gbinder_ipc_looper_tx_handle(
     if (write(tx->pipefd[1], &done, sizeof(done)) <= 0) {
         GWARN("Failed to wake up the looper");
     }
-    return G_SOURCE_REMOVE;
 }
 
 static
@@ -593,13 +592,13 @@ gbinder_ipc_looper_transact(
         GBinderIpcPriv* priv = ipc->priv;
         struct pollfd fds[2];
         guint8 done = 0;
-        GSource* source = g_idle_source_new();
         gboolean was_blocked = FALSE;
+        GBinderEventLoopCallback* callback =
+            gbinder_idle_callback_new(gbinder_ipc_looper_tx_handle,
+                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
 
         /* Let GBinderLocalObject handle the transaction on the main thread */
-        g_source_set_callback(source, gbinder_ipc_looper_tx_handle,
-            gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
-        g_source_attach(source, priv->context);
+        gbinder_idle_callback_schedule(callback);
 
         /* Wait for either transaction completion or looper shutdown */
         memset(fds, 0, sizeof(fds));
@@ -685,8 +684,8 @@ gbinder_ipc_looper_transact(
             gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
 
-        g_source_destroy(source);
-        g_source_unref(source);
+        gbinder_idle_callback_cancel(callback);
+        gbinder_idle_callback_unref(callback);
 
         if (was_blocked) {
             guint n;
@@ -1197,7 +1196,7 @@ gbinder_ipc_tx_free(
     GBinderIpc* self = pub->ipc;
     GBinderIpcPriv* priv = self->priv;
 
-    g_source_unref(tx->completion);
+    gbinder_idle_callback_unref(tx->completion);
     g_hash_table_remove(priv->tx_table, GINT_TO_POINTER(pub->id));
     tx->fn_free(tx);
 
@@ -1206,7 +1205,7 @@ gbinder_ipc_tx_free(
 }
 
 static
-gboolean
+void
 gbinder_ipc_tx_done(
     gpointer data)
 {
@@ -1216,7 +1215,6 @@ gbinder_ipc_tx_done(
     if (!pub->cancelled) {
         tx->fn_done(tx);
     }
-    return G_SOURCE_REMOVE;
 }
 
 static
@@ -1247,8 +1245,7 @@ gbinder_ipc_tx_priv_init(
     priv->fn_exec = fn_exec;
     priv->fn_done = fn_done;
     priv->fn_free = fn_free;
-    priv->completion = g_idle_source_new();
-    g_source_set_callback(priv->completion, gbinder_ipc_tx_done, priv,
+    priv->completion = gbinder_idle_callback_new(gbinder_ipc_tx_done, priv,
         gbinder_ipc_tx_free);
 }
 
@@ -1425,8 +1422,6 @@ gbinder_ipc_tx_proc(
     gpointer object)
 {
     GBinderIpcTxPriv* tx = data;
-    GBinderIpc* self = GBINDER_IPC(object);
-    GBinderIpcPriv* priv = self->priv;
 
     if (!tx->pub.cancelled) {
         tx->fn_exec(tx);
@@ -1435,7 +1430,7 @@ gbinder_ipc_tx_proc(
     }
 
     /* The result is handled by the main thread */
-    g_source_attach(tx->completion, priv->context);
+    gbinder_idle_callback_schedule(tx->completion);
 }
 
 /*==========================================================================*
@@ -1641,7 +1636,6 @@ gbinder_ipc_init(
     g_mutex_init(&priv->looper_mutex);
     g_mutex_init(&priv->local_objects_mutex);
     g_mutex_init(&priv->remote_objects_mutex);
-    priv->context = g_main_context_default();
     priv->tx_table = g_hash_table_new(g_direct_hash, g_direct_equal);
     priv->tx_pool = g_thread_pool_new(gbinder_ipc_tx_proc, self,
         GBINDER_IPC_MAX_TX_THREADS, FALSE, NULL);
@@ -1795,11 +1789,12 @@ gbinder_ipc_exit()
         }
         for (k = tx_keys; k; k = k->next) {
             GBinderIpcTxPriv* tx = g_hash_table_lookup(priv->tx_table, k->data);
-            GSource* source = g_source_ref(tx->completion);
+            GBinderEventLoopCallback* callback =
+                gbinder_idle_callback_ref(tx->completion);
 
             GVERBOSE_("tx %lu", tx->pub.id);
-            g_source_destroy(source);
-            g_source_unref(source);
+            gbinder_idle_callback_cancel(callback);
+            gbinder_idle_callback_unref(callback);
         }
 
         /* The above loop must destroy all uncompleted transactions */
@@ -1830,6 +1825,7 @@ gbinder_ipc_exit()
         g_slist_free_full(local_objs, g_object_unref);
     }
     g_slist_free_full(ipcs, g_object_unref);
+    gbinder_eventloop_set(NULL);
 }
 
 /*
