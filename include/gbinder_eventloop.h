@@ -165,7 +165,12 @@ typedef struct gbinder_eventloop_integration {
     void (*_reserved7)(void);
     void (*_reserved8)(void);
     void (*_reserved9)(void);
-    void (*_reserved10)(void);
+
+    /*
+     * api_level will remain zero (and ignored) until we run out of
+     * the above placeholders. Hopefully, forever.
+     */
+    int api_level;
 } GBinderEventLoopIntegration;
 
 /**
