@@ -1,14 +1,16 @@
 Name: libgbinder
-Version: 1.0.39
+Version: 1.0.40
 Release: 0
 Summary: Binder client library
-Group: Development/Libraries
 License: BSD
 URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
-Requires: libglibutil >= 1.0.35
+
+%define libglibutil_version 1.0.35
+
 BuildRequires: pkgconfig(glib-2.0)
-BuildRequires: pkgconfig(libglibutil) >= 1.0.35
+BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
+Requires: libglibutil >= %{libglibutil_version}
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
