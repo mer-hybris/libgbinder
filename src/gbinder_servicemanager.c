@@ -36,6 +36,7 @@
 #include "gbinder_client_p.h"
 #include "gbinder_local_object_p.h"
 #include "gbinder_remote_object_p.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_driver.h"
 #include "gbinder_ipc.h"
 #include "gbinder_log.h"
@@ -62,7 +63,7 @@ struct gbinder_servicemanager_priv {
     GHashTable* watch_table;
     gulong death_id;
     gboolean present;
-    guint presence_check_id;
+    GBinderEventLoopTimeout* presence_check;
     guint presence_check_delay_ms;
 };
 
@@ -275,9 +276,9 @@ gbinder_servicemanager_reanimated(
 {
     GBinderServiceManagerPriv* priv = self->priv;
 
-    if (priv->presence_check_id) {
-        g_source_remove(priv->presence_check_id);
-        priv->presence_check_id = 0;
+    if (priv->presence_check) {
+        gbinder_timeout_remove(priv->presence_check);
+        priv->presence_check = NULL;
     }
     GINFO("Service manager %s has appeared", self->dev);
     /* Re-arm the watches */
@@ -317,13 +318,14 @@ gbinder_servicemanager_presense_check_timer(
     gbinder_servicemanager_ref(self);
     if (gbinder_remote_object_reanimate(remote)) {
         /* Done */
-        priv->presence_check_id = 0;
+        priv->presence_check = NULL;
         gbinder_servicemanager_reanimated(self);
         result = G_SOURCE_REMOVE;
     } else if (priv->presence_check_delay_ms < PRESENSE_WAIT_MS_MAX) {
         priv->presence_check_delay_ms += PRESENSE_WAIT_MS_STEP;
-        priv->presence_check_id = g_timeout_add(priv->presence_check_delay_ms,
-            gbinder_servicemanager_presense_check_timer, self);
+        priv->presence_check =
+            gbinder_timeout_add(priv->presence_check_delay_ms,
+                gbinder_servicemanager_presense_check_timer, self);
         result = G_SOURCE_REMOVE;
     } else {
         result = G_SOURCE_CONTINUE;
@@ -339,9 +341,9 @@ gbinder_servicemanager_presence_check_start(
 {
     GBinderServiceManagerPriv* priv = self->priv;
 
-    GASSERT(!priv->presence_check_id);
+    GASSERT(!priv->presence_check);
     priv->presence_check_delay_ms = PRESENSE_WAIT_MS_MIN;
-    priv->presence_check_id = g_timeout_add(PRESENSE_WAIT_MS_MIN,
+    priv->presence_check = gbinder_timeout_add(PRESENSE_WAIT_MS_MIN,
         gbinder_servicemanager_presense_check_timer, self);
 }
 
@@ -915,9 +917,7 @@ gbinder_servicemanager_finalize(
     GBinderServiceManager* self = GBINDER_SERVICEMANAGER(object);
     GBinderServiceManagerPriv* priv = self->priv;
 
-    if (priv->presence_check_id) {
-        g_source_remove(priv->presence_check_id);
-    }
+    gbinder_timeout_remove(priv->presence_check);
     gbinder_remote_object_remove_handler(self->client->remote, priv->death_id);
     g_hash_table_destroy(priv->watch_table);
     gutil_idle_pool_destroy(self->pool);

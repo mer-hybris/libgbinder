@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,7 @@
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_servicepoll.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_log.h"
 
 #include <gbinder_client.h>
@@ -48,7 +49,7 @@ typedef struct gbinder_defaultservicemanager_watch {
     GBinderServicePoll* poll;
     char* name;
     gulong handler_id;
-    guint notify_id;
+    GBinderEventLoopTimeout* notify;
 } GBinderDefaultServiceManagerWatch;
 
 typedef GBinderServiceManagerClass GBinderDefaultServiceManagerClass;
@@ -99,9 +100,9 @@ gbinder_defaultservicemanager_watch_proc(
         GBinderServiceManager* manager =
             gbinder_servicepoll_manager(watch->poll);
 
-        if (watch->notify_id) {
-            g_source_remove(watch->notify_id);
-            watch->notify_id = 0;
+        if (watch->notify) {
+            gbinder_timeout_remove(watch->notify);
+            watch->notify = NULL;
         }
         gbinder_servicemanager_service_registered(manager, name_added);
     }
@@ -116,8 +117,8 @@ gbinder_defaultservicemanager_watch_notify(
     GBinderServiceManager* manager = gbinder_servicepoll_manager(watch->poll);
     char* name = g_strdup(watch->name);
 
-    GASSERT(watch->notify_id);
-    watch->notify_id = 0;
+    GASSERT(watch->notify);
+    watch->notify = NULL;
     gbinder_servicemanager_service_registered(manager, name);
     g_free(name);
     return G_SOURCE_REMOVE;
@@ -130,9 +131,7 @@ gbinder_defaultservicemanager_watch_free(
 {
     GBinderDefaultServiceManagerWatch* watch = user_data;
 
-    if (watch->notify_id) {
-        g_source_remove(watch->notify_id);
-    }
+    gbinder_timeout_remove(watch->notify);
     gbinder_servicepoll_remove_handler(watch->poll, watch->handler_id);
     gbinder_servicepoll_unref(watch->poll);
     g_free(watch->name);
@@ -258,8 +257,8 @@ gbinder_defaultservicemanager_watch(
 
     g_hash_table_replace(self->watch_table, watch->name, watch);
     if (gbinder_servicepoll_is_known_name(watch->poll, name)) {
-        watch->notify_id =
-            g_idle_add(gbinder_defaultservicemanager_watch_notify, watch);
+        watch->notify = gbinder_idle_add
+            (gbinder_defaultservicemanager_watch_notify, watch);
     }
     return TRUE;
 }

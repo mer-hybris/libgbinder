@@ -8,6 +8,7 @@ unit_buffer \
 unit_cleanup \
 unit_client \
 unit_driver \
+unit_eventloop \
 unit_ipc \
 unit_local_object \
 unit_local_reply \
