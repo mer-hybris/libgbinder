@@ -593,12 +593,10 @@ gbinder_ipc_looper_transact(
         struct pollfd fds[2];
         guint8 done = 0;
         gboolean was_blocked = FALSE;
-        GBinderEventLoopCallback* callback =
-            gbinder_idle_callback_new(gbinder_ipc_looper_tx_handle,
-                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
-
         /* Let GBinderLocalObject handle the transaction on the main thread */
-        gbinder_idle_callback_schedule(callback);
+        GBinderEventLoopCallback* callback =
+            gbinder_idle_callback_schedule_new(gbinder_ipc_looper_tx_handle,
+                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
 
         /* Wait for either transaction completion or looper shutdown */
         memset(fds, 0, sizeof(fds));
@@ -684,8 +682,7 @@ gbinder_ipc_looper_transact(
             gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
 
-        gbinder_idle_callback_cancel(callback);
-        gbinder_idle_callback_unref(callback);
+        gbinder_idle_callback_destroy(callback);
 
         if (was_blocked) {
             guint n;
@@ -1789,12 +1786,9 @@ gbinder_ipc_exit()
         }
         for (k = tx_keys; k; k = k->next) {
             GBinderIpcTxPriv* tx = g_hash_table_lookup(priv->tx_table, k->data);
-            GBinderEventLoopCallback* callback =
-                gbinder_idle_callback_ref(tx->completion);
 
             GVERBOSE_("tx %lu", tx->pub.id);
-            gbinder_idle_callback_cancel(callback);
-            gbinder_idle_callback_unref(callback);
+            gbinder_idle_callback_cancel(tx->completion);
         }
 
         /* The above loop must destroy all uncompleted transactions */

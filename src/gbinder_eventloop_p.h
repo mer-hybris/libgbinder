@@ -62,6 +62,13 @@ gbinder_idle_callback_new(
 
 G_GNUC_INTERNAL
 GBinderEventLoopCallback*
+gbinder_idle_callback_schedule_new(
+    GBinderEventLoopCallbackFunc func,
+    gpointer data,
+    GDestroyNotify destroy);
+
+G_GNUC_INTERNAL
+GBinderEventLoopCallback*
 gbinder_idle_callback_ref(
     GBinderEventLoopCallback* cb);
 
@@ -78,6 +85,11 @@ gbinder_idle_callback_schedule(
 G_GNUC_INTERNAL
 void
 gbinder_idle_callback_cancel(
+    GBinderEventLoopCallback* cb);
+
+G_GNUC_INTERNAL
+void
+gbinder_idle_callback_destroy(
     GBinderEventLoopCallback* cb);
 
 #endif /* GBINDER_EVENTLOOP_PRIVATE_H */
