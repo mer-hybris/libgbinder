@@ -43,7 +43,6 @@
 
 #include <gbinder_client.h>
 
-#include <gutil_idlepool.h>
 #include <gutil_misc.h>
 
 #include <errno.h>
@@ -65,6 +64,8 @@ struct gbinder_servicemanager_priv {
     gboolean present;
     GBinderEventLoopTimeout* presence_check;
     guint presence_check_delay_ms;
+    GBinderEventLoopCallback* autorelease_cb;
+    GSList* autorelease;
 };
 
 G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
@@ -393,6 +394,20 @@ gbinder_servicemanager_sleep_ms(
         (wait.tv_sec > 0 || wait.tv_nsec > 0));
 }
 
+static
+void
+gbinder_servicemanager_autorelease_cb(
+    gpointer data)
+{
+    GBinderServiceManager* self = GBINDER_SERVICEMANAGER(data);
+    GBinderServiceManagerPriv* priv = self->priv;
+    GSList* list = priv->autorelease;
+
+    priv->autorelease_cb = NULL;
+    priv->autorelease = NULL;
+    g_slist_free_full(list, g_object_unref);
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -677,10 +692,15 @@ gbinder_servicemanager_get_service_sync(
     if (G_LIKELY(self) && name) {
         obj = GBINDER_SERVICEMANAGER_GET_CLASS(self)->get_service
             (self, name, status);
-        if (!self->pool) {
-            self->pool = gutil_idle_pool_new();
+        if (obj) {
+            GBinderServiceManagerPriv* priv = self->priv;
+
+            priv->autorelease = g_slist_prepend(priv->autorelease, obj);
+            if (!priv->autorelease_cb) {
+                priv->autorelease_cb = gbinder_idle_callback_schedule_new
+                    (gbinder_servicemanager_autorelease_cb, self, NULL);
+            }
         }
-        gutil_idle_pool_add_object(self->pool, obj);
     } else if (status) {
         *status = (-EINVAL);
     }
@@ -919,8 +939,9 @@ gbinder_servicemanager_finalize(
 
     gbinder_timeout_remove(priv->presence_check);
     gbinder_remote_object_remove_handler(self->client->remote, priv->death_id);
+    gbinder_idle_callback_destroy(priv->autorelease_cb);
+    g_slist_free_full(priv->autorelease, g_object_unref);
     g_hash_table_destroy(priv->watch_table);
-    gutil_idle_pool_destroy(self->pool);
     gbinder_client_unref(self->client);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }

@@ -47,7 +47,6 @@
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
-#include <gutil_idlepool.h>
 #include <gutil_macros.h>
 
 #include <unistd.h>
@@ -1639,7 +1638,6 @@ gbinder_ipc_init(
     priv->object_registry.f = &object_registry_functions;
     priv->self = self;
     self->priv = priv;
-    self->pool = gutil_idle_pool_new();
 }
 
 static
@@ -1720,7 +1718,6 @@ gbinder_ipc_finalize(
     }
     GASSERT(!g_hash_table_size(priv->tx_table));
     g_hash_table_unref(priv->tx_table);
-    gutil_idle_pool_unref(self->pool);
     gbinder_driver_unref(self->driver);
     g_free(priv->key);
     G_OBJECT_CLASS(gbinder_ipc_parent_class)->finalize(object);
