@@ -47,7 +47,6 @@
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
-#include <gutil_idlepool.h>
 #include <gutil_macros.h>
 
 #include <unistd.h>
@@ -593,12 +592,10 @@ gbinder_ipc_looper_transact(
         struct pollfd fds[2];
         guint8 done = 0;
         gboolean was_blocked = FALSE;
-        GBinderEventLoopCallback* callback =
-            gbinder_idle_callback_new(gbinder_ipc_looper_tx_handle,
-                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
-
         /* Let GBinderLocalObject handle the transaction on the main thread */
-        gbinder_idle_callback_schedule(callback);
+        GBinderEventLoopCallback* callback =
+            gbinder_idle_callback_schedule_new(gbinder_ipc_looper_tx_handle,
+                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
 
         /* Wait for either transaction completion or looper shutdown */
         memset(fds, 0, sizeof(fds));
@@ -684,8 +681,7 @@ gbinder_ipc_looper_transact(
             gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
 
-        gbinder_idle_callback_cancel(callback);
-        gbinder_idle_callback_unref(callback);
+        gbinder_idle_callback_destroy(callback);
 
         if (was_blocked) {
             guint n;
@@ -1642,7 +1638,6 @@ gbinder_ipc_init(
     priv->object_registry.f = &object_registry_functions;
     priv->self = self;
     self->priv = priv;
-    self->pool = gutil_idle_pool_new();
 }
 
 static
@@ -1723,7 +1718,6 @@ gbinder_ipc_finalize(
     }
     GASSERT(!g_hash_table_size(priv->tx_table));
     g_hash_table_unref(priv->tx_table);
-    gutil_idle_pool_unref(self->pool);
     gbinder_driver_unref(self->driver);
     g_free(priv->key);
     G_OBJECT_CLASS(gbinder_ipc_parent_class)->finalize(object);
@@ -1789,12 +1783,9 @@ gbinder_ipc_exit()
         }
         for (k = tx_keys; k; k = k->next) {
             GBinderIpcTxPriv* tx = g_hash_table_lookup(priv->tx_table, k->data);
-            GBinderEventLoopCallback* callback =
-                gbinder_idle_callback_ref(tx->completion);
 
             GVERBOSE_("tx %lu", tx->pub.id);
-            gbinder_idle_callback_cancel(callback);
-            gbinder_idle_callback_unref(callback);
+            gbinder_idle_callback_cancel(tx->completion);
         }
 
         /* The above loop must destroy all uncompleted transactions */

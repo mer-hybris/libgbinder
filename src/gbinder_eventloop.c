@@ -263,6 +263,19 @@ gbinder_idle_callback_new(
 }
 
 GBinderEventLoopCallback*
+gbinder_idle_callback_schedule_new(
+    GBinderEventLoopCallbackFunc func,
+    gpointer data,
+    GDestroyNotify finalize)
+{
+    GBinderEventLoopCallback* cb =
+        gbinder_eventloop->callback_new(func, data, finalize);
+
+    gbinder_idle_callback_schedule(cb);
+    return cb;
+}
+
+GBinderEventLoopCallback*
 gbinder_idle_callback_ref(
     GBinderEventLoopCallback* cb)
 {
@@ -297,6 +310,18 @@ gbinder_idle_callback_cancel(
 {
     if (cb) {
         cb->eventloop->callback_cancel(cb);
+    }
+}
+
+void
+gbinder_idle_callback_destroy(
+    GBinderEventLoopCallback* cb)
+{
+    if (cb) {
+        const GBinderEventLoopIntegration* eventloop = cb->eventloop;
+
+        eventloop->callback_cancel(cb);
+        eventloop->callback_unref(cb);
     }
 }
 
