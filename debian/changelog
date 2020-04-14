@@ -1,3 +1,9 @@
+libgbinder (1.0.41) unstable; urgency=low
+
+  * Stop using GUtilIdlePool
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 14 Apr 2020 12:36:54 +0300
+
 libgbinder (1.0.40) unstable; urgency=low
 
   * Support integration with non-glib event loops
