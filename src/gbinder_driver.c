@@ -414,7 +414,7 @@ void
 gbinder_driver_handle_transaction(
     GBinderDriver* self,
     GBinderObjectRegistry* reg,
-    GBinderHandler* h,
+    GBinderHandler* handler,
     const void* data)
 {
     GBinderLocalReply* reply = NULL;
@@ -447,9 +447,21 @@ gbinder_driver_handle_transaction(
             tx.code, tx.flags, &status);
         break;
     case GBINDER_LOCAL_TRANSACTION_SUPPORTED:
-        reply = gbinder_handler_transact(h, obj, req, tx.code, tx.flags,
-            &status);
-        break;
+        {
+            if(handler)
+            {
+                // this function will be called if we have none null handler
+                reply = gbinder_handler_transact(handler, obj, req, tx.code, tx.flags,
+                    &status);
+            }
+            else
+            {
+                // this function will be called during other transactions processing to allow
+                // local object to handle all callbacks if we have null handler
+                reply = gbinder_local_object_handle_transaction(obj, req, tx.code, tx.flags,
+                    &status);
+            }
+        } break;
     default:
         GWARN("Unhandled transaction %s 0x%08x", iface, tx.code);
         break;
