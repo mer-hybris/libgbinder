@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -75,10 +75,13 @@ test_null(
     void)
 {
     g_assert(!gbinder_client_new(NULL, NULL));
+    g_assert(!gbinder_client_new2(NULL, NULL, 0));
     g_assert(!gbinder_client_ref(NULL));
     g_assert(!gbinder_client_interface(NULL));
+    g_assert(!gbinder_client_interface2(NULL, 0));
     gbinder_client_unref(NULL);
     g_assert(!gbinder_client_new_request(NULL));
+    g_assert(!gbinder_client_new_request2(NULL, 0));
     g_assert(!gbinder_client_transact_sync_reply(NULL, 0, NULL, NULL));
     g_assert(gbinder_client_transact_sync_oneway(NULL, 0, NULL) == (-EINVAL));
     g_assert(!gbinder_client_transact(NULL, 0, 0, NULL, NULL, NULL, NULL));
@@ -102,11 +105,49 @@ test_basic(
 
     g_assert(client);
     g_assert(gbinder_client_ref(client) == client);
-    g_assert(!g_strcmp0(gbinder_client_interface(client), iface));
+    g_assert_cmpstr(gbinder_client_interface(client), == ,iface);
     gbinder_client_unref(client);
     gbinder_client_cancel(client, 0); /* does nothing */
 
     gbinder_client_unref(client);
+    gbinder_remote_object_unref(obj);
+    gbinder_ipc_unref(ipc);
+}
+
+/*==========================================================================*
+ * interfaces
+ *==========================================================================*/
+
+static
+void
+test_interfaces(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, 0);
+    static const GBinderClientIfaceInfo ifaces[] = {
+        {"33", 33 }, { "11", 11 }, { "22", 22 }
+    };
+    GBinderClient* client = gbinder_client_new2(obj, ifaces,
+        G_N_ELEMENTS(ifaces));
+
+    g_assert(client);
+    g_assert_cmpstr(gbinder_client_interface(client), == ,"11");
+    g_assert_cmpstr(gbinder_client_interface2(client, 11), == ,"11");
+    g_assert_cmpstr(gbinder_client_interface2(client, 22), == ,"22");
+    g_assert_cmpstr(gbinder_client_interface2(client, 33), == ,"33");
+    g_assert(!gbinder_client_interface2(client, 34));
+    g_assert(!gbinder_client_new_request2(client, 34));
+    gbinder_client_unref(client);
+
+    /* Client with no interface info */
+    client = gbinder_client_new2(obj, NULL, 0);
+    g_assert(client);
+    g_assert(!gbinder_client_interface(client));
+    g_assert(!gbinder_client_interface2(client, 1));
+    gbinder_client_unref(client);
+
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
 }
@@ -344,8 +385,9 @@ test_reply(
     GDestroyNotify destroy)
 {
     GBinderClient* client = test_client_new(0, TEST_INTERFACE);
-    GBinderLocalRequest* req = gbinder_client_new_request(client);
+    GBinderLocalRequest* req = gbinder_client_new_request2(client, 0);
 
+    g_assert(req);
     test_reply_tx(client, req, done, destroy);
     gbinder_local_request_unref(req);
 
@@ -391,6 +433,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("interfaces"), test_interfaces);
     g_test_add_func(TEST_("dead"), test_dead);
     g_test_add_func(TEST_("no_header"), test_no_header);
     g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
