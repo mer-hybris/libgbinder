@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,6 +37,11 @@
 
 G_BEGIN_DECLS
 
+typedef struct gbinder_client_iface_info {
+    const char* iface;
+    guint32 last_code;
+} GBinderClientIfaceInfo;
+
 typedef
 void
 (*GBinderClientReplyFunc)(
@@ -51,6 +56,12 @@ gbinder_client_new(
     const char* iface);
 
 GBinderClient*
+gbinder_client_new2(
+    GBinderRemoteObject* object,
+    const GBinderClientIfaceInfo* ifaces,
+    gsize count); /* since 1.0.42 */
+
+GBinderClient*
 gbinder_client_ref(
     GBinderClient* client);
 
@@ -62,9 +73,19 @@ const char*
 gbinder_client_interface(
     GBinderClient* client); /* since 1.0.22 */
 
+const char*
+gbinder_client_interface2(
+    GBinderClient* client,
+    guint32 code); /* since 1.0.42 */
+
 GBinderLocalRequest*
 gbinder_client_new_request(
     GBinderClient* client);
+
+GBinderLocalRequest*
+gbinder_client_new_request2(
+    GBinderClient* client,
+    guint32 code); /* since 1.0.42 */
 
 GBinderRemoteReply*
 gbinder_client_transact_sync_reply(

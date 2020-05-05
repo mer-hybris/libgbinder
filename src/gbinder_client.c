@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,14 +41,22 @@
 
 #include <gutil_macros.h>
 
+#include <stdlib.h>
 #include <errno.h>
+#include <limits.h>
+
+typedef struct gbinder_client_iface_range {
+    char* iface;
+    GBytes* rpc_header;
+    GBinderLocalRequest* basic_req;
+    guint32 last_code;
+} GBinderClientIfaceRange;
 
 typedef struct gbinder_client_priv {
     GBinderClient pub;
     guint32 refcount;
-    char* iface;
-    GBytes* rpc_header;
-    GBinderLocalRequest* basic_req;
+    GBinderClientIfaceRange* ranges;
+    guint nr;
 } GBinderClientPriv;
 
 typedef struct gbinder_client_tx {
@@ -66,18 +74,78 @@ static inline GBinderClientPriv* gbinder_client_cast(GBinderClient* client)
  *==========================================================================*/
 
 static
+const GBinderClientIfaceRange*
+gbinder_client_find_range(
+    GBinderClientPriv* priv,
+    guint32 code)
+{
+    guint i;
+
+    for (i = 0; i < priv->nr; i++) {
+        const GBinderClientIfaceRange* r = priv->ranges + i;
+
+        if (r->last_code >= code) {
+            return r;
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Generates basic request (without additional parameters) for the
+ * specified interface and pulls header data out of it. The basic
+ * request can be reused for those transactions which have no
+ * additional parameters. The header data are needed for building
+ * non-trivial requests.
+ */
+static
+void
+gbinder_client_init_range(
+    GBinderClientIfaceRange* r,
+    GBinderDriver* driver,
+    const GBinderClientIfaceInfo* info)
+{
+    GBinderOutputData* hdr;
+
+    r->basic_req = gbinder_driver_local_request_new(driver, info->iface);
+    hdr = gbinder_local_request_data(r->basic_req);
+    r->rpc_header = g_bytes_new(hdr->bytes->data, hdr->bytes->len);
+    r->iface = g_strdup(info->iface);
+    r->last_code = info->last_code;
+}
+
+static
+int
+gbinder_client_sort_ranges(
+    const void* p1,
+    const void* p2)
+{
+    const GBinderClientIfaceRange* r1 = p1;
+    const GBinderClientIfaceRange* r2 = p2;
+
+    return (r1->last_code < r2->last_code) ? (-1) :
+        (r1->last_code > r2->last_code) ? 1 : 0;
+}
+
+static
 void
 gbinder_client_free(
     GBinderClientPriv* priv)
 {
     GBinderClient* self = &priv->pub;
+    guint i;
 
-    gbinder_remote_object_unref(self->remote);
-    gbinder_local_request_unref(priv->basic_req);
-    g_free(priv->iface);
-    if (priv->rpc_header) {
-        g_bytes_unref(priv->rpc_header);
+    for (i = 0; i < priv->nr; i++) {
+        GBinderClientIfaceRange* r = priv->ranges + i;
+
+        gbinder_local_request_unref(r->basic_req);
+        g_free(r->iface);
+        if (r->rpc_header) {
+            g_bytes_unref(r->rpc_header);
+        }
     }
+    g_free(priv->ranges);
+    gbinder_remote_object_unref(self->remote);
     g_slice_free(GBinderClientPriv, priv);
 }
 
@@ -115,9 +183,10 @@ gbinder_client_transact_destroy(
  *==========================================================================*/
 
 GBinderClient*
-gbinder_client_new(
+gbinder_client_new2(
     GBinderRemoteObject* remote,
-    const char* iface)
+    const GBinderClientIfaceInfo* ifaces,
+    gsize count)
 {
     if (G_LIKELY(remote)) {
         GBinderClientPriv* priv = g_slice_new0(GBinderClientPriv);
@@ -126,27 +195,39 @@ gbinder_client_new(
 
         g_atomic_int_set(&priv->refcount, 1);
         self->remote = gbinder_remote_object_ref(remote);
+        if (count > 0) {
+            gsize i;
 
-        /*
-         * Generate basic request (without additional parameters) and pull
-         * header data out of it. The basic request can be reused for those
-         * transactions which has no additional parameters. The header data
-         * are needed for building non-trivial requests.
-         */
-        if (iface) {
-            GBinderOutputData* hdr;
-
-            priv->basic_req = gbinder_driver_local_request_new(driver, iface);
-            hdr = gbinder_local_request_data(priv->basic_req);
-            priv->rpc_header = g_bytes_new(hdr->bytes->data, hdr->bytes->len);
-            self->iface = priv->iface = g_strdup(iface);
+            priv->nr = count;
+            priv->ranges = g_new(GBinderClientIfaceRange, priv->nr);
+            for (i = 0; i < count; i++) {
+                gbinder_client_init_range(priv->ranges + i, driver, ifaces + i);
+            }
+            qsort(priv->ranges, count, sizeof(GBinderClientIfaceRange),
+                gbinder_client_sort_ranges);
         } else {
-            priv->basic_req = gbinder_local_request_new
+            /* No interface info */
+            priv->nr = 1;
+            priv->ranges = g_new0(GBinderClientIfaceRange, 1);
+            priv->ranges[0].last_code = UINT_MAX;
+            priv->ranges[0].basic_req = gbinder_local_request_new
                 (gbinder_driver_io(driver), NULL);
         }
         return self;
     }
     return NULL;
+}
+
+GBinderClient*
+gbinder_client_new(
+    GBinderRemoteObject* remote,
+    const char* iface)
+{
+    GBinderClientIfaceInfo info;
+
+    info.iface = iface;
+    info.last_code = UINT_MAX;
+    return gbinder_client_new2(remote, &info, 1);
 }
 
 GBinderClient*
@@ -180,7 +261,23 @@ const char*
 gbinder_client_interface(
     GBinderClient* self) /* since 1.0.22 */
 {
-    return G_LIKELY(self) ? gbinder_client_cast(self)->iface : NULL;
+    return G_LIKELY(self) ? gbinder_client_cast(self)->ranges->iface : NULL;
+}
+
+const char*
+gbinder_client_interface2(
+    GBinderClient* self,
+    guint32 code) /* since 1.0.42 */
+{
+    if (G_LIKELY(self)) {
+        const GBinderClientIfaceRange* r =
+            gbinder_client_find_range(gbinder_client_cast(self), code);
+
+        if (r) {
+            return r->iface;
+        }
+    }
+    return NULL;
 }
 
 GBinderLocalRequest*
@@ -190,7 +287,27 @@ gbinder_client_new_request(
     if (G_LIKELY(self)) {
         GBinderClientPriv* priv = gbinder_client_cast(self);
         const GBinderIo* io = gbinder_driver_io(self->remote->ipc->driver);
-        return gbinder_local_request_new(io, priv->rpc_header);
+
+        return gbinder_local_request_new(io, priv->ranges->rpc_header);
+    }
+    return NULL;
+}
+
+GBinderLocalRequest*
+gbinder_client_new_request2(
+    GBinderClient* self,
+    guint32 code) /* since 1.0.42 */
+{
+    if (G_LIKELY(self)) {
+        GBinderClientPriv* priv = gbinder_client_cast(self);
+        const GBinderClientIfaceRange* r = gbinder_client_find_range
+            (priv, code);
+
+        if (r) {
+            const GBinderIo* io = gbinder_driver_io(self->remote->ipc->driver);
+
+            return gbinder_local_request_new(io, r->rpc_header);
+        }
     }
     return NULL;
 }
@@ -207,8 +324,13 @@ gbinder_client_transact_sync_reply(
 
         if (G_LIKELY(!obj->dead)) {
             if (!req) {
+                const GBinderClientIfaceRange* r = gbinder_client_find_range
+                    (gbinder_client_cast(self), code);
+
                 /* Default empty request (just the header, no parameters) */
-                req = gbinder_client_cast(self)->basic_req;
+                if (r) {
+                    req = r->basic_req;
+                }
             }
             return gbinder_ipc_transact_sync_reply(obj->ipc, obj->handle,
                 code, req, status);
@@ -229,8 +351,13 @@ gbinder_client_transact_sync_oneway(
 
         if (G_LIKELY(!obj->dead)) {
             if (!req) {
+                const GBinderClientIfaceRange* r = gbinder_client_find_range
+                    (gbinder_client_cast(self), code);
+
                 /* Default empty request (just the header, no parameters) */
-                req = gbinder_client_cast(self)->basic_req;
+                if (r) {
+                    req = r->basic_req;
+                }
             }
             return gbinder_ipc_transact_sync_oneway(obj->ipc, obj->handle,
                 code, req);
@@ -263,8 +390,13 @@ gbinder_client_transact(
             tx->user_data = user_data;
 
             if (!req) {
+                const GBinderClientIfaceRange* r = gbinder_client_find_range
+                    (gbinder_client_cast(self), code);
+
                 /* Default empty request (just the header, no parameters) */
-                req = gbinder_client_cast(self)->basic_req;
+                if (r) {
+                    req = r->basic_req;
+                }
             }
 
             return gbinder_ipc_transact(obj->ipc, obj->handle, code,
