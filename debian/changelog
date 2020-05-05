@@ -1,3 +1,9 @@
+libgbinder (1.0.42) unstable; urgency=low
+
+  * Allow GBinderClient to use multiple interfaces
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 05 May 2020 19:56:39 +0300
+
 libgbinder (1.0.41) unstable; urgency=low
 
   * Stop using GUtilIdlePool
