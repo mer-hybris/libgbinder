@@ -120,6 +120,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 #
 
 CC ?= $(CROSS_COMPILE)gcc
+STRIP ?= strip
 LD = $(CC)
 WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
 INCLUDES += -I$(INCLUDE_DIR)
@@ -264,7 +265,7 @@ $(DEBUG_SO): $(DEBUG_OBJS)
 $(RELEASE_SO): $(RELEASE_OBJS)
 	$(LD) $(RELEASE_OBJS) $(RELEASE_LDFLAGS) -o $@
 ifeq ($(KEEP_SYMBOLS),0)
-	strip $@
+	$(STRIP) $@
 endif
 
 $(DEBUG_LIB): $(DEBUG_OBJS)
