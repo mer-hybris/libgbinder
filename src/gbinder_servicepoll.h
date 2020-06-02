@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,7 +35,7 @@
 
 #include "gbinder_types_p.h"
 
-extern guint gbinder_servicepoll_interval_ms;
+extern guint gbinder_servicepoll_interval_ms GBINDER_INTERNAL;
 
 typedef
 void
@@ -47,35 +47,42 @@ void
 GBinderServicePoll*
 gbinder_servicepoll_new(
     GBinderServiceManager* manager,
-    GBinderServicePoll** weakptr);
+    GBinderServicePoll** weakptr)
+    GBINDER_INTERNAL;
 
 GBinderServicePoll*
 gbinder_servicepoll_ref(
-    GBinderServicePoll* poll);
+    GBinderServicePoll* poll)
+    GBINDER_INTERNAL;
 
 void
 gbinder_servicepoll_unref(
-    GBinderServicePoll* poll);
+    GBinderServicePoll* poll)
+    GBINDER_INTERNAL;
 
 GBinderServiceManager*
 gbinder_servicepoll_manager(
-    GBinderServicePoll* poll);
+    GBinderServicePoll* poll)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_servicepoll_is_known_name(
     GBinderServicePoll* poll,
-    const char* name);
+    const char* name)
+    GBINDER_INTERNAL;
 
 gulong
 gbinder_servicepoll_add_handler(
     GBinderServicePoll* poll,
     GBinderServicePollFunc func,
-    void* user_data);
+    void* user_data)
+    GBINDER_INTERNAL;
 
 void
 gbinder_servicepoll_remove_handler(
     GBinderServicePoll* poll,
-    gulong id);
+    gulong id)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_SERVICEPOLL_H */
 

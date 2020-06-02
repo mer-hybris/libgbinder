@@ -84,18 +84,20 @@ typedef struct gbinder_servicemanager_class {
     void (*unwatch)(GBinderServiceManager* self, const char* name);
 } GBinderServiceManagerClass;
 
-GType gbinder_servicemanager_get_type(void);
+GType gbinder_servicemanager_get_type(void) GBINDER_INTERNAL;
 #define GBINDER_TYPE_SERVICEMANAGER (gbinder_servicemanager_get_type())
 
 GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
     GType type,
-    const char* dev);
+    const char* dev)
+    GBINDER_INTERNAL;
 
 void
 gbinder_servicemanager_service_registered(
     GBinderServiceManager* self,
-    const char* name);
+    const char* name)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */
 

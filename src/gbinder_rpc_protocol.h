@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -15,8 +15,8 @@
  *      documentation and/or other materials provided with the distribution.
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -49,13 +49,14 @@ struct gbinder_rpc_protocol {
         char** iface);
 };
 
-extern const GBinderRpcProtocol gbinder_rpc_protocol_binder;
-extern const GBinderRpcProtocol gbinder_rpc_protocol_hwbinder;
+extern const GBinderRpcProtocol gbinder_rpc_protocol_binder GBINDER_INTERNAL;
+extern const GBinderRpcProtocol gbinder_rpc_protocol_hwbinder GBINDER_INTERNAL;
 
 /* Returns one of the above based on the device name */
 const GBinderRpcProtocol*
 gbinder_rpc_protocol_for_device(
-    const char* dev);
+    const char* dev)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_RPC_PROTOCOL_H */
 

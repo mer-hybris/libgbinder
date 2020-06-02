@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -55,15 +55,18 @@ GBinderRemoteObject*
 gbinder_remote_object_new(
     GBinderIpc* ipc,
     guint32 handle,
-    gboolean maybe_dead);
+    gboolean maybe_dead)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_remote_object_reanimate(
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 void
 gbinder_remote_object_handle_death_notification(
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_REMOTE_OBJECT_PRIVATE_H */
 

@@ -67,69 +67,68 @@ void
     int status,
     void* user_data);
 
-G_GNUC_INTERNAL
 GBinderIpc*
 gbinder_ipc_new(
-   const char* dev,
-   const GBinderRpcProtocol* protocol);
+    const char* dev,
+    const GBinderRpcProtocol* protocol)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderIpc*
 gbinder_ipc_ref(
-    GBinderIpc* ipc);
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_ipc_unref(
-    GBinderIpc* ipc);
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_ipc_looper_check(
-   GBinderIpc* ipc);
+   GBinderIpc* ipc)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderObjectRegistry*
 gbinder_ipc_object_registry(
-    GBinderIpc* ipc);
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_ipc_register_local_object(
     GBinderIpc* ipc,
-    GBinderLocalObject* obj);
+    GBinderLocalObject* obj)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderRemoteObject*
 gbinder_ipc_get_remote_object(
     GBinderIpc* ipc,
     guint32 handle,
-    gboolean maybe_dead);
+    gboolean maybe_dead)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* ipc,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderRemoteReply*
 gbinder_ipc_transact_sync_reply(
     GBinderIpc* ipc,
     guint32 handle,
     guint32 code,
     GBinderLocalRequest* req,
-    int* status);
+    int* status)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 int
 gbinder_ipc_transact_sync_oneway(
     GBinderIpc* ipc,
     guint32 handle,
     guint32 code,
-    GBinderLocalRequest* req);
+    GBinderLocalRequest* req)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 gulong
 gbinder_ipc_transact(
     GBinderIpc* ipc,
@@ -139,43 +138,44 @@ gbinder_ipc_transact(
     GBinderLocalRequest* req,
     GBinderIpcReplyFunc func,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 gulong
 gbinder_ipc_transact_custom(
     GBinderIpc* ipc,
     GBinderIpcTxFunc exec,
     GBinderIpcTxFunc done,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_ipc_cancel(
     GBinderIpc* ipc,
-    gulong id);
+    gulong id)
+    GBINDER_INTERNAL;
 
 /* Internal for GBinderLocalObject */
-G_GNUC_INTERNAL
 void
 gbinder_ipc_local_object_disposed(
     GBinderIpc* self,
-    GBinderLocalObject* obj);
+    GBinderLocalObject* obj)
+    GBINDER_INTERNAL;
 
 /* Internal for GBinderRemoteObject */
-G_GNUC_INTERNAL
 void
 gbinder_ipc_remote_object_disposed(
     GBinderIpc* self,
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 /* Declared for unit tests */
-G_GNUC_INTERNAL
 __attribute__((destructor))
 void
 gbinder_ipc_exit(
-    void);
+    void)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_IPC_H */
 

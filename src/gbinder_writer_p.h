@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -48,94 +48,111 @@ typedef struct gbinder_writer_data {
 void
 gbinder_writer_init(
     GBinderWriter* writer,
-    GBinderWriterData* data);
+    GBinderWriterData* data)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
-    GBinderBuffer* buffer);
+    GBinderBuffer* buffer)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_bool(
     GBinderWriterData* data,
-    gboolean value);
+    gboolean value)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_int32(
     GBinderWriterData* data,
-    guint32 value);
+    guint32 value)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_int64(
     GBinderWriterData* data,
-    guint64 value);
+    guint64 value)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_float(
     GBinderWriterData* data,
-    gfloat value);
+    gfloat value)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_double(
     GBinderWriterData* data,
-    gdouble value);
+    gdouble value)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_string8(
     GBinderWriterData* data,
-    const char* str);
+    const char* str)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_string8_len(
     GBinderWriterData* data,
     const char* str,
-    gsize len);
+    gsize len)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_string16(
     GBinderWriterData* data,
-    const char* utf8);
+    const char* utf8)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_string16_len(
     GBinderWriterData* data,
     const char* utf8,
-    gssize num_bytes);
+    gssize num_bytes)
+    GBINDER_INTERNAL;
 
 guint
 gbinder_writer_data_append_buffer_object(
     GBinderWriterData* data,
     const void* ptr,
     gsize size,
-    const GBinderParent* parent);
+    const GBinderParent* parent)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_hidl_vec(
     GBinderWriterData* data,
     const void* base,
     guint count,
-    guint elemsize);
+    guint elemsize)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_hidl_string(
     GBinderWriterData* data,
-    const char* str);
+    const char* str)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_hidl_string_vec(
     GBinderWriterData* data,
     const char* strv[],
-    gssize count);
+    gssize count)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_local_object(
     GBinderWriterData* data,
-    GBinderLocalObject* obj);
+    GBinderLocalObject* obj)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_remote_object(
     GBinderWriterData* data,
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_WRITER_PRIVATE_H */
 
