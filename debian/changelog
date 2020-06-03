@@ -1,3 +1,11 @@
+libgbinder (1.0.43) unstable; urgency=low
+
+  * Hide internal symbols
+  * Respect arch specific lib dir
+  * Allow strip command to be replaced via environment variable
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 03 Jun 2020 15:15:40 +0300
+
 libgbinder (1.0.42) unstable; urgency=low
 
   * Allow GBinderClient to use multiple interfaces
