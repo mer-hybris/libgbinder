@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -46,13 +46,15 @@ gbinder_remote_request_new(
     GBinderObjectRegistry* reg,
     const GBinderRpcProtocol* protocol,
     pid_t pid,
-    uid_t euid);
+    uid_t euid)
+    GBINDER_INTERNAL;
 
 void
 gbinder_remote_request_set_data(
     GBinderRemoteRequest* request,
     guint txcode,
-    GBinderBuffer* buffer);
+    GBinderBuffer* buffer)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_REMOTE_REQUEST_PRIVATE_H */
 

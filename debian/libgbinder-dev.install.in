@@ -1,0 +1,3 @@
+debian/tmp/@LIBDIR@/libgbinder.so @LIBDIR@
+debian/tmp/@LIBDIR@/pkgconfig/libgbinder.pc @LIBDIR@/pkgconfig
+debian/tmp/usr/include/* usr/include

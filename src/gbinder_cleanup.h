@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,17 +37,20 @@
 
 void
 gbinder_cleanup_free(
-    GBinderCleanup* cleanup);
+    GBinderCleanup* cleanup)
+    GBINDER_INTERNAL;
 
 void
 gbinder_cleanup_reset(
-    GBinderCleanup* cleanup);
+    GBinderCleanup* cleanup)
+    GBINDER_INTERNAL;
 
 GBinderCleanup*
 gbinder_cleanup_add(
     GBinderCleanup* cleanup,
     GDestroyNotify destroy,
-    gpointer pointer);
+    gpointer pointer)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_CLEANUP_H */
 

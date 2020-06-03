@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -40,87 +40,105 @@ struct pollfd;
 GBinderDriver*
 gbinder_driver_new(
     const char* dev,
-    const GBinderRpcProtocol* protocol);
+    const GBinderRpcProtocol* protocol)
+    GBINDER_INTERNAL;
 
 GBinderDriver*
 gbinder_driver_ref(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 void
 gbinder_driver_unref(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 int
 gbinder_driver_fd(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 int
 gbinder_driver_poll(
     GBinderDriver* driver,
-    struct pollfd* pollfd);
+    struct pollfd* pollfd)
+    GBINDER_INTERNAL;
 
 const char*
 gbinder_driver_dev(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 const GBinderIo*
 gbinder_driver_io(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_request_death_notification(
     GBinderDriver* driver,
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_clear_death_notification(
     GBinderDriver* driver,
-    GBinderRemoteObject* obj);
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_increfs(
     GBinderDriver* driver,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_decrefs(
     GBinderDriver* driver,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_acquire(
     GBinderDriver* driver,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_release(
     GBinderDriver* driver,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
 void
 gbinder_driver_close_fds(
     GBinderDriver* self,
     void** objects,
-    const void* end);
+    const void* end)
+    GBINDER_INTERNAL;
 
 void
 gbinder_driver_free_buffer(
     GBinderDriver* driver,
-    void* buffer);
+    void* buffer)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_enter_looper(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_driver_exit_looper(
-    GBinderDriver* driver);
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
 
 int
 gbinder_driver_read(
     GBinderDriver* driver,
     GBinderObjectRegistry* reg,
-    GBinderHandler* handler);
+    GBinderHandler* handler)
+    GBINDER_INTERNAL;
 
 int
 gbinder_driver_transact(
@@ -129,18 +147,21 @@ gbinder_driver_transact(
     guint32 handle,
     guint32 code,
     GBinderLocalRequest* request,
-    GBinderRemoteReply* reply);
+    GBinderRemoteReply* reply)
+    GBINDER_INTERNAL;
 
 int
 gbinder_driver_ping(
     GBinderDriver* driver,
     GBinderObjectRegistry* reg,
-    guint32 handle);
+    guint32 handle)
+    GBINDER_INTERNAL;
 
 GBinderLocalRequest*
 gbinder_driver_local_request_new(
     GBinderDriver* self,
-    const char* iface);
+    const char* iface)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_DRIVER_H */
 

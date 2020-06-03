@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -39,16 +39,19 @@
 
 GBinderRemoteReply*
 gbinder_remote_reply_new(
-    GBinderObjectRegistry* reg);
+    GBinderObjectRegistry* reg)
+    GBINDER_INTERNAL;
 
 void
 gbinder_remote_reply_set_data(
     GBinderRemoteReply* reply,
-    GBinderBuffer* buffer);
+    GBinderBuffer* buffer)
+    GBINDER_INTERNAL;
 
 gboolean
 gbinder_remote_reply_is_empty(
-    GBinderRemoteReply* reply);
+    GBinderRemoteReply* reply)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_REMOTE_REPLY_PRIVATE_H */
 

@@ -33,64 +33,65 @@
 #ifndef GBINDER_EVENTLOOP_PRIVATE_H
 #define GBINDER_EVENTLOOP_PRIVATE_H
 
+#include "gbinder_types_p.h"
 #include "gbinder_eventloop.h"
 
-G_GNUC_INTERNAL
 GBinderEventLoopTimeout*
 gbinder_timeout_add(
     guint millis,
     GSourceFunc func,
-    gpointer data);
+    gpointer data)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderEventLoopTimeout*
 gbinder_idle_add(
     GSourceFunc func,
-    gpointer data);
+    gpointer data)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_timeout_remove(
-    GBinderEventLoopTimeout* timeout);
+    GBinderEventLoopTimeout* timeout)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderEventLoopCallback*
 gbinder_idle_callback_new(
     GBinderEventLoopCallbackFunc func,
     gpointer data,
-    GDestroyNotify destroy);
+    GDestroyNotify destroy)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderEventLoopCallback*
 gbinder_idle_callback_schedule_new(
     GBinderEventLoopCallbackFunc func,
     gpointer data,
-    GDestroyNotify destroy);
+    GDestroyNotify destroy)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 GBinderEventLoopCallback*
 gbinder_idle_callback_ref(
-    GBinderEventLoopCallback* cb);
+    GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_idle_callback_unref(
-    GBinderEventLoopCallback* cb);
+    GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_idle_callback_schedule(
-    GBinderEventLoopCallback* cb);
+    GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_idle_callback_cancel(
-    GBinderEventLoopCallback* cb);
+    GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
 
-G_GNUC_INTERNAL
 void
 gbinder_idle_callback_destroy(
-    GBinderEventLoopCallback* cb);
+    GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_EVENTLOOP_PRIVATE_H */
 

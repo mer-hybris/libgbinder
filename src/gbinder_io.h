@@ -181,8 +181,8 @@ struct gbinder_io {
     int (*write_read)(int fd, GBinderIoBuf* write, GBinderIoBuf* read);
 };
 
-extern const GBinderIo gbinder_io_32;
-extern const GBinderIo gbinder_io_64;
+extern const GBinderIo gbinder_io_32 GBINDER_INTERNAL;
+extern const GBinderIo gbinder_io_64 GBINDER_INTERNAL;
 
 #endif /* GBINDER_IO_H */
 
