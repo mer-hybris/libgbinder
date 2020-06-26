@@ -447,8 +447,14 @@ gbinder_driver_handle_transaction(
             tx.code, tx.flags, &status);
         break;
     case GBINDER_LOCAL_TRANSACTION_SUPPORTED:
-        reply = gbinder_handler_transact(h, obj, req, tx.code, tx.flags,
-            &status);
+        /*
+         * NULL GBinderHandler means that this is a synchronous call
+         * executed on the main thread, meaning that we can call the
+         * local object directly.
+         */
+        reply = h ? gbinder_handler_transact(h, obj, req, tx.code, tx.flags,
+            &status) : gbinder_local_object_handle_transaction(obj, req,
+            tx.code, tx.flags, &status);
         break;
     default:
         GWARN("Unhandled transaction %s 0x%08x", iface, tx.code);
@@ -963,6 +969,7 @@ int
 gbinder_driver_transact(
     GBinderDriver* self,
     GBinderObjectRegistry* reg,
+    GBinderHandler* handler,
     guint32 handle,
     guint32 code,
     GBinderLocalRequest* req,
@@ -1019,7 +1026,7 @@ gbinder_driver_transact(
         if (err < 0) {
             txstatus = err;
         } else {
-            txstatus = gbinder_driver_txstatus(self, reg, NULL, &rb, reply);
+            txstatus = gbinder_driver_txstatus(self, reg, handler, &rb, reply);
         }
     }
 
@@ -1028,14 +1035,14 @@ gbinder_driver_transact(
         GASSERT(write.consumed == write.size || txstatus > 0);
 
         /* Loop until we have handled all the incoming commands */
-        gbinder_driver_handle_commands(self, reg, NULL, &rb);
+        gbinder_driver_handle_commands(self, reg, handler, &rb);
         while (rb.buf.consumed) {
             int err = gbinder_driver_write_read(self, NULL, &rb.buf);
             if (err < 0) {
                 txstatus = err;
                 break;
             } else {
-                gbinder_driver_handle_commands(self, reg, NULL, &rb);
+                gbinder_driver_handle_commands(self, reg, handler, &rb);
             }
         }
     }
@@ -1058,7 +1065,7 @@ gbinder_driver_ping(
 
     gbinder_local_request_init_writer(req, &writer);
     protocol->write_ping(&writer);
-    ret = gbinder_driver_transact(self, reg, handle, protocol->ping_tx,
+    ret = gbinder_driver_transact(self, reg, NULL, handle, protocol->ping_tx,
         req, reply);
 
     gbinder_local_request_unref(req);

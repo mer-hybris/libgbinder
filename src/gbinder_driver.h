@@ -144,6 +144,7 @@ int
 gbinder_driver_transact(
     GBinderDriver* driver,
     GBinderObjectRegistry* reg,
+    GBinderHandler* handler,
     guint32 handle,
     guint32 code,
     GBinderLocalRequest* request,

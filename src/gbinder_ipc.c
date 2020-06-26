@@ -162,6 +162,11 @@ struct gbinder_ipc_looper {
     int txfd[2];
 };
 
+typedef struct gbinder_ipc_tx_handler {
+    int pipefd[2];
+    int txfd[2];
+} GBinderIpcTxHandler;
+
 typedef struct gbinder_ipc_tx_priv GBinderIpcTxPriv;
 
 typedef
@@ -918,6 +923,133 @@ gbinder_ipc_looper_join(
 }
 
 /*==========================================================================*
+ * GBinderIpcTxHandler
+ *
+ * It's needed to handle the following scenario:
+ *
+ * 1. Asynchronous call is made. The actual transaction is performed on
+ *    gbinder_ipc_tx_proc thread.
+ * 2. While we were are waiting for completion of our transaction, we
+ *    receive a valid incoming transation.
+ * 3. This transaction is handled by gbinder_ipc_tx_handler_transact.
+ *
+ * This seems to be quite a rare scenario, so we allocate a new
+ * GBinderIpcTxHandler (and new pipes) for each such transaction,
+ * to keep things as simple as possible.
+ *
+ *==========================================================================*/
+
+static
+GBinderIpcTxHandler*
+gbinder_ipc_tx_handler_new(
+    void)
+{
+    GBinderIpcTxHandler* h = g_slice_new0(GBinderIpcTxHandler);
+
+    /* Note: pipe() calls can actually fail */
+    if (!pipe(h->txfd)) {
+        if (!pipe(h->pipefd)) {
+            return h;
+        } else {
+            GERR("Failed to create a tx pipe: %s", strerror(errno));
+        }
+        close(h->txfd[0]);
+        close(h->txfd[1]);
+    } else {
+        GERR("Failed to create a tx pipe: %s", strerror(errno));
+    }
+    g_slice_free(GBinderIpcTxHandler, h);
+    return NULL;
+}
+
+static
+void
+gbinder_ipc_tx_handler_free(
+    GBinderIpcTxHandler* h)
+{
+    close(h->pipefd[0]);
+    close(h->pipefd[1]);
+    if (h->txfd[0] >= 0) {
+        close(h->txfd[0]);
+        close(h->txfd[1]);
+    }
+    g_slice_free(GBinderIpcTxHandler, h);
+}
+
+static
+GBinderLocalReply*
+gbinder_ipc_tx_handler_transact(
+    GBinderHandler* handler,
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* result)
+{
+    GBinderIpcTxHandler* h = gbinder_ipc_tx_handler_new();
+    GBinderLocalReply* reply = NULL;
+    int status = -EFAULT;
+
+    if (h) {
+        GBinderIpcLooperTx* tx = gbinder_ipc_looper_tx_new(obj, code, flags,
+            req, h->txfd);
+        struct pollfd fds[2];
+        guint8 done = 0;
+        /* Handle transaction on the main thread */
+        GBinderEventLoopCallback* callback =
+            gbinder_idle_callback_schedule_new(gbinder_ipc_looper_tx_handle,
+                gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
+
+        /* Wait for completion */
+        memset(fds, 0, sizeof(fds));
+        fds[0].fd = h->pipefd[0];
+        fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+        fds[1].fd = tx->pipefd[0];
+        fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+        poll(fds, 2, -1);
+        if ((fds[1].revents & POLLIN) &&
+            read(fds[1].fd, &done, sizeof(done)) == 1) {
+            /* Normal completion */
+            if (done == TX_BLOCKED) {
+                /* Block until asynchronous transaction gets completed. */
+                done = 0;
+                memset(fds, 0, sizeof(fds));
+                fds[0].fd = h->pipefd[0];
+                fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+                fds[1].fd = tx->pipefd[0];
+                fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+                poll(fds, 2, -1);
+                if ((fds[1].revents & POLLIN) &&
+                    read(fds[1].fd, &done, sizeof(done)) == 1) {
+                    GASSERT(done == TX_DONE);
+                }
+            }
+        }
+        if (done) {
+            GASSERT(done == TX_DONE);
+            reply = gbinder_local_reply_ref(tx->reply);
+            status = tx->status;
+            if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
+                /*
+                 * This wasn't the last references meaning that
+                 * gbinder_ipc_looper_tx_free() will close the
+                 * descriptors and we will have to create a new
+                 * pipe for the next transaction.
+                 */
+                h->txfd[0] = h->txfd[1] = -1;
+            }
+        } else {
+            gbinder_ipc_looper_tx_unref(tx, FALSE);
+        }
+        gbinder_idle_callback_destroy(callback);
+        gbinder_ipc_tx_handler_free(h);
+    }
+
+    *result = status;
+    return reply;
+}
+
+/*==========================================================================*
  * GBinderObjectRegistry
  *==========================================================================*/
 
@@ -1288,19 +1420,23 @@ void
 gbinder_ipc_tx_internal_exec(
     GBinderIpcTxPriv* priv)
 {
+    static const GBinderHandlerFunctions handler_fn = {
+        gbinder_ipc_tx_handler_transact
+    };
     GBinderIpcTxInternal* tx = gbinder_ipc_tx_internal_cast(priv);
     GBinderIpcTx* pub = &priv->pub;
     GBinderIpc* self = pub->ipc;
     GBinderObjectRegistry* reg = &self->priv->object_registry;
+    GBinderHandler handler = { &handler_fn };
 
     /* Perform synchronous transaction */
     if (tx->flags & GBINDER_TX_FLAG_ONEWAY) {
-        tx->status = gbinder_driver_transact(self->driver, reg, tx->handle,
-            tx->code, tx->req, NULL);
+        tx->status = gbinder_driver_transact(self->driver, reg, &handler,
+            tx->handle, tx->code, tx->req, NULL);
     } else {
         tx->reply = gbinder_remote_reply_new(&self->priv->object_registry);
-        tx->status = gbinder_driver_transact(self->driver, reg, tx->handle,
-            tx->code, tx->req, tx->reply);
+        tx->status = gbinder_driver_transact(self->driver, reg, &handler,
+            tx->handle, tx->code, tx->req, tx->reply);
         if (tx->status != GBINDER_STATUS_OK &&
             gbinder_remote_reply_is_empty(tx->reply)) {
             /* Drop useless reply */
@@ -1512,8 +1648,8 @@ gbinder_ipc_transact_sync_reply(
         GBinderIpcPriv* priv = self->priv;
         GBinderObjectRegistry* reg = &priv->object_registry;
         GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
-        int ret = gbinder_driver_transact(self->driver, reg, handle, code,
-            req, reply);
+        int ret = gbinder_driver_transact(self->driver, reg, NULL, handle,
+            code, req, reply);
 
         if (status) *status = ret;
         if (ret == GBINDER_STATUS_OK || !gbinder_remote_reply_is_empty(reply)) {
@@ -1538,7 +1674,7 @@ gbinder_ipc_transact_sync_oneway(
         GBinderIpcPriv* priv = self->priv;
 
         return gbinder_driver_transact(self->driver, &priv->object_registry,
-            handle, code, req, NULL);
+            NULL, handle, code, req, NULL);
     } else {
         return (-EINVAL);
     }
