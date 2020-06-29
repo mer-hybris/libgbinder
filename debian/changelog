@@ -1,3 +1,9 @@
+libgbinder (1.0.44) unstable; urgency=low
+
+  * Never drop valid incoming transactions
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 29 Jun 2020 17:05:22 +0300
+
 libgbinder (1.0.43) unstable; urgency=low
 
   * Hide internal symbols
