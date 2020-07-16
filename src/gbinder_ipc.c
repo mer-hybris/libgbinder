@@ -689,17 +689,16 @@ gbinder_ipc_looper_transact(
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
             status = tx->status;
-            if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
-                /*
-                 * This wasn't the last references meaning that
-                 * gbinder_ipc_looper_tx_free() will close the
-                 * descriptors and we will have to create a new
-                 * pipe for the next transaction.
-                 */
-                looper->txfd[0] = looper->txfd[1] = -1;
-            }
-        } else {
-            gbinder_ipc_looper_tx_unref(tx, FALSE);
+        }
+
+        if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
+            /*
+             * This wasn't the last reference meaning that
+             * gbinder_ipc_looper_tx_free() will close the
+             * descriptors and we will have to create a new
+             * pipe for the next transaction.
+             */
+            looper->txfd[0] = looper->txfd[1] = -1;
         }
 
         gbinder_idle_callback_destroy(callback);
@@ -1024,22 +1023,23 @@ gbinder_ipc_tx_handler_transact(
                 GASSERT(done == TX_DONE);
             }
         }
+
         if (done) {
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
             status = tx->status;
-            if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
-                /*
-                 * This wasn't the last references meaning that
-                 * gbinder_ipc_looper_tx_free() will close the
-                 * descriptors and we will have to create a new
-                 * pipe for the next transaction.
-                 */
-                h->txfd[0] = h->txfd[1] = -1;
-            }
-        } else {
-            gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
+
+        if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
+            /*
+             * This wasn't the last references meaning that
+             * gbinder_ipc_looper_tx_free() will close the
+             * descriptors and we will have to create a new
+             * pipe for the next transaction.
+             */
+            h->txfd[0] = h->txfd[1] = -1;
+        }
+
         gbinder_idle_callback_destroy(callback);
         gbinder_ipc_tx_handler_free(h);
     }
