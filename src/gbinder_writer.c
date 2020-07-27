@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -686,13 +686,9 @@ gbinder_writer_data_append_hidl_vec(
     vec->owns_buffer = TRUE;
     data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec);
 
-    /* Write the buffer object pointing to the vector descriptor */
+    /* Every vector, even the one without data, requires two buffer objects */
     gbinder_writer_data_write_buffer_object(data, vec, sizeof(*vec), NULL);
-
-    /* Not sure what's the right way to deal with NULL vectors... */
-    if (buf) {
-        gbinder_writer_data_write_buffer_object(data, buf, total, &vec_parent);
-    }
+    gbinder_writer_data_write_buffer_object(data, buf, total, &vec_parent);
 }
 
 void
@@ -732,13 +728,14 @@ gbinder_writer_data_append_hidl_string(
     gbinder_writer_data_write_buffer_object(data, hidl_string,
         sizeof(*hidl_string), NULL);
 
-    /* Not sure what's the right way to deal with NULL strings... */
     if (str) {
         /* Write the buffer pointing to the string data including the
          * NULL terminator, referencing string descriptor as a parent. */
         gbinder_writer_data_write_buffer_object(data, str, len+1, &str_parent);
         GVERBOSE_("\"%s\" %u %u %u", str, (guint)len, (guint)str_parent.index,
             (guint)data->buffers_size);
+    } else {
+        gbinder_writer_data_write_buffer_object(data, NULL, 0, &str_parent);
     }
 }
 
@@ -819,9 +816,16 @@ gbinder_writer_data_append_hidl_string_vec(
                 GVERBOSE_("%d. \"%s\" %u %u %u", i + 1, hidl_str->data.str,
                     (guint)hidl_str->len, (guint)str_parent.index,
                     (guint)data->buffers_size);
+            } else {
+                GVERBOSE_("%d. NULL %u %u %u", i + 1, (guint)hidl_str->len,
+                    (guint)str_parent.index, (guint)data->buffers_size);
+                gbinder_writer_data_write_buffer_object(data, NULL, 0,
+                    &str_parent);
             }
             str_parent.offset += sizeof(GBinderHidlString);
         }
+    } else {
+        gbinder_writer_data_write_buffer_object(data, NULL, 0, &vec_parent);
     }
 }
 

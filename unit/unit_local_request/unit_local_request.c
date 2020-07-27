@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -385,10 +385,10 @@ test_hidl_string(
     gbinder_local_request_append_hidl_string(req, NULL);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets->count == 1);
+    g_assert(offsets->count == 2);
     g_assert(offsets->data[0] == 0);
     g_assert(gbinder_output_data_buffers_size(data)==sizeof(GBinderHidlString));
-    g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
+    g_assert(data->bytes->len == 2*BUFFER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
 }
 
@@ -408,10 +408,10 @@ test_hidl_string_vec(
     gbinder_local_request_append_hidl_string_vec(req, NULL, 0);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets->count == 1);
+    g_assert(offsets->count == 2);
     g_assert(offsets->data[0] == 0);
     g_assert(gbinder_output_data_buffers_size(data) == sizeof(GBinderHidlVec));
-    g_assert(data->bytes->len == BUFFER_OBJECT_SIZE_32);
+    g_assert(data->bytes->len == 2*BUFFER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
 }
 
