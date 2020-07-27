@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -485,8 +485,6 @@ typedef struct test_hidl_vec_data {
     guint buffers_size;
 } TestHidlVecData;
 
-static guint test_hidl_vec_offsets_0[] =
-    { 0 };
 static guint test_hidl_vec_offsets_32[] =
     { 0, BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_vec_offsets_64[] =
@@ -494,12 +492,12 @@ static guint test_hidl_vec_offsets_64[] =
 
 static const TestHidlVecData test_hidl_vec_tests[] = {
     { "32/null", &gbinder_io_32, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(GBinderHidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32), sizeof(GBinderHidlVec) },
     { "32/2x1", &gbinder_io_32, "xy", 2, 1,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32),
       sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ },
     { "64/null", &gbinder_io_64, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_0), sizeof(GBinderHidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64), sizeof(GBinderHidlVec) },
     { "64/2x2", &gbinder_io_64, "xxyy", 2, 2,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64),
       sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ }
@@ -544,8 +542,6 @@ typedef struct test_hidl_string_data {
     guint buffers_size;
 } TestHidlStringData;
 
-static guint test_hidl_string_offsets_0[] =
-    { 0 };
 static guint test_hidl_string_offsets_32[] =
     { 0, BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_string_offsets_64[] =
@@ -553,13 +549,13 @@ static guint test_hidl_string_offsets_64[] =
 
 static const TestHidlStringData test_hidl_string_tests[] = {
     { "32/null", &gbinder_io_32, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
       sizeof(GBinderHidlString) },
     { "32/xxx", &gbinder_io_32, "xxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
       sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "64/null", &gbinder_io_64, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_0),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
       sizeof(GBinderHidlString) },
     { "64/xxxxxxx", &gbinder_io_64, "xxxxxxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
@@ -607,7 +603,7 @@ test_hidl_string2(
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 3);
+    g_assert(offsets->count == 4);
     g_assert(offsets->data[0] == 0);
     g_assert(offsets->data[1] == BUFFER_OBJECT_SIZE_32);
     g_assert(offsets->data[2] == 2*BUFFER_OBJECT_SIZE_32);
@@ -634,8 +630,10 @@ typedef struct test_hidl_string_vec_data {
 
 static char* test_hidl_string_vec_data_1[] = { "test" };
 
-static guint test_hidl_string_vec_offsets_empty[] =
-    { 0 };
+static guint test_hidl_string_vec_offsets_empty_32[] =
+    { 0, BUFFER_OBJECT_SIZE_32 };
+static guint test_hidl_string_vec_offsets_empty_64[] =
+    { 0, BUFFER_OBJECT_SIZE_64 };
 static guint test_hidl_string_vec_offsets_1_32[] =
     { 0, BUFFER_OBJECT_SIZE_32, 2*BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_string_vec_offsets_1_64[] =
@@ -643,14 +641,14 @@ static guint test_hidl_string_vec_offsets_1_64[] =
 
 static const TestHidlStringVecData test_hidl_string_vec_tests[] = {
     { "32/null", &gbinder_io_32, NULL, -1,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty_32),
       sizeof(GBinderHidlVec) },
     { "32/1", &gbinder_io_32,
       (const char**)TEST_ARRAY_AND_COUNT(test_hidl_string_vec_data_1),
       TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_1_32),
       sizeof(GBinderHidlVec) + sizeof(GBinderHidlString) + 8 },
     { "64/null", &gbinder_io_64, NULL, -1,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_vec_offsets_empty_64),
       sizeof(GBinderHidlVec) },
     { "64/1", &gbinder_io_64,
       (const char**)TEST_ARRAY_AND_COUNT(test_hidl_string_vec_data_1),
