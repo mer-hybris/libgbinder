@@ -1,3 +1,9 @@
+libgbinder (1.0.45) unstable; urgency=low
+
+  * Always provide data buffer for hidl vector
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 27 Jul 2020 23:19:25 +0300
+
 libgbinder (1.0.44) unstable; urgency=low
 
   * Never drop valid incoming transactions
