@@ -1,11 +1,13 @@
 *~
 debian/files
-debian/libgbinder-dev
 debian/libgbinder
+debian/libgbinder-dev
+debian/libgbinder-tools
 debian/*.debhelper.log
 debian/*.debhelper
 debian/*.substvars
-debian/*.install
+debian/libgbinder.install
+debian/libgbinder-dev.install
 debian/tmp
 documentation.list
 installroot
