@@ -231,7 +231,7 @@ clean:
 	rm -fr debian/tmp debian/libgbinder debian/libgbinder-dev
 	rm -f documentation.list debian/files debian/*.substvars
 	rm -f debian/*.debhelper.log debian/*.debhelper debian/*~
-	rm -f debian/*.install
+	rm -f debian/libgbinder.install debian/libgbinder-dev.install
 
 test:
 	make -C unit test

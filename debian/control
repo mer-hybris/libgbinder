@@ -16,3 +16,9 @@ Section: libdevel
 Architecture: any
 Depends: libgbinder (= ${binary:Version}), ${misc:Depends}
 Description: Development files for libgbinder
+
+Package: libgbinder-tools
+Section: utils
+Architecture: any
+Depends: libgbinder, ${misc:Depends}
+Description: Binder command line utilities
