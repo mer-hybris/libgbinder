@@ -210,6 +210,40 @@ gbinder_ipc_looper_new(
     GBinderIpc* ipc);
 
 /*==========================================================================*
+ * Utilities
+ *==========================================================================*/
+
+static
+gboolean
+gbinder_ipc_wait(
+    int fd_wakeup,
+    int fd_read,
+    guint8* out)
+{
+    struct pollfd fds[2];
+
+    memset(fds, 0, sizeof(fds));
+    fds[0].fd = fd_wakeup;
+    fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+    fds[1].fd = fd_read;
+    fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+    if (poll(fds, 2, -1) < 0) {
+        GWARN("Transaction pipe polling error: %s", strerror(errno));
+    } else if (fds[1].revents & POLLIN) {
+        const ssize_t n = read(fds[1].fd, out, 1);
+
+        if (n == 1) {
+            return TRUE;
+        } else if (n < 0) {
+            GWARN("Transaction pipe read error: %s", strerror(errno));
+        } else {
+            GWARN("Nothing was read from the transaction pipe");
+        }
+    }
+    return FALSE;
+}
+
+/*==========================================================================*
  * GBinderIpcLooperTx
  *==========================================================================*/
 
@@ -594,7 +628,6 @@ gbinder_ipc_looper_transact(
         GBinderIpcLooperTx* tx = gbinder_ipc_looper_tx_new(obj, code, flags,
             req, looper->txfd);
         GBinderIpcPriv* priv = ipc->priv;
-        struct pollfd fds[2];
         guint8 done = 0;
         gboolean was_blocked = FALSE;
         /* Let GBinderLocalObject handle the transaction on the main thread */
@@ -603,69 +636,52 @@ gbinder_ipc_looper_transact(
                 gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
 
         /* Wait for either transaction completion or looper shutdown */
-        memset(fds, 0, sizeof(fds));
-        fds[0].fd = looper->pipefd[0];
-        fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-        fds[1].fd = tx->pipefd[0];
-        fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-        poll(fds, 2, -1);
+        if (gbinder_ipc_wait(looper->pipefd[0], tx->pipefd[0], &done) &&
+            done == TX_BLOCKED) {
+            /*
+             * We are going to block this looper for potentially
+             * significant period of time. Start new looper to
+             * accept normal incoming requests and terminate this
+             * one when we are done with this transaction.
+             *
+             * For the duration of the transaction, this looper is
+             * moved to the blocked_loopers list.
+             */
+            GBinderIpcPriv* priv = looper->ipc->priv;
+            GBinderIpcLooper* new_looper = NULL;
 
-        if ((fds[1].revents & POLLIN) &&
-            read(fds[1].fd, &done, sizeof(done)) == 1) {
-            /* Normal completion */
-            if (done == TX_BLOCKED) {
-                /*
-                 * We are going to block this looper for potentially
-                 * significant period of time. Start new looper to
-                 * accept normal incoming requests and terminate this
-                 * one when we are done with this transaction.
-                 *
-                 * For the duration of the transaction, this looper is
-                 * moved to the blocked_loopers list.
-                 */
-                GBinderIpcPriv* priv = looper->ipc->priv;
-                GBinderIpcLooper* new_looper = NULL;
+            /* Lock */
+            g_mutex_lock(&priv->looper_mutex);
+            if (gbinder_ipc_looper_remove_primary(looper)) {
+                GDEBUG("Primary looper %s is blocked", looper->name);
+                looper->next = priv->blocked_loopers;
+                priv->blocked_loopers = looper;
+                was_blocked = TRUE;
 
-                /* Lock */
-                g_mutex_lock(&priv->looper_mutex);
-                if (gbinder_ipc_looper_remove_primary(looper)) {
-                    GDEBUG("Primary looper %s is blocked", looper->name);
-                    looper->next = priv->blocked_loopers;
-                    priv->blocked_loopers = looper;
-                    was_blocked = TRUE;
-
-                    /* If there's no more primary loopers left, create one */
-                    if (!priv->primary_loopers) {
-                        new_looper = gbinder_ipc_looper_new(ipc);
-                        if (new_looper) {
-                            /* Will unref it after it gets started */
-                            gbinder_ipc_looper_ref(new_looper);
-                            priv->primary_loopers = new_looper;
-                        }
+                /* If there's no more primary loopers left, create one */
+                if (!priv->primary_loopers) {
+                    new_looper = gbinder_ipc_looper_new(ipc);
+                    if (new_looper) {
+                        /* Will unref it after it gets started */
+                        gbinder_ipc_looper_ref(new_looper);
+                        priv->primary_loopers = new_looper;
                     }
                 }
-                g_mutex_unlock(&priv->looper_mutex);
-                /* Unlock */
+            }
+            g_mutex_unlock(&priv->looper_mutex);
+            /* Unlock */
 
-                if (new_looper) {
-                    /* Wait until it gets started */
-                    gbinder_ipc_looper_start(new_looper);
-                    gbinder_ipc_looper_unref(new_looper);
-                }
+            if (new_looper) {
+                /* Wait until it gets started */
+                gbinder_ipc_looper_start(new_looper);
+                gbinder_ipc_looper_unref(new_looper);
+            }
 
-                /* Block until asynchronous transaction gets completed. */
-                done = 0;
-                memset(fds, 0, sizeof(fds));
-                fds[0].fd = looper->pipefd[0];
-                fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-                fds[1].fd = tx->pipefd[0];
-                fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-                poll(fds, 2, -1);
-                if ((fds[1].revents & POLLIN) &&
-                    read(fds[1].fd, &done, sizeof(done)) == 1) {
-                    GDEBUG("Looper %s is released", looper->name);
-                    GASSERT(done == TX_DONE);
-                }
+            /* Block until asynchronous transaction gets completed. */
+            done = 0;
+            if (gbinder_ipc_wait(looper->pipefd[0], tx->pipefd[0], &done)) {
+                GDEBUG("Looper %s is released", looper->name);
+                GASSERT(done == TX_DONE);
             }
         }
 
@@ -673,17 +689,16 @@ gbinder_ipc_looper_transact(
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
             status = tx->status;
-            if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
-                /*
-                 * This wasn't the last references meaning that
-                 * gbinder_ipc_looper_tx_free() will close the
-                 * descriptors and we will have to create a new
-                 * pipe for the next transaction.
-                 */
-                looper->txfd[0] = looper->txfd[1] = -1;
-            }
-        } else {
-            gbinder_ipc_looper_tx_unref(tx, FALSE);
+        }
+
+        if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
+            /*
+             * This wasn't the last reference meaning that
+             * gbinder_ipc_looper_tx_free() will close the
+             * descriptors and we will have to create a new
+             * pipe for the next transaction.
+             */
+            looper->txfd[0] = looper->txfd[1] = -1;
         }
 
         gbinder_idle_callback_destroy(callback);
@@ -993,7 +1008,6 @@ gbinder_ipc_tx_handler_transact(
     if (h) {
         GBinderIpcLooperTx* tx = gbinder_ipc_looper_tx_new(obj, code, flags,
             req, h->txfd);
-        struct pollfd fds[2];
         guint8 done = 0;
         /* Handle transaction on the main thread */
         GBinderEventLoopCallback* callback =
@@ -1001,46 +1015,31 @@ gbinder_ipc_tx_handler_transact(
                 gbinder_ipc_looper_tx_ref(tx), gbinder_ipc_looper_tx_done);
 
         /* Wait for completion */
-        memset(fds, 0, sizeof(fds));
-        fds[0].fd = h->pipefd[0];
-        fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-        fds[1].fd = tx->pipefd[0];
-        fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-        poll(fds, 2, -1);
-        if ((fds[1].revents & POLLIN) &&
-            read(fds[1].fd, &done, sizeof(done)) == 1) {
-            /* Normal completion */
-            if (done == TX_BLOCKED) {
-                /* Block until asynchronous transaction gets completed. */
-                done = 0;
-                memset(fds, 0, sizeof(fds));
-                fds[0].fd = h->pipefd[0];
-                fds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-                fds[1].fd = tx->pipefd[0];
-                fds[1].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
-                poll(fds, 2, -1);
-                if ((fds[1].revents & POLLIN) &&
-                    read(fds[1].fd, &done, sizeof(done)) == 1) {
-                    GASSERT(done == TX_DONE);
-                }
+        if (gbinder_ipc_wait(h->pipefd[0], tx->pipefd[0], &done) &&
+            done == TX_BLOCKED) {
+            /* Block until asynchronous transaction gets completed. */
+            done = 0;
+            if (gbinder_ipc_wait(h->pipefd[0], tx->pipefd[0], &done)) {
+                GASSERT(done == TX_DONE);
             }
         }
+
         if (done) {
             GASSERT(done == TX_DONE);
             reply = gbinder_local_reply_ref(tx->reply);
             status = tx->status;
-            if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
-                /*
-                 * This wasn't the last references meaning that
-                 * gbinder_ipc_looper_tx_free() will close the
-                 * descriptors and we will have to create a new
-                 * pipe for the next transaction.
-                 */
-                h->txfd[0] = h->txfd[1] = -1;
-            }
-        } else {
-            gbinder_ipc_looper_tx_unref(tx, FALSE);
         }
+
+        if (!gbinder_ipc_looper_tx_unref(tx, TRUE)) {
+            /*
+             * This wasn't the last references meaning that
+             * gbinder_ipc_looper_tx_free() will close the
+             * descriptors and we will have to create a new
+             * pipe for the next transaction.
+             */
+            h->txfd[0] = h->txfd[1] = -1;
+        }
+
         gbinder_idle_callback_destroy(callback);
         gbinder_ipc_tx_handler_free(h);
     }
