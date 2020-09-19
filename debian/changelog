@@ -1,3 +1,9 @@
+libgbinder (1.0.47) unstable; urgency=low
+
+  * Make library executable on RPM based systems
+
+ -- Slava Monich <slava.monich@jolla.com>  Sat, 19 Sep 2020 20:14:20 +0300
+
 libgbinder (1.0.46) unstable; urgency=low
 
   * Make sure we drop fds that are going to be closed
