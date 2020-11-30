@@ -64,7 +64,6 @@ typedef struct gbinder_servicemanager_class {
 
     const char* iface;
     const char* default_device;
-    const GBinderRpcProtocol* rpc_protocol;
 
     /* Methods (synchronous) */
     char** (*list)(GBinderServiceManager* self);

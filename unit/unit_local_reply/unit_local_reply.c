@@ -399,7 +399,7 @@ test_local_object(
     GBinderLocalReply* reply;
     GBinderOutputData* data;
     GUtilIntArray* offsets;
-    GBinderIpc* ipc = gbinder_ipc_new(NULL, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(NULL);
     const char* const ifaces[] = { "android.hidl.base@1.0::IBase", NULL };
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
 

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -174,7 +174,6 @@ test_servicemanager_class_init(
 {
     klass->iface = TEST_SERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
-    klass->rpc_protocol = &gbinder_rpc_protocol_binder;
     klass->list = test_servicemanager_list;
     klass->get_service = test_servicemanager_get_service;
     klass->add_service = test_servicemanager_add_service;
@@ -225,7 +224,7 @@ test_basic(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GBinderServicePoll* weakptr = NULL;
     GBinderServiceManager* manager;
     GBinderServicePoll* poll;
@@ -301,7 +300,7 @@ test_notify1(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServicePoll* weakptr = NULL;
     GBinderServiceManager* manager;
@@ -375,7 +374,7 @@ test_notify2(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServicePoll* weakptr = NULL;
     GBinderServiceManager* manager;
@@ -434,7 +433,7 @@ test_already_there(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServicePoll* weakptr = NULL;
     GBinderServiceManager* manager;

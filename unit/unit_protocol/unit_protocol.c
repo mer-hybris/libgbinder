@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,7 @@
 #include "test_common.h"
 
 #include "gbinder_buffer_p.h"
+#include "gbinder_config.h"
 #include "gbinder_driver.h"
 #include "gbinder_io.h"
 #include "gbinder_local_request_p.h"
@@ -43,6 +44,7 @@
 #include "gbinder_writer.h"
 
 static TestOpt test_opt;
+static const char TMP_DIR_TEMPLATE[] = "gbinder-test-protocol-XXXXXX";
 
 #define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
 #define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
@@ -82,12 +84,177 @@ void
 test_device(
     void)
 {
-    g_assert(gbinder_rpc_protocol_for_device(NULL) ==
-        &gbinder_rpc_protocol_binder);
-    g_assert(gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER) ==
-        &gbinder_rpc_protocol_binder);
-    g_assert(gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_HWBINDER) ==
-        &gbinder_rpc_protocol_hwbinder);
+    const GBinderRpcProtocol* p;
+
+    p = gbinder_rpc_protocol_for_device(NULL);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    p = gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    p = gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_HWBINDER);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+}
+
+/*==========================================================================*
+ * config1
+ *==========================================================================*/
+
+static
+void
+test_config1(
+    void)
+{
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    const GBinderRpcProtocol* p;
+
+    static const char config[] =
+        "[Protocol]\n"
+        "/dev/binder = hidl\n" /* Redefined name for /dev/binder */
+        "/dev/hwbinder = foo\n"; /* Invalid protocol name */
+
+    gbinder_rpc_protocol_exit(); /* Reset the state */
+    gbinder_config_exit();
+
+    /* Write the config file */
+    g_assert(g_file_set_contents(file, config, -1, NULL));
+    gbinder_config_file = file;
+
+    p = gbinder_rpc_protocol_for_device(NULL);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/hwbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/binder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl"); /* Redefined by config */
+
+    p = gbinder_rpc_protocol_for_device("/dev/someotherbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    gbinder_rpc_protocol_exit();
+    gbinder_config_exit();
+    gbinder_config_file = NULL;
+
+    remove(file);
+    g_free(file);
+
+    remove(dir);
+    g_free(dir);
+}
+
+/*==========================================================================*
+ * config2
+ *==========================================================================*/
+
+static
+void
+test_config2(
+    void)
+{
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    const GBinderRpcProtocol* p;
+
+    static const char config[] =
+        "[Protocol]\n"
+        "Default = hidl\n"
+        "/dev/vndbinder = hidl\n"
+        "/dev/hwbinder = foo\n"; /* Invalid protocol name */
+
+    gbinder_rpc_protocol_exit(); /* Reset the state */
+    gbinder_config_exit();
+
+    /* Write the config file */
+    g_assert(g_file_set_contents(file, config, -1, NULL));
+    gbinder_config_file = file;
+
+    p = gbinder_rpc_protocol_for_device(NULL);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/vndbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/hwbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/binder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    /* The default is redefined */
+    p = gbinder_rpc_protocol_for_device("/dev/someotherbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+
+    gbinder_rpc_protocol_exit();
+    gbinder_config_exit();
+    gbinder_config_file = NULL;
+
+    remove(file);
+    g_free(file);
+
+    remove(dir);
+    g_free(dir);
+}
+
+/*==========================================================================*
+ * config3
+ *==========================================================================*/
+
+static
+void
+test_config3(
+    void)
+{
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    const GBinderRpcProtocol* p;
+
+    static const char config[] =
+        "[Whatever]\n"
+        "/dev/hwbinder = aidl\n"; /* Ignored, wrong section */
+
+    gbinder_rpc_protocol_exit(); /* Reset the state */
+    gbinder_config_exit();
+
+    /* Write the config file */
+    g_assert(g_file_set_contents(file, config, -1, NULL));
+    gbinder_config_file = file;
+
+    /* Just the default config */
+    p = gbinder_rpc_protocol_for_device(NULL);
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/hwbinder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"hidl");
+
+    p = gbinder_rpc_protocol_for_device("/dev/binder");
+    g_assert(p);
+    g_assert_cmpstr(p->name, == ,"aidl");
+
+    gbinder_rpc_protocol_exit();
+    gbinder_config_exit();
+    gbinder_config_file = NULL;
+
+    remove(file);
+    g_free(file);
+
+    remove(dir);
+    g_free(dir);
 }
 
 /*==========================================================================*
@@ -116,7 +283,7 @@ void
 test_no_header2(
     void)
 {
-    const GBinderRpcProtocol* p = &gbinder_rpc_protocol_binder;
+    const GBinderRpcProtocol* p = gbinder_rpc_protocol_for_device(NULL);
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, p);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL, p, 0, 0);
 
@@ -187,6 +354,9 @@ int main(int argc, char* argv[])
 
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("device"), test_device);
+    g_test_add_func(TEST_("config1"), test_config1);
+    g_test_add_func(TEST_("config2"), test_config2);
+    g_test_add_func(TEST_("config3"), test_config3);
     g_test_add_func(TEST_("no_header1"), test_no_header1);
     g_test_add_func(TEST_("no_header2"), test_no_header2);
 

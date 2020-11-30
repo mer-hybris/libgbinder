@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -281,7 +281,6 @@ test_hwservicemanager_class_init(
 {
     klass->iface = TEST_HWSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
-    klass->rpc_protocol = &gbinder_rpc_protocol_hwbinder;
     klass->list = test_servicemanager_list;
     klass->get_service = test_servicemanager_get_service;
     klass->add_service = test_servicemanager_add_service;
@@ -365,7 +364,6 @@ test_defservicemanager_class_init(
 {
     klass->iface = TEST_DEFSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_BINDER;
-    klass->rpc_protocol = &gbinder_rpc_protocol_binder;
     klass->list = test_servicemanager_list;
     klass->get_service = test_servicemanager_get_service;
     klass->add_service = test_servicemanager_add_service;
@@ -423,7 +421,7 @@ test_invalid(
 {
     int status = 0;
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GBinderServiceManager* sm;
     gulong id = 0;
 
@@ -468,7 +466,7 @@ test_basic(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GBinderServiceManager* sm;
     GBinderLocalObject* obj;
 
@@ -496,7 +494,7 @@ test_not_present(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     GBinderServiceManager* sm;
 
@@ -521,7 +519,7 @@ test_wait(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     const glong forever = (test_opt.flags & TEST_FLAG_DEBUG) ?
         (TEST_TIMEOUT_SEC * 1000) : -1;
@@ -571,7 +569,7 @@ test_wait_long(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     GBinderServiceManager* sm;
     gulong id;
@@ -616,7 +614,7 @@ test_wait_async(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
@@ -660,7 +658,7 @@ test_death(
     void)
 { 
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
@@ -728,7 +726,7 @@ test_reanimate(
     void)
 {
     const char* dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
@@ -781,9 +779,9 @@ test_reuse(
     const char* binder_dev = GBINDER_DEFAULT_BINDER;
     const char* vndbinder_dev = "/dev/vpnbinder";
     const char* hwbinder_dev = GBINDER_DEFAULT_HWBINDER;
-    GBinderIpc* binder_ipc = gbinder_ipc_new(binder_dev, NULL);
-    GBinderIpc* vndbinder_ipc = gbinder_ipc_new(vndbinder_dev, NULL);
-    GBinderIpc* hwbinder_ipc = gbinder_ipc_new(hwbinder_dev, NULL);
+    GBinderIpc* binder_ipc = gbinder_ipc_new(binder_dev);
+    GBinderIpc* vndbinder_ipc = gbinder_ipc_new(vndbinder_dev);
+    GBinderIpc* hwbinder_ipc = gbinder_ipc_new(hwbinder_dev);
     GBinderServiceManager* m1;
     GBinderServiceManager* m2;
     GBinderServiceManager* vnd1;
@@ -835,7 +833,7 @@ test_notify_type(
     GType t,
     const char* dev)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GBinderServiceManager* sm;
     TestHwServiceManager* test;
     const char* name = "foo";
@@ -902,7 +900,7 @@ test_list(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
     TestHwServiceManager* test;
@@ -950,7 +948,7 @@ test_get(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
     TestHwServiceManager* test;
@@ -1011,7 +1009,7 @@ test_add(
     void)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderServiceManager* sm;
     TestHwServiceManager* test;

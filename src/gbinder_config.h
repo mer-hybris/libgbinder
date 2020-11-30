@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Jolla Ltd.
+ * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,39 +30,27 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_RPC_PROTOCOL_H
-#define GBINDER_RPC_PROTOCOL_H
+#ifndef GBINDER_CONFIG_H
+#define GBINDER_CONFIG_H
 
 #include "gbinder_types_p.h"
 
-/*
- * There are several versions of binder RPC protocol with diffferent
- * transaction headers and transaction codes.
- */
-
-struct gbinder_rpc_protocol {
-    const char* name;
-    guint32 ping_tx;
-    void (*write_ping)(GBinderWriter* writer);
-    void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
-    const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
-        char** iface);
-};
-
-/* Returns one of the above based on the device name */
-const GBinderRpcProtocol*
-gbinder_rpc_protocol_for_device(
-    const char* dev)
-    GBINDER_INTERNAL;
-
-/* Runs at exit, declared here strictly for unit tests */
-void
-gbinder_rpc_protocol_exit(
+GKeyFile* /* autoreleased */
+gbinder_config_get(
     void)
-    GBINDER_DESTRUCTOR
     GBINDER_INTERNAL;
 
-#endif /* GBINDER_RPC_PROTOCOL_H */
+/* This one declared strictly for unit tests */
+void
+gbinder_config_exit(
+    void)
+    GBINDER_INTERNAL
+    GBINDER_DESTRUCTOR;
+
+/* And this one too */
+extern const char* gbinder_config_file GBINDER_INTERNAL;
+
+#endif /* GBINDER_CONFIG_H */
 
 /*
  * Local Variables:

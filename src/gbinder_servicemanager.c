@@ -424,7 +424,7 @@ gbinder_servicemanager_new_with_type(
         GBinderIpc* ipc;
 
         if (!dev) dev = klass->default_device;
-        ipc = gbinder_ipc_new(dev, klass->rpc_protocol);
+        ipc = gbinder_ipc_new(dev);
         if (ipc) {
             /* Create a possible dead remote object */
             GBinderRemoteObject* object = gbinder_ipc_get_remote_object

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Contact: Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -13,9 +13,9 @@
  *   2. Redistributions in binary form must reproduce the above copyright
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
- *   3. Neither the name of Jolla Ltd nor the names of its contributors may
- *      be used to endorse or promote products derived from this software
- *      without specific prior written permission.
+ *   3. Neither the names of the copyright holders nor the names of its
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -34,6 +34,11 @@
 
 #include <gutil_log.h>
 
+typedef struct test_quit_later_data{
+    GMainLoop* loop;
+    guint n;
+} TestQuitLaterData;
+
 static
 gboolean
 test_timeout_expired(
@@ -41,6 +46,46 @@ test_timeout_expired(
 {
     g_assert(!"TIMEOUT");
     return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_quit_later_n_free(
+    gpointer user_data)
+{
+    TestQuitLaterData* data = user_data;
+
+    g_main_loop_unref(data->loop);
+    g_free(data);
+}
+
+static
+gboolean
+test_quit_later_n_func(
+    gpointer user_data)
+{
+    TestQuitLaterData* data = user_data;
+
+    if (data->n > 0) {
+        data->n--;
+        return G_SOURCE_CONTINUE;
+    } else {
+        g_main_loop_quit(data->loop);
+        return G_SOURCE_REMOVE;
+    }
+}
+
+void
+test_quit_later_n(
+    GMainLoop* loop,
+    guint n)
+{
+    TestQuitLaterData* data = g_new0(TestQuitLaterData, 1);
+
+    data->loop = g_main_loop_ref(loop);
+    data->n = n;
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, test_quit_later_n_func, data,
+        test_quit_later_n_free);
 }
 
 static

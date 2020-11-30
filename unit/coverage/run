@@ -7,6 +7,7 @@ TESTS="\
 unit_buffer \
 unit_cleanup \
 unit_client \
+unit_config \
 unit_driver \
 unit_eventloop \
 unit_ipc \

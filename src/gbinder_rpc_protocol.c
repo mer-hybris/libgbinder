@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,6 +33,8 @@
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_reader.h"
 #include "gbinder_writer.h"
+#include "gbinder_config.h"
+#include "gbinder_log.h"
 
 /*==========================================================================*
  * GBinderIpcProtocol callbacks (see Parcel::writeInterfaceToken in Android)
@@ -40,10 +42,35 @@
  *
  *   platform/system/libhwbinder/Parcel.cpp
  *   platform/frameworks/native/libs/binder/Parcel.cpp
+ *
+ * which mutate from version to version. Specific device => protocol
+ * mapping can be optionally configured in /etc/gbinder.conf file.
+ * The default protocol configuration looks like this:
+ *
+ *   [Protocol]
+ *   Default = aidl
+ *   /dev/binder = aidl
+ *   /dev/hwbinder = hidl
+ *
  *==========================================================================*/
 
+#define CONF_GROUP "Protocol"
+#define CONF_DEFAULT "Default"
+
+static GHashTable* gbinder_rpc_protocol_map = NULL;
+
+/*
+ * Default protocol for those binder devices which which haven't been
+ * explicitely mapped.
+ */
+#define DEFAULT_PROTOCOL gbinder_rpc_protocol_aidl
+static const GBinderRpcProtocol DEFAULT_PROTOCOL;
+static const GBinderRpcProtocol* gbinder_rpc_protocol_default =
+    &DEFAULT_PROTOCOL;
+
 /*==========================================================================*
- * /dev/binder
+ * The original AIDL protocol.
+ * Still used for talking to Java services.
  *==========================================================================*/
 
 /* No idea what that is... */
@@ -52,7 +79,7 @@
 
 static
 void
-gbinder_rpc_protocol_binder_write_ping(
+gbinder_rpc_protocol_aidl_write_ping(
     GBinderWriter* writer)
 {
     /* No payload */
@@ -60,7 +87,7 @@ gbinder_rpc_protocol_binder_write_ping(
 
 static
 void
-gbinder_rpc_protocol_binder_write_rpc_header(
+gbinder_rpc_protocol_aidl_write_rpc_header(
     GBinderWriter* writer,
     const char* iface)
 {
@@ -75,7 +102,7 @@ gbinder_rpc_protocol_binder_write_rpc_header(
 
 static
 const char*
-gbinder_rpc_protocol_binder_read_rpc_header(
+gbinder_rpc_protocol_aidl_read_rpc_header(
     GBinderReader* reader,
     guint32 txcode,
     char** iface)
@@ -91,13 +118,21 @@ gbinder_rpc_protocol_binder_read_rpc_header(
     return *iface;
 }
 
+static const GBinderRpcProtocol gbinder_rpc_protocol_aidl = {
+    .name = "aidl",
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_aidl_write_ping,
+    .write_rpc_header = gbinder_rpc_protocol_aidl_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_aidl_read_rpc_header
+};
+
 /*==========================================================================*
- * /dev/hwbinder
+ * The original /dev/hwbinder protocol.
  *==========================================================================*/
 
 static
 void
-gbinder_rpc_protocol_hwbinder_write_rpc_header(
+gbinder_rpc_protocol_hidl_write_rpc_header(
     GBinderWriter* writer,
     const char* iface)
 {
@@ -109,16 +144,16 @@ gbinder_rpc_protocol_hwbinder_write_rpc_header(
 
 static
 void
-gbinder_rpc_protocol_hwbinder_write_ping(
+gbinder_rpc_protocol_hidl_write_ping(
     GBinderWriter* writer)
 {
-    gbinder_rpc_protocol_hwbinder_write_rpc_header(writer,
+    gbinder_rpc_protocol_hidl_write_rpc_header(writer,
         "android.hidl.base@1.0::IBase");
 }
 
 static
 const char*
-gbinder_rpc_protocol_hwbinder_read_rpc_header(
+gbinder_rpc_protocol_hidl_read_rpc_header(
     GBinderReader* reader,
     guint32 txcode,
     char** iface)
@@ -127,30 +162,137 @@ gbinder_rpc_protocol_hwbinder_read_rpc_header(
     return gbinder_reader_read_string8(reader);
 }
 
+static const GBinderRpcProtocol gbinder_rpc_protocol_hidl = {
+    .name = "hidl",
+    .ping_tx = HIDL_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_hidl_write_ping,
+    .write_rpc_header = gbinder_rpc_protocol_hidl_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_hidl_read_rpc_header
+};
+
+/*==========================================================================*
+ * Implementation
+ *==========================================================================*/
+
+/* All known protocols */
+static const GBinderRpcProtocol* gbinder_rpc_protocol_list[] = {
+    &gbinder_rpc_protocol_aidl,
+    &gbinder_rpc_protocol_hidl
+};
+
+static
+const GBinderRpcProtocol*
+gbinder_rpc_protocol_find(
+    const char* name)
+{
+    guint i;
+
+    for (i = 0; i < G_N_ELEMENTS(gbinder_rpc_protocol_list); i++) {
+        if (!g_ascii_strcasecmp(gbinder_rpc_protocol_list[i]->name, name)) {
+            return gbinder_rpc_protocol_list[i];
+        }
+    }
+    return NULL;
+}
+
+static
+void
+gbinder_rpc_protocol_map_add_default(
+    GHashTable* map,
+    const char* dev,
+    const GBinderRpcProtocol* protocol)
+{
+    if (!g_hash_table_contains(map, dev)) {
+        g_hash_table_insert(map, g_strdup(dev), (gpointer) protocol);
+    }
+}
+
+static
+GHashTable*
+gbinder_rpc_protocol_load_config()
+{
+    GKeyFile* k = gbinder_config_get();
+    GHashTable* map = g_hash_table_new_full(g_str_hash, g_str_equal,
+        g_free, NULL);
+
+    if (k) {
+        gsize n;
+        char** devs = g_key_file_get_keys(k, CONF_GROUP, &n, NULL);
+
+        if (devs) {
+            gsize i;
+
+            for (i = 0; i < n; i++) {
+                char* dev = devs[i];
+                char* name = g_key_file_get_value(k, CONF_GROUP, dev, NULL);
+                const GBinderRpcProtocol* p = gbinder_rpc_protocol_find(name);
+
+                if (p) {
+                    if (!strcmp(dev, CONF_DEFAULT)) {
+                        gbinder_rpc_protocol_default = p;
+                    } else {
+                        g_hash_table_replace(map, dev, (gpointer) p);
+                    }
+                } else {
+                    GWARN("Unknown protocol name '%s' is configured for %s",
+                        name, dev);
+                    g_free(dev);
+                }
+                g_free(name);
+            }
+
+            /* Shallow delete (contents got stolen or freed) */
+            g_free(devs);
+        }
+    }
+
+    /* Add default configuration if it's not overridden */
+    gbinder_rpc_protocol_map_add_default(map,
+        GBINDER_DEFAULT_BINDER, &gbinder_rpc_protocol_aidl);
+    gbinder_rpc_protocol_map_add_default(map,
+        GBINDER_DEFAULT_HWBINDER, &gbinder_rpc_protocol_hidl);
+
+    return map;
+}
+
+/* Runs at exit */
+void
+gbinder_rpc_protocol_exit()
+{
+    if (gbinder_rpc_protocol_map) {
+        g_hash_table_destroy(gbinder_rpc_protocol_map);
+        gbinder_rpc_protocol_map = NULL;
+    }
+    /* Reset the default too, mostly for unit testing */
+    gbinder_rpc_protocol_default = &DEFAULT_PROTOCOL;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
-
-const GBinderRpcProtocol gbinder_rpc_protocol_binder = {
-    .ping_tx = GBINDER_PING_TRANSACTION,
-    .write_ping = gbinder_rpc_protocol_binder_write_ping,
-    .write_rpc_header = gbinder_rpc_protocol_binder_write_rpc_header,
-    .read_rpc_header = gbinder_rpc_protocol_binder_read_rpc_header
-};
-
-const GBinderRpcProtocol gbinder_rpc_protocol_hwbinder = {
-    .ping_tx = HIDL_PING_TRANSACTION,
-    .write_ping = gbinder_rpc_protocol_hwbinder_write_ping,
-    .write_rpc_header = gbinder_rpc_protocol_hwbinder_write_rpc_header,
-    .read_rpc_header = gbinder_rpc_protocol_hwbinder_read_rpc_header
-};
 
 const GBinderRpcProtocol*
 gbinder_rpc_protocol_for_device(
     const char* dev)
 {
-    return (dev && !strcmp(dev, GBINDER_DEFAULT_HWBINDER)) ?
-        &gbinder_rpc_protocol_hwbinder : &gbinder_rpc_protocol_binder;
+    if (dev) {
+        const GBinderRpcProtocol* protocol;
+
+        if (!gbinder_rpc_protocol_map) {
+            gbinder_rpc_protocol_map = gbinder_rpc_protocol_load_config();
+        }
+        protocol = g_hash_table_lookup(gbinder_rpc_protocol_map, dev);
+        if (protocol) {
+            GDEBUG("Using %s protocol for %s", protocol->name, dev);
+            return protocol;
+        }
+        GDEBUG("Using default protocol %s for %s",
+            gbinder_rpc_protocol_default->name, dev);
+    } else {
+        GDEBUG("Using default protocol %s",
+            gbinder_rpc_protocol_default->name);
+    }
+    return gbinder_rpc_protocol_default;
 }
 
 /*

@@ -300,7 +300,6 @@ gbinder_defaultservicemanager_class_init(
 {
     klass->iface = DEFAULTSERVICEMANAGER_IFACE;
     klass->default_device = GBINDER_DEFAULT_BINDER;
-    klass->rpc_protocol = &gbinder_rpc_protocol_binder;
 
     klass->list = gbinder_defaultservicemanager_list;
     klass->get_service = gbinder_defaultservicemanager_get_service;
