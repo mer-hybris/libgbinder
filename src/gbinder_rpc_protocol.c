@@ -208,43 +208,19 @@ gbinder_rpc_protocol_map_add_default(
 }
 
 static
+gconstpointer
+gbinder_rpc_protocol_value_map(
+    const char* name)
+{
+    return gbinder_rpc_protocol_find(name);
+}
+
+static
 GHashTable*
 gbinder_rpc_protocol_load_config()
 {
-    GKeyFile* k = gbinder_config_get();
-    GHashTable* map = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, NULL);
-
-    if (k) {
-        gsize n;
-        char** devs = g_key_file_get_keys(k, CONF_GROUP, &n, NULL);
-
-        if (devs) {
-            gsize i;
-
-            for (i = 0; i < n; i++) {
-                char* dev = devs[i];
-                char* name = g_key_file_get_value(k, CONF_GROUP, dev, NULL);
-                const GBinderRpcProtocol* p = gbinder_rpc_protocol_find(name);
-
-                if (p) {
-                    if (!strcmp(dev, CONF_DEFAULT)) {
-                        gbinder_rpc_protocol_default = p;
-                    } else {
-                        g_hash_table_replace(map, dev, (gpointer) p);
-                    }
-                } else {
-                    GWARN("Unknown protocol name '%s' is configured for %s",
-                        name, dev);
-                    g_free(dev);
-                }
-                g_free(name);
-            }
-
-            /* Shallow delete (contents got stolen or freed) */
-            g_free(devs);
-        }
-    }
+    GHashTable* map = gbinder_config_load(CONF_GROUP,
+        gbinder_rpc_protocol_value_map);
 
     /* Add default configuration if it's not overridden */
     gbinder_rpc_protocol_map_add_default(map,
@@ -279,7 +255,19 @@ gbinder_rpc_protocol_for_device(
         const GBinderRpcProtocol* protocol;
 
         if (!gbinder_rpc_protocol_map) {
+            const GBinderRpcProtocol* p;
+
+            /* One-time initialization */
             gbinder_rpc_protocol_map = gbinder_rpc_protocol_load_config();
+
+            /* "Default" is a special value stored in a special variable */
+            p = g_hash_table_lookup(gbinder_rpc_protocol_map, CONF_DEFAULT);
+            if (p) {
+                g_hash_table_remove(gbinder_rpc_protocol_map, CONF_DEFAULT);
+                gbinder_rpc_protocol_default = p;
+            } else {
+                gbinder_rpc_protocol_default = &DEFAULT_PROTOCOL;
+            }
         }
         protocol = g_hash_table_lookup(gbinder_rpc_protocol_map, dev);
         if (protocol) {

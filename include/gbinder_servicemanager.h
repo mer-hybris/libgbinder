@@ -80,11 +80,13 @@ gbinder_servicemanager_new(
 
 GBinderServiceManager*
 gbinder_defaultservicemanager_new(
-    const char* dev);
+    const char* dev)
+    G_DEPRECATED_FOR(gbinder_servicemanager_new);
 
 GBinderServiceManager*
 gbinder_hwservicemanager_new(
-    const char* dev);
+    const char* dev)
+    G_DEPRECATED_FOR(gbinder_servicemanager_new);
 
 GBinderLocalObject*
 gbinder_servicemanager_new_local_object(

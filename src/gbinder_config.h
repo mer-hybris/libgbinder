@@ -35,6 +35,17 @@
 
 #include "gbinder_types_p.h"
 
+typedef
+gconstpointer
+(*GBinderConfigValueMapFunc)(
+    const char* value);
+
+GHashTable*
+gbinder_config_load(
+    const char* group,
+    GBinderConfigValueMapFunc map)
+    GBINDER_INTERNAL;
+
 GKeyFile* /* autoreleased */
 gbinder_config_get(
     void)

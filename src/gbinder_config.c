@@ -79,6 +79,45 @@ gbinder_config_get()
     return gbinder_config_keyfile;
 }
 
+/* Helper for loading config group in device = ident format */
+GHashTable*
+gbinder_config_load(
+    const char* group,
+    GBinderConfigValueMapFunc mapper)
+{
+    GKeyFile* k = gbinder_config_get();
+    GHashTable* map = g_hash_table_new_full(g_str_hash, g_str_equal,
+        g_free, NULL);
+
+    if (k) {
+        gsize n;
+        char** devs = g_key_file_get_keys(k, group, &n, NULL);
+
+        if (devs) {
+            gsize i;
+
+            for (i = 0; i < n; i++) {
+                char* dev = devs[i];
+                char* sval = g_key_file_get_value(k, group, dev, NULL);
+                gconstpointer val = mapper(sval);
+
+                if (val) {
+                    g_hash_table_replace(map, dev, (gpointer) val);
+                } else {
+                    GWARN("Unknown gbinder config '%s' for %s in group [%s]",
+                        sval, dev, group);
+                    g_free(dev);
+                }
+                g_free(sval);
+            }
+
+            /* Shallow delete (contents got stolen or freed) */
+            g_free(devs);
+        }
+    }
+    return map;
+}
+
 void
 gbinder_config_exit()
 {

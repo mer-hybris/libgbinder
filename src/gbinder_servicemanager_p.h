@@ -98,6 +98,13 @@ gbinder_servicemanager_service_registered(
     const char* name)
     GBINDER_INTERNAL;
 
+/* Declared for unit tests */
+void
+gbinder_servicemanager_exit(
+    void)
+    GBINDER_INTERNAL
+    GBINDER_DESTRUCTOR;
+
 /* Derived types */
 
 GType gbinder_servicemanager_aidl_get_type(void) GBINDER_INTERNAL;
