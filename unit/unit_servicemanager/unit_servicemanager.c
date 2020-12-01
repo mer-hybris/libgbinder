@@ -291,12 +291,10 @@ test_hwservicemanager_class_init(
     G_OBJECT_CLASS(klass)->finalize = test_hwservicemanager_finalize;
 }
 
-GBinderServiceManager*
-gbinder_hwservicemanager_new(
-    const char* dev)
+GType
+gbinder_servicemanager_hidl_get_type()
 {
-    return gbinder_servicemanager_new_with_type(TEST_TYPE_HWSERVICEMANAGER,
-        dev);
+    return TEST_TYPE_HWSERVICEMANAGER;
 }
 
 /*==========================================================================*
@@ -372,12 +370,10 @@ test_defservicemanager_class_init(
     G_OBJECT_CLASS(klass)->finalize = test_defservicemanager_finalize;
 }
 
-GBinderServiceManager*
-gbinder_defaultservicemanager_new(
-    const char* dev)
+GType
+gbinder_servicemanager_aidl_get_type()
 {
-    return gbinder_servicemanager_new_with_type(TEST_TYPE_DEFSERVICEMANAGER,
-        dev);
+    return TEST_TYPE_DEFSERVICEMANAGER;
 }
 
 /*==========================================================================*

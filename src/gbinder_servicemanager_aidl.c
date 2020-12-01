@@ -31,7 +31,6 @@
  */
 
 #include "gbinder_servicemanager_p.h"
-#include "gbinder_rpc_protocol.h"
 #include "gbinder_servicepoll.h"
 #include "gbinder_eventloop_p.h"
 #include "gbinder_log.h"
@@ -40,61 +39,48 @@
 #include <gbinder_local_request.h>
 #include <gbinder_remote_reply.h>
 
-#include <gutil_macros.h>
-
-#include <errno.h>
-#include <pthread.h>
-
-typedef struct gbinder_defaultservicemanager_watch {
+typedef struct gbinder_servicemanager_aidl_watch {
     GBinderServicePoll* poll;
     char* name;
     gulong handler_id;
     GBinderEventLoopTimeout* notify;
-} GBinderDefaultServiceManagerWatch;
+} GBinderServiceManagerAidlWatch;
 
-typedef GBinderServiceManagerClass GBinderDefaultServiceManagerClass;
-typedef struct gbinder_defaultservicemanager {
+typedef GBinderServiceManagerClass GBinderServiceManagerAidlClass;
+typedef struct gbinder_servicemanager_aidl {
     GBinderServiceManager manager;
     GBinderServicePoll* poll;
     GHashTable* watch_table;
-} GBinderDefaultServiceManager;
+} GBinderServiceManagerAidl;
 
-G_DEFINE_TYPE(GBinderDefaultServiceManager,
-    gbinder_defaultservicemanager,
+G_DEFINE_TYPE(GBinderServiceManagerAidl,
+    gbinder_servicemanager_aidl,
     GBINDER_TYPE_SERVICEMANAGER)
 
-#define PARENT_CLASS gbinder_defaultservicemanager_parent_class
-#define GBINDER_TYPE_DEFAULTSERVICEMANAGER \
-    gbinder_defaultservicemanager_get_type()
-#define GBINDER_DEFAULTSERVICEMANAGER(obj) \
-    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_DEFAULTSERVICEMANAGER, \
-    GBinderDefaultServiceManager)
+#define PARENT_CLASS gbinder_servicemanager_aidl_parent_class
+#define GBINDER_TYPE_SERVICEMANAGER_AIDL \
+    gbinder_servicemanager_aidl_get_type()
+#define GBINDER_SERVICEMANAGER_AIDL(obj) \
+    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
+    GBinderServiceManagerAidl)
 
-enum gbinder_defaultservicemanager_calls {
+enum gbinder_servicemanager_aidl_calls {
     GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
     CHECK_SERVICE_TRANSACTION,
     ADD_SERVICE_TRANSACTION,
     LIST_SERVICES_TRANSACTION
 };
 
-#define DEFAULTSERVICEMANAGER_IFACE  "android.os.IServiceManager"
-
-GBinderServiceManager*
-gbinder_defaultservicemanager_new(
-    const char* dev)
-{
-    return gbinder_servicemanager_new_with_type
-        (GBINDER_TYPE_DEFAULTSERVICEMANAGER, dev);
-}
+#define SERVICEMANAGER_AIDL_IFACE  "android.os.IServiceManager"
 
 static
 void
-gbinder_defaultservicemanager_watch_proc(
+gbinder_servicemanager_aidl_watch_proc(
     GBinderServicePoll* poll,
     const char* name_added,
     void* user_data)
 {
-    GBinderDefaultServiceManagerWatch* watch = user_data;
+    GBinderServiceManagerAidlWatch* watch = user_data;
 
     if (!g_strcmp0(name_added, watch->name)) {
         GBinderServiceManager* manager =
@@ -110,10 +96,10 @@ gbinder_defaultservicemanager_watch_proc(
 
 static
 gboolean
-gbinder_defaultservicemanager_watch_notify(
+gbinder_servicemanager_aidl_watch_notify(
     gpointer user_data)
 {
-    GBinderDefaultServiceManagerWatch* watch = user_data;
+    GBinderServiceManagerAidlWatch* watch = user_data;
     GBinderServiceManager* manager = gbinder_servicepoll_manager(watch->poll);
     char* name = g_strdup(watch->name);
 
@@ -126,31 +112,31 @@ gbinder_defaultservicemanager_watch_notify(
 
 static
 void
-gbinder_defaultservicemanager_watch_free(
+gbinder_servicemanager_aidl_watch_free(
     gpointer user_data)
 {
-    GBinderDefaultServiceManagerWatch* watch = user_data;
+    GBinderServiceManagerAidlWatch* watch = user_data;
 
     gbinder_timeout_remove(watch->notify);
     gbinder_servicepoll_remove_handler(watch->poll, watch->handler_id);
     gbinder_servicepoll_unref(watch->poll);
     g_free(watch->name);
-    g_slice_free(GBinderDefaultServiceManagerWatch, watch);
+    g_slice_free(GBinderServiceManagerAidlWatch, watch);
 }
 
 static
-GBinderDefaultServiceManagerWatch*
-gbinder_defaultservicemanager_watch_new(
-    GBinderDefaultServiceManager* manager,
+GBinderServiceManagerAidlWatch*
+gbinder_servicemanager_aidl_watch_new(
+    GBinderServiceManagerAidl* manager,
     const char* name)
 {
-    GBinderDefaultServiceManagerWatch* watch =
-        g_slice_new0(GBinderDefaultServiceManagerWatch);
+    GBinderServiceManagerAidlWatch* watch =
+        g_slice_new0(GBinderServiceManagerAidlWatch);
 
     watch->name = g_strdup(name);
     watch->poll = gbinder_servicepoll_new(&manager->manager, &manager->poll);
     watch->handler_id = gbinder_servicepoll_add_handler(watch->poll,
-        gbinder_defaultservicemanager_watch_proc, watch);
+        gbinder_servicemanager_aidl_watch_proc, watch);
     return watch;
 }
 
@@ -166,7 +152,7 @@ gbinder_servicemanager_list_services_req(
 
 static
 char**
-gbinder_defaultservicemanager_list(
+gbinder_servicemanager_aidl_list(
     GBinderServiceManager* self)
 {
     GPtrArray* list = g_ptr_array_new();
@@ -194,7 +180,7 @@ gbinder_defaultservicemanager_list(
 
 static
 GBinderRemoteObject*
-gbinder_defaultservicemanager_get_service(
+gbinder_servicemanager_aidl_get_service(
     GBinderServiceManager* self,
     const char* name,
     int* status)
@@ -215,7 +201,7 @@ gbinder_defaultservicemanager_get_service(
 
 static
 int
-gbinder_defaultservicemanager_add_service(
+gbinder_servicemanager_aidl_add_service(
     GBinderServiceManager* self,
     const char* name,
     GBinderLocalObject* obj)
@@ -238,7 +224,7 @@ gbinder_defaultservicemanager_add_service(
 
 static
 GBINDER_SERVICEMANAGER_NAME_CHECK
-gbinder_defaultservicemanager_check_name(
+gbinder_servicemanager_aidl_check_name(
     GBinderServiceManager* self,
     const char* name)
 {
@@ -247,47 +233,47 @@ gbinder_defaultservicemanager_check_name(
 
 static
 gboolean
-gbinder_defaultservicemanager_watch(
+gbinder_servicemanager_aidl_watch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    GBinderDefaultServiceManager* self = GBINDER_DEFAULTSERVICEMANAGER(manager);
-    GBinderDefaultServiceManagerWatch* watch =
-        gbinder_defaultservicemanager_watch_new(self, name);
+    GBinderServiceManagerAidl* self = GBINDER_SERVICEMANAGER_AIDL(manager);
+    GBinderServiceManagerAidlWatch* watch =
+        gbinder_servicemanager_aidl_watch_new(self, name);
 
     g_hash_table_replace(self->watch_table, watch->name, watch);
     if (gbinder_servicepoll_is_known_name(watch->poll, name)) {
         watch->notify = gbinder_idle_add
-            (gbinder_defaultservicemanager_watch_notify, watch);
+            (gbinder_servicemanager_aidl_watch_notify, watch);
     }
     return TRUE;
 }
 
 static
 void
-gbinder_defaultservicemanager_unwatch(
+gbinder_servicemanager_aidl_unwatch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    g_hash_table_remove(GBINDER_DEFAULTSERVICEMANAGER(manager)->watch_table,
+    g_hash_table_remove(GBINDER_SERVICEMANAGER_AIDL(manager)->watch_table,
         name);
 }
 
 static
 void
-gbinder_defaultservicemanager_init(
-    GBinderDefaultServiceManager* self)
+gbinder_servicemanager_aidl_init(
+    GBinderServiceManagerAidl* self)
 {
     self->watch_table = g_hash_table_new_full(g_str_hash, g_str_equal,
-        NULL, gbinder_defaultservicemanager_watch_free);
+        NULL, gbinder_servicemanager_aidl_watch_free);
 }
 
 static
 void
-gbinder_defaultservicemanager_finalize(
+gbinder_servicemanager_aidl_finalize(
     GObject* object)
 {
-    GBinderDefaultServiceManager* self = GBINDER_DEFAULTSERVICEMANAGER(object);
+    GBinderServiceManagerAidl* self = GBINDER_SERVICEMANAGER_AIDL(object);
 
     g_hash_table_destroy(self->watch_table);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
@@ -295,20 +281,20 @@ gbinder_defaultservicemanager_finalize(
 
 static
 void
-gbinder_defaultservicemanager_class_init(
-    GBinderDefaultServiceManagerClass* klass)
+gbinder_servicemanager_aidl_class_init(
+    GBinderServiceManagerAidlClass* klass)
 {
-    klass->iface = DEFAULTSERVICEMANAGER_IFACE;
+    klass->iface = SERVICEMANAGER_AIDL_IFACE;
     klass->default_device = GBINDER_DEFAULT_BINDER;
 
-    klass->list = gbinder_defaultservicemanager_list;
-    klass->get_service = gbinder_defaultservicemanager_get_service;
-    klass->add_service = gbinder_defaultservicemanager_add_service;
-    klass->check_name = gbinder_defaultservicemanager_check_name;
+    klass->list = gbinder_servicemanager_aidl_list;
+    klass->get_service = gbinder_servicemanager_aidl_get_service;
+    klass->add_service = gbinder_servicemanager_aidl_add_service;
+    klass->check_name = gbinder_servicemanager_aidl_check_name;
     /* normalize_name is not needed */
-    klass->watch = gbinder_defaultservicemanager_watch;
-    klass->unwatch = gbinder_defaultservicemanager_unwatch;
-    G_OBJECT_CLASS(klass)->finalize = gbinder_defaultservicemanager_finalize;
+    klass->watch = gbinder_servicemanager_aidl_watch;
+    klass->unwatch = gbinder_servicemanager_aidl_unwatch;
+    G_OBJECT_CLASS(klass)->finalize = gbinder_servicemanager_aidl_finalize;
 }
 
 /*

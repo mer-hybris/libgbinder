@@ -98,9 +98,9 @@ SRC = \
   gbinder_writer.c
 
 SRC += \
-  gbinder_defaultservicemanager.c \
-  gbinder_hwservicemanager.c \
-  gbinder_servicemanager.c
+  gbinder_servicemanager.c \
+  gbinder_servicemanager_aidl.c \
+  gbinder_servicemanager_hidl.c
 
 SRC += \
   gbinder_system.c

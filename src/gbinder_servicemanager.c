@@ -870,6 +870,28 @@ gbinder_servicemanager_remove_handlers(
     }
 }
 
+/*
+ * These two exist mostly for backward compatibility. Normally,
+ * gbinder_servicemanager_new() should be used, to allow the type of
+ * service manager to be configurable per device via /etc/gbinder.conf
+ */
+
+GBinderServiceManager*
+gbinder_defaultservicemanager_new(
+    const char* dev)
+{
+    return gbinder_servicemanager_new_with_type
+        (gbinder_servicemanager_aidl_get_type(), dev);
+}
+
+GBinderServiceManager*
+gbinder_hwservicemanager_new(
+    const char* dev)
+{
+    return gbinder_servicemanager_new_with_type
+        (gbinder_servicemanager_hidl_get_type(), dev);
+}
+
 /*==========================================================================*
  * Internals
  *==========================================================================*/

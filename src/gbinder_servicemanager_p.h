@@ -98,6 +98,11 @@ gbinder_servicemanager_service_registered(
     const char* name)
     GBINDER_INTERNAL;
 
+/* Derived types */
+
+GType gbinder_servicemanager_aidl_get_type(void) GBINDER_INTERNAL;
+GType gbinder_servicemanager_hidl_get_type(void) GBINDER_INTERNAL;
+
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */
 
 /*

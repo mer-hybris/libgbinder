@@ -211,18 +211,16 @@ test_servicemanager_class_init(
     G_OBJECT_CLASS(klass)->finalize = test_servicemanager_finalize;
 }
 
-GBinderServiceManager*
-gbinder_defaultservicemanager_new(
-    const char* dev)
+GType
+gbinder_servicemanager_hidl_get_type()
 {
-    return gbinder_servicemanager_new_with_type(TEST_TYPE_SERVICEMANAGER, dev);
+    return TEST_TYPE_SERVICEMANAGER;
 }
 
-GBinderServiceManager*
-gbinder_hwservicemanager_new(
-    const char* dev)
+GType
+gbinder_servicemanager_aidl_get_type()
 {
-    return gbinder_servicemanager_new(dev);
+    return TEST_TYPE_SERVICEMANAGER;
 }
 
 /*==========================================================================*
