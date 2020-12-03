@@ -34,8 +34,31 @@
 
 #include "gbinder_config.h"
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] = "gbinder-test-config-XXXXXX";
+
+static
+const char*
+test_value(
+    GKeyFile* keyfile,
+    const char* group,
+    const char* key,
+    GString* buf)
+{
+    char* value = g_key_file_get_value(keyfile, group, key, NULL);
+
+    g_string_set_size(buf, 0);
+    if (value) {
+        g_string_append(buf, value);
+        g_free(value);
+        return buf->str;
+    } else {
+        return NULL;
+    }
+}
 
 /*==========================================================================*
  * null
@@ -51,6 +74,7 @@ test_null(
     /* Reset the state */
     gbinder_config_exit();
     gbinder_config_file = NULL;
+    gbinder_config_dir = NULL;
     g_assert(!gbinder_config_get());
 
     /* Reset the state again */
@@ -117,6 +141,118 @@ test_bad_config(
 }
 
 /*==========================================================================*
+ * dirs
+ *==========================================================================*/
+
+static
+void
+test_dirs(
+    void)
+{
+    GKeyFile* k;
+    GString* b = g_string_new(NULL);
+    const char* default_file = gbinder_config_file;
+    const char* default_dir = gbinder_config_dir;
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* subdir = g_build_filename(dir, "d", NULL);
+    char* notafile = g_build_filename(subdir, "dir.conf", NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    char* file1 = g_build_filename(subdir, "a.conf", NULL);
+    char* file2 = g_build_filename(subdir, "b.conf", NULL);
+    char* random_file = g_build_filename(subdir, "foo", NULL);
+    static const char garbage[] = "foo";
+    static const char config[] =
+        "[Protocol]\n"
+        "/dev/binder = aidl\n"
+        "/dev/hbinder = hidl\n";
+    static const char config1[] =
+        "[Protocol]\n"
+        "/dev/hwbinder = hidl\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl\n";
+    static const char config2[] =
+        "[Protocol]\n"
+        "/dev/binder = aidl2\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl2\n";
+
+    g_assert_cmpint(mkdir(subdir, 0700), == ,0);
+    g_assert_cmpint(mkdir(notafile, 0700), == ,0);
+    g_assert(g_file_set_contents(file, config, -1, NULL));
+    g_assert(g_file_set_contents(file1, config1, -1, NULL));
+    g_assert(g_file_set_contents(file2, config2, -1, NULL));
+    g_assert(g_file_set_contents(random_file, garbage, -1, NULL));
+
+    /* Reset the state */
+    gbinder_config_exit();
+    gbinder_config_file = file;
+    gbinder_config_dir = subdir;
+
+    /* Load the config */
+    k = gbinder_config_get();
+    g_assert(k);
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/hbinder",b), == ,"hidl");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/hwbinder",b), == ,"hidl");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
+
+    /* Remove the default file and try again */
+    gbinder_config_exit();
+    g_assert_cmpint(remove(file), == ,0);
+    k = gbinder_config_get();
+    g_assert(k);
+    g_assert(!test_value(k,"Protocol","/dev/hbinder",b));
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/hwbinder",b), == ,"hidl");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
+
+    /* Damage one of the files and try again */
+    gbinder_config_exit();
+    g_assert(g_file_set_contents(file1, garbage, -1, NULL));
+    k = gbinder_config_get();
+    g_assert(k);
+    g_assert(!test_value(k,"Protocol","/dev/hbinder",b));
+    g_assert(!test_value(k,"Protocol","/dev/hwbinder",b));
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
+
+    /* Disallow access to one of the files and try again */
+    gbinder_config_exit();
+    g_assert_cmpint(chmod(file1, 0), == ,0);
+    k = gbinder_config_get();
+    g_assert(k);
+    g_assert(!test_value(k,"Protocol","/dev/hbinder",b));
+    g_assert(!test_value(k,"Protocol","/dev/hwbinder",b));
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
+
+    /* Delete the remaining files and try again */
+    gbinder_config_exit();
+    g_assert_cmpint(remove(file1), == ,0);
+    g_assert_cmpint(remove(file2), == ,0);
+    g_assert(!gbinder_config_get());
+
+    /* Undo all the damage */
+    gbinder_config_exit();
+    gbinder_config_file = default_file;
+    gbinder_config_dir = default_dir;
+
+    remove(random_file);
+    g_free(file);
+    g_free(file1);
+    g_free(file2);
+    g_free(random_file);
+
+    remove(notafile);
+    remove(subdir);
+    remove(dir);
+    g_free(notafile);
+    g_free(subdir);
+    g_free(dir);
+    g_string_free(b, TRUE);
+}
+
+/*==========================================================================*
  * autorelease
  *==========================================================================*/
 
@@ -125,7 +261,7 @@ void
 test_autorelease(
     void)
 {
-    const char* default_name = gbinder_config_file;
+    const char* default_file = gbinder_config_file;
     char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
     char* file = g_build_filename(dir, "test.conf", NULL);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
@@ -149,7 +285,7 @@ test_autorelease(
 
     /* Reset the state again */
     gbinder_config_exit();
-    gbinder_config_file = default_name;
+    gbinder_config_file = default_file;
 
     remove(file);
     g_free(file);
@@ -170,6 +306,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("non_exist"), test_non_exit);
+    g_test_add_func(TEST_("dirs"), test_dirs);
     g_test_add_func(TEST_("bad_config"), test_bad_config);
     g_test_add_func(TEST_("autorelease"), test_autorelease);
     test_init(&test_opt, argc, argv);

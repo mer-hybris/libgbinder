@@ -58,8 +58,9 @@ gbinder_config_exit(
     GBINDER_INTERNAL
     GBINDER_DESTRUCTOR;
 
-/* And this one too */
+/* And these too */
 extern const char* gbinder_config_file GBINDER_INTERNAL;
+extern const char* gbinder_config_dir GBINDER_INTERNAL;
 
 #endif /* GBINDER_CONFIG_H */
 
