@@ -100,6 +100,7 @@ SRC = \
 SRC += \
   gbinder_servicemanager.c \
   gbinder_servicemanager_aidl.c \
+  gbinder_servicemanager_aidl2.c \
   gbinder_servicemanager_hidl.c
 
 SRC += \

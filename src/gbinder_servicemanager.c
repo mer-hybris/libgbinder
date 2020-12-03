@@ -81,11 +81,12 @@ typedef struct gbinder_servicemanager_type {
 
 static const GBinderServiceManagerType gbinder_servicemanager_types[] = {
     { "aidl", gbinder_servicemanager_aidl_get_type },
+    { "aidl2", gbinder_servicemanager_aidl2_get_type },
     { "hidl", gbinder_servicemanager_hidl_get_type }
 };
 
 #define SERVICEMANAGER_TYPE_AIDL (gbinder_servicemanager_types + 0)
-#define SERVICEMANAGER_TYPE_HIDL (gbinder_servicemanager_types + 1)
+#define SERVICEMANAGER_TYPE_HIDL (gbinder_servicemanager_types + 2)
 #define SERVICEMANAGER_TYPE_DEFAULT SERVICEMANAGER_TYPE_AIDL
 
 static GHashTable* gbinder_servicemanager_map = NULL;
@@ -120,9 +121,6 @@ G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
 #define GBINDER_SERVICEMANAGER(obj) \
     G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_SERVICEMANAGER, \
     GBinderServiceManager)
-#define GBINDER_SERVICEMANAGER_CLASS(klass) \
-    G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER, \
-    GBinderServiceManagerClass)
 #define GBINDER_SERVICEMANAGER_GET_CLASS(obj) \
     G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_SERVICEMANAGER, \
     GBinderServiceManagerClass)

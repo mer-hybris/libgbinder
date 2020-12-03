@@ -211,14 +211,22 @@ test_servicemanager_class_init(
     G_OBJECT_CLASS(klass)->finalize = test_servicemanager_finalize;
 }
 
+/* Avoid pulling in the actual objects */
+
 GType
-gbinder_servicemanager_hidl_get_type()
+gbinder_servicemanager_aidl_get_type()
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl_get_type()
+gbinder_servicemanager_aidl2_get_type()
+{
+    return TEST_TYPE_SERVICEMANAGER;
+}
+
+GType
+gbinder_servicemanager_hidl_get_type()
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
