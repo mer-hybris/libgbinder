@@ -36,6 +36,10 @@
 #include "gbinder_config.h"
 #include "gbinder_log.h"
 
+#define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
+#define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
+#define UNSET_WORK_SOURCE (-1)
+
 /*==========================================================================*
  * GBinderIpcProtocol callbacks (see Parcel::writeInterfaceToken in Android)
  * Note that there are two slightly different kinds of Parcels:
@@ -70,12 +74,7 @@ static const GBinderRpcProtocol* gbinder_rpc_protocol_default =
 
 /*==========================================================================*
  * The original AIDL protocol.
- * Still used for talking to Java services.
  *==========================================================================*/
-
-/* No idea what that is... */
-#define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
-#define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
 
 static
 void
@@ -124,6 +123,54 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl = {
     .write_ping = gbinder_rpc_protocol_aidl_write_ping,
     .write_rpc_header = gbinder_rpc_protocol_aidl_write_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_aidl_read_rpc_header
+};
+
+/*==========================================================================*
+ * AIDL protocol appeared in Android 10 (API level 29)
+ *==========================================================================*/
+
+static
+void
+gbinder_rpc_protocol_aidl2_write_rpc_header(
+    GBinderWriter* writer,
+    const char* iface)
+{
+    /*
+     * writeInt32(IPCThreadState::self()->getStrictModePolicy() |
+     *               STRICT_MODE_PENALTY_GATHER);
+     * writeInt32(IPCThreadState::kUnsetWorkSource);
+     * writeString16(interface);
+     */
+    gbinder_writer_append_int32(writer, BINDER_RPC_FLAGS);
+    gbinder_writer_append_int32(writer, UNSET_WORK_SOURCE);
+    gbinder_writer_append_string16(writer, iface);
+}
+
+static
+const char*
+gbinder_rpc_protocol_aidl2_read_rpc_header(
+    GBinderReader* reader,
+    guint32 txcode,
+    char** iface)
+{
+    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+        /* Internal transaction e.g. GBINDER_DUMP_TRANSACTION etc. */
+        *iface = NULL;
+    } else if (gbinder_reader_read_int32(reader, NULL) /* flags */ &&
+        gbinder_reader_read_int32(reader, NULL) /* work source */) {
+        *iface = gbinder_reader_read_string16(reader);
+    } else {
+        *iface = NULL;
+    }
+    return *iface;
+}
+
+static const GBinderRpcProtocol gbinder_rpc_protocol_aidl2 = {
+    .name = "aidl2",
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
+    .write_rpc_header = gbinder_rpc_protocol_aidl2_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_aidl2_read_rpc_header
 };
 
 /*==========================================================================*
@@ -177,6 +224,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_hidl = {
 /* All known protocols */
 static const GBinderRpcProtocol* gbinder_rpc_protocol_list[] = {
     &gbinder_rpc_protocol_aidl,
+    &gbinder_rpc_protocol_aidl2,
     &gbinder_rpc_protocol_hidl
 };
 
