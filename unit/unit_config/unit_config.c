@@ -34,6 +34,9 @@
 
 #include "gbinder_config.h"
 
+#include <gutil_strv.h>
+#include <gutil_log.h>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -58,6 +61,74 @@ test_value(
     } else {
         return NULL;
     }
+}
+
+static
+gboolean
+test_keyfiles_equal(
+    GKeyFile* keyfile1,
+    GKeyFile* keyfile2)
+{
+    gboolean equal = FALSE;
+    gsize ngroups;
+    char** groups = g_key_file_get_groups(keyfile1, &ngroups);
+    char** groups2 = g_key_file_get_groups(keyfile2, NULL);
+
+    gutil_strv_sort(groups, TRUE);
+    gutil_strv_sort(groups2, TRUE);
+    if (gutil_strv_equal(groups, groups2)) {
+        gsize i;
+
+        equal = TRUE;
+        for (i = 0; i < ngroups && equal; i++) {
+            const char* group = groups[i];
+            gsize nkeys;
+            char** keys = g_key_file_get_keys(keyfile1, group, &nkeys, NULL);
+            char** keys2 = g_key_file_get_keys(keyfile2, group, &nkeys, NULL);
+
+            equal = FALSE;
+            gutil_strv_sort(keys, TRUE);
+            gutil_strv_sort(keys2, TRUE);
+            if (gutil_strv_equal(keys, keys2)) {
+                gsize k;
+
+                equal = TRUE;
+                for (k = 0; k < nkeys && equal; k++) {
+                    const char* key = keys[k];
+                    char* v1 = g_key_file_get_value(keyfile1, group, key, NULL);
+                    char* v2 = g_key_file_get_value(keyfile2, group, key, NULL);
+
+                    if (g_strcmp0(v1, v2)) {
+                        equal = FALSE;
+                        GDEBUG("Values for %s/%s don't match ('%s' vs '%s')",
+                            group, key, v1, v2);
+                    }
+                    g_free(v1);
+                    g_free(v2);
+                }
+            } else {
+                GDEBUG("Keys for %s don't match", group);
+            }
+            g_strfreev(keys);
+            g_strfreev(keys2);
+        }
+    } else {
+        GDEBUG("Groups don't match");
+    }
+    g_strfreev(groups);
+    g_strfreev(groups2);
+    if (!equal) {
+        char* data1 = g_key_file_to_data(keyfile1, NULL, NULL);
+        char* data2 = g_key_file_to_data(keyfile2, NULL, NULL);
+
+        GDEBUG("This:");
+        GDEBUG("%s", data1);
+        GDEBUG("Doesn't match this:");
+        GDEBUG("%s", data2);
+        g_free(data1);
+        g_free(data2);
+    }
+    return equal;
 }
 
 /*==========================================================================*
@@ -295,6 +366,108 @@ test_autorelease(
 }
 
 /*==========================================================================*
+ * Presets
+ *==========================================================================*/
+
+typedef struct test_presets_data {
+    const char* name;
+    const char* in;
+    const char* out;
+} TestPresetsData;
+
+static
+void
+test_presets(
+    gconstpointer test_data)
+{
+    const TestPresetsData* test = test_data;
+    const char* default_file = gbinder_config_file;
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    GKeyFile* expected = g_key_file_new();
+    GKeyFile* keyfile;
+
+    /* Reset the state */
+    gbinder_config_exit();
+
+    /* Load the file */
+    if (test->in) {
+        g_assert(g_file_set_contents(file, test->in, -1, NULL));
+        gbinder_config_file = file;
+    } else {
+        gbinder_config_file = NULL;
+    }
+    keyfile = gbinder_config_get();
+    g_assert(keyfile);
+
+    /* Compare it against the expected value */
+    g_assert(g_key_file_load_from_data(expected, test->out, (gsize)-1,
+        G_KEY_FILE_NONE, NULL));
+    g_assert(test_keyfiles_equal(keyfile, expected));
+
+    /* Reset the state again */
+    gbinder_config_exit();
+    gbinder_config_file = default_file;
+
+    remove(file);
+    g_free(file);
+
+    remove(dir);
+    g_free(dir);
+    g_key_file_unref(expected);
+}
+
+static const TestPresetsData test_presets_data [] = {
+    {
+        "override",
+
+        "[General]\n"
+        "ApiLevel = 28\n"
+        "[ServiceManager]\n"
+        "/dev/vndbinder = aidl\n",
+
+        "[General]\n"
+        "ApiLevel = 28\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl2\n"
+        "/dev/vndbinder = aidl\n" /* Preset is overridden */
+    },{
+        "too_small",
+
+        "[General]\n"
+        "ApiLevel = 27\n",
+
+        "[General]\n"
+        "ApiLevel = 27\n"
+    },{
+       "28",
+
+        "[General]\n"
+        "ApiLevel = 28",
+
+        "[General]\n"
+        "ApiLevel = 28\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl2\n"
+        "/dev/vndbinder = aidl2\n"
+    },{
+        "29",
+
+        "[General]\n"
+        "ApiLevel = 29",
+
+        "[General]\n"
+        "ApiLevel = 29\n"
+        "[Protocol]\n"
+        "/dev/binder = aidl2\n"
+        "/dev/vndbinder = aidl2\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl2\n"
+        "/dev/vndbinder = aidl2\n"
+    }
+};
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -303,12 +476,22 @@ test_autorelease(
 
 int main(int argc, char* argv[])
 {
+    guint i;
+
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("non_exist"), test_non_exit);
     g_test_add_func(TEST_("dirs"), test_dirs);
     g_test_add_func(TEST_("bad_config"), test_bad_config);
     g_test_add_func(TEST_("autorelease"), test_autorelease);
+    for (i = 0; i < G_N_ELEMENTS(test_presets_data); i++) {
+        const TestPresetsData* test = test_presets_data + i;
+        char* path;
+
+        path = g_strconcat(TEST_("presets/"), test->name, NULL);
+        g_test_add_data_func(path, test, test_presets);
+        g_free(path);
+    }
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

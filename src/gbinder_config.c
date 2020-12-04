@@ -57,6 +57,69 @@ static const char gbinder_config_default_dir[] = "/etc/gbinder.d";
 const char* gbinder_config_file = gbinder_config_default_file;
 const char* gbinder_config_dir = gbinder_config_default_dir;
 
+/*
+ * Presets for particular API level can be chosen with ApiLevel
+ * setting, e.g.
+ *
+ * [General]
+ * ApiLevel=29
+ *
+ */
+
+static const char CONF_GENERAL[] = "General";
+static const char CONG_API_LEVEL[] = "ApiLevel";
+
+typedef struct gbinder_config_preset_entry {
+    const char* key;
+    const char* value;
+} GBinderConfigPresetEntry;
+
+typedef struct gbinder_config_preset_group {
+    const char* name;
+    const GBinderConfigPresetEntry* entries;
+} GBinderConfigPresetGroup;
+
+typedef struct gbinder_config_preset {
+    guint api_level;
+    const GBinderConfigPresetGroup* groups;
+} GBinderConfigPreset;
+
+/* API level 28 */
+
+static const GBinderConfigPresetEntry gbinder_config_28_servicemanager[] = {
+    { "/dev/binder", "aidl2" },
+    { "/dev/vndbinder", "aidl2" },
+    { NULL, NULL }
+};
+
+static const GBinderConfigPresetGroup gbinder_config_28[] = {
+    { GBINDER_CONFIG_GROUP_SERVICEMANAGER, gbinder_config_28_servicemanager },
+    { NULL, NULL }
+};
+
+/* API level 29 */
+
+static const GBinderConfigPresetEntry gbinder_config_29_protocol[] = {
+    { "/dev/binder", "aidl2" },
+    { "/dev/vndbinder", "aidl2" },
+    { NULL, NULL }
+};
+
+#define gbinder_config_29_servicemanager gbinder_config_28_servicemanager
+
+static const GBinderConfigPresetGroup gbinder_config_29[] = {
+    { GBINDER_CONFIG_GROUP_PROTOCOL, gbinder_config_29_protocol },
+    { GBINDER_CONFIG_GROUP_SERVICEMANAGER, gbinder_config_29_servicemanager },
+    { NULL, NULL }
+};
+
+/* Presets sorted by API level in descending order */
+
+static const GBinderConfigPreset gbinder_config_presets[] = {
+    { 29, gbinder_config_29 },
+    { 28, gbinder_config_28 }
+};
+
 static
 char**
 gbinder_config_collect_files(
@@ -135,6 +198,26 @@ gbinder_config_merge_keyfiles(
 }
 
 static
+void
+gbinder_config_apply_presets(
+    GKeyFile* config,
+    const GBinderConfigPreset* preset)
+{
+    const GBinderConfigPresetGroup* g;
+
+    GDEBUG("Applying presets for API level %d", preset->api_level);
+    for (g = preset->groups; g->name; g++) {
+        const GBinderConfigPresetEntry* e;
+
+        for (e = g->entries; e->key; e++) {
+            if (!g_key_file_has_key(config, g->name, e->key, NULL)) {
+                g_key_file_set_value(config, g->name, e->key, e->value);
+            }
+        }
+    }
+}
+
+static
 GKeyFile*
 gbinder_config_load_files()
 {
@@ -189,6 +272,26 @@ gbinder_config_load_files()
         g_strfreev(files);
         if (override) {
             g_key_file_unref(override);
+        }
+    }
+
+    if (out) {
+        /* Apply presets */
+        const int api_level = g_key_file_get_integer(out,
+            CONF_GENERAL, CONG_API_LEVEL, NULL);
+
+        if (api_level > 0) {
+            int i;
+
+            GDEBUG("API level %d", api_level);
+            for (i = 0; i < G_N_ELEMENTS(gbinder_config_presets); i++) {
+                const GBinderConfigPreset* preset = gbinder_config_presets + i;
+
+                if (api_level >= preset->api_level) {
+                    gbinder_config_apply_presets(out, preset);
+                    break;
+                }
+            }
         }
     }
 

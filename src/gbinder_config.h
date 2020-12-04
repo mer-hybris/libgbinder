@@ -62,6 +62,11 @@ gbinder_config_exit(
 extern const char* gbinder_config_file GBINDER_INTERNAL;
 extern const char* gbinder_config_dir GBINDER_INTERNAL;
 
+/* Configuration groups and special value */
+#define GBINDER_CONFIG_GROUP_PROTOCOL "Protocol"
+#define GBINDER_CONFIG_GROUP_SERVICEMANAGER "ServiceManager"
+#define GBINDER_CONFIG_VALUE_DEFAULT "Default"
+
 #endif /* GBINDER_CONFIG_H */
 
 /*

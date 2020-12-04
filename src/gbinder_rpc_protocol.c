@@ -58,8 +58,8 @@
  *
  *==========================================================================*/
 
-#define CONF_GROUP "Protocol"
-#define CONF_DEFAULT "Default"
+#define CONF_GROUP GBINDER_CONFIG_GROUP_PROTOCOL
+#define CONF_DEFAULT GBINDER_CONFIG_VALUE_DEFAULT
 
 static GHashTable* gbinder_rpc_protocol_map = NULL;
 

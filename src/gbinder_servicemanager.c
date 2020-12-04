@@ -71,8 +71,8 @@
  *
  *==========================================================================*/
 
-#define CONF_GROUP "ServiceManager"
-#define CONF_DEFAULT "Default"
+#define CONF_GROUP GBINDER_CONFIG_GROUP_SERVICEMANAGER
+#define CONF_DEFAULT GBINDER_CONFIG_VALUE_DEFAULT
 
 typedef struct gbinder_servicemanager_type {
     const char* name;
