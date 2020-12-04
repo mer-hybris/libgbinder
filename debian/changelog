@@ -1,3 +1,14 @@
+libgbinder (1.1.0) unstable; urgency=low
+
+  * Made RPC protocol configurable per binder device
+  * Made service managers configurable per binder device
+  * Added support for multiple config files
+  * Added "aidl2" variant of service manager
+  * Added "aidl2" variant of RPC protocol
+  * Added support for API level presets
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 04 Dec 2020 13:47:26 +0200
+
 libgbinder (1.0.47) unstable; urgency=low
 
   * Make library executable on RPM based systems
