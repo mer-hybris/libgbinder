@@ -34,6 +34,7 @@
 
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_client_p.h"
+#include "gbinder_config.h"
 #include "gbinder_local_object_p.h"
 #include "gbinder_remote_object_p.h"
 #include "gbinder_eventloop_p.h"
@@ -46,6 +47,51 @@
 #include <gutil_misc.h>
 
 #include <errno.h>
+
+/*==========================================================================*
+ *
+ * Different versions of Android come with different flavors of service
+ * managers. They are usually based on these two more or less independent
+ * variants:
+ *
+ *   platform/frameworks/native/cmds/servicemanager/ServiceManager.cpp
+ *   platform/system/hwservicemanager/ServiceManager.cpp
+ *
+ * They are talking slightly different protocols which slightly mutate
+ * from version to version. If that's not complex enough, different
+ * kinds of service managers can be running simultaneously, serving
+ * different binder devices. Specific device => servicemanager mapping
+ * can be optionally configured in /etc/gbinder.conf file. The default
+ * service manager configuration looks like this:
+ *
+ *   [ServiceManager]
+ *   Default = aidl
+ *   /dev/binder = aidl
+ *   /dev/hwbinder = hidl
+ *
+ *==========================================================================*/
+
+#define CONF_GROUP GBINDER_CONFIG_GROUP_SERVICEMANAGER
+#define CONF_DEFAULT GBINDER_CONFIG_VALUE_DEFAULT
+
+typedef struct gbinder_servicemanager_type {
+    const char* name;
+    GType (*get_type)(void);
+} GBinderServiceManagerType;
+
+static const GBinderServiceManagerType gbinder_servicemanager_types[] = {
+    { "aidl", gbinder_servicemanager_aidl_get_type },
+    { "aidl2", gbinder_servicemanager_aidl2_get_type },
+    { "hidl", gbinder_servicemanager_hidl_get_type }
+};
+
+#define SERVICEMANAGER_TYPE_AIDL (gbinder_servicemanager_types + 0)
+#define SERVICEMANAGER_TYPE_HIDL (gbinder_servicemanager_types + 2)
+#define SERVICEMANAGER_TYPE_DEFAULT SERVICEMANAGER_TYPE_AIDL
+
+static GHashTable* gbinder_servicemanager_map = NULL;
+static const GBinderServiceManagerType* gbinder_servicemanager_default =
+    SERVICEMANAGER_TYPE_DEFAULT;
 
 #define PRESENSE_WAIT_MS_MIN  (100)
 #define PRESENSE_WAIT_MS_MAX  (1000)
@@ -75,9 +121,6 @@ G_DEFINE_ABSTRACT_TYPE(GBinderServiceManager, gbinder_servicemanager,
 #define GBINDER_SERVICEMANAGER(obj) \
     G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_SERVICEMANAGER, \
     GBinderServiceManager)
-#define GBINDER_SERVICEMANAGER_CLASS(klass) \
-    G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER, \
-    GBinderServiceManagerClass)
 #define GBINDER_SERVICEMANAGER_GET_CLASS(obj) \
     G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_SERVICEMANAGER, \
     GBinderServiceManagerClass)
@@ -408,6 +451,64 @@ gbinder_servicemanager_autorelease_cb(
     g_slist_free_full(list, g_object_unref);
 }
 
+static
+void
+gbinder_servicemanager_map_add_default(
+    GHashTable* map,
+    const char* dev,
+    const GBinderServiceManagerType* type)
+{
+    if (!g_hash_table_contains(map, dev)) {
+        g_hash_table_insert(map, g_strdup(dev), (gpointer) type);
+    }
+}
+
+static
+gconstpointer
+gbinder_servicemanager_value_map(
+    const char* name)
+{
+    guint i;
+
+    for (i = 0; i < G_N_ELEMENTS(gbinder_servicemanager_types); i++) {
+        const GBinderServiceManagerType* t = gbinder_servicemanager_types + i;
+
+        if (!g_strcmp0(name, t->name)) {
+            return t;
+        }
+    }
+    return NULL;
+}
+
+static
+GHashTable*
+gbinder_servicemanager_load_config()
+{
+    GHashTable* map = gbinder_config_load(CONF_GROUP,
+        gbinder_servicemanager_value_map);
+
+    /* Add default configuration if it's not overridden */
+    gbinder_servicemanager_map_add_default(map,
+        GBINDER_DEFAULT_BINDER, SERVICEMANAGER_TYPE_AIDL);
+    gbinder_servicemanager_map_add_default(map,
+        GBINDER_DEFAULT_HWBINDER, SERVICEMANAGER_TYPE_HIDL);
+
+    return map;
+}
+
+/* Runs at exit */
+void
+gbinder_servicemanager_exit(
+    void)
+{
+    if (gbinder_servicemanager_map) {
+        g_hash_table_destroy(gbinder_servicemanager_map);
+        gbinder_servicemanager_map = NULL;
+    }
+    /* Reset the default too, mostly for unit testing */
+    gbinder_servicemanager_default = SERVICEMANAGER_TYPE_DEFAULT;
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -424,9 +525,9 @@ gbinder_servicemanager_new_with_type(
         GBinderIpc* ipc;
 
         if (!dev) dev = klass->default_device;
-        ipc = gbinder_ipc_new(dev, klass->rpc_protocol);
+        ipc = gbinder_ipc_new(dev);
         if (ipc) {
-            /* Create a possible dead remote object */
+            /* Create a possibly dead remote object */
             GBinderRemoteObject* object = gbinder_ipc_get_remote_object
                 (ipc, GBINDER_SERVICEMANAGER_HANDLE, TRUE);
 
@@ -517,11 +618,35 @@ GBinderServiceManager*
 gbinder_servicemanager_new(
     const char* dev)
 {
-    if (!g_strcmp0(dev, GBINDER_DEFAULT_HWBINDER)) {
-        return gbinder_hwservicemanager_new(dev);
-    } else {
-        return gbinder_defaultservicemanager_new(dev);
+    if (dev) {
+        const GBinderServiceManagerType* type = NULL;
+
+        if (!gbinder_servicemanager_map) {
+            const GBinderServiceManagerType* t;
+
+            /* One-time initialization */
+            gbinder_servicemanager_map = gbinder_servicemanager_load_config();
+
+            /* "Default" is a special value stored in a special variable */
+            t = g_hash_table_lookup(gbinder_servicemanager_map, CONF_DEFAULT);
+            if (t) {
+                g_hash_table_remove(gbinder_servicemanager_map, CONF_DEFAULT);
+                gbinder_servicemanager_default = t;
+            } else {
+                gbinder_servicemanager_default = SERVICEMANAGER_TYPE_DEFAULT;
+            }
+        }
+
+        type = g_hash_table_lookup(gbinder_servicemanager_map, dev);
+        if (type) {
+            GDEBUG("Using %s service manager for %s", type->name, dev);
+        } else {
+            type = gbinder_servicemanager_default;
+            GDEBUG("Using default service manager %s for %s", type->name, dev);
+        }
+        return gbinder_servicemanager_new_with_type(type->get_type(), dev);
     }
+    return NULL;
 }
 
 GBinderLocalObject*
@@ -868,6 +993,28 @@ gbinder_servicemanager_remove_handlers(
             }
         }
     }
+}
+
+/*
+ * These two exist mostly for backward compatibility. Normally,
+ * gbinder_servicemanager_new() should be used, to allow the type of
+ * service manager to be configurable per device via /etc/gbinder.conf
+ */
+
+GBinderServiceManager*
+gbinder_defaultservicemanager_new(
+    const char* dev)
+{
+    return gbinder_servicemanager_new_with_type
+        (gbinder_servicemanager_aidl_get_type(), dev);
+}
+
+GBinderServiceManager*
+gbinder_hwservicemanager_new(
+    const char* dev)
+{
+    return gbinder_servicemanager_new_with_type
+        (gbinder_servicemanager_hidl_get_type(), dev);
 }
 
 /*==========================================================================*

@@ -69,8 +69,7 @@ void
 
 GBinderIpc*
 gbinder_ipc_new(
-    const char* dev,
-    const GBinderRpcProtocol* protocol)
+    const char* dev)
     GBINDER_INTERNAL;
 
 GBinderIpc*
@@ -171,11 +170,11 @@ gbinder_ipc_remote_object_disposed(
     GBINDER_INTERNAL;
 
 /* Declared for unit tests */
-__attribute__((destructor))
 void
 gbinder_ipc_exit(
     void)
-    GBINDER_INTERNAL;
+    GBINDER_INTERNAL
+    GBINDER_DESTRUCTOR;
 
 #endif /* GBINDER_IPC_H */
 

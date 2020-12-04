@@ -78,6 +78,7 @@ SRC = \
   gbinder_buffer.c \
   gbinder_cleanup.c \
   gbinder_client.c \
+  gbinder_config.c \
   gbinder_driver.c \
   gbinder_eventloop.c \
   gbinder_io_32.c \
@@ -97,9 +98,10 @@ SRC = \
   gbinder_writer.c
 
 SRC += \
-  gbinder_defaultservicemanager.c \
-  gbinder_hwservicemanager.c \
-  gbinder_servicemanager.c
+  gbinder_servicemanager.c \
+  gbinder_servicemanager_aidl.c \
+  gbinder_servicemanager_aidl2.c \
+  gbinder_servicemanager_hidl.c
 
 SRC += \
   gbinder_system.c

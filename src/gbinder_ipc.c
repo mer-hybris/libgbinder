@@ -36,6 +36,7 @@
 #include "gbinder_driver.h"
 #include "gbinder_handler.h"
 #include "gbinder_io.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_object_registry.h"
 #include "gbinder_local_object_p.h"
 #include "gbinder_local_reply.h"
@@ -1570,12 +1571,14 @@ gbinder_ipc_tx_proc(
 
 GBinderIpc*
 gbinder_ipc_new(
-    const char* dev,
-    const GBinderRpcProtocol* protocol)
+    const char* dev)
 {
     GBinderIpc* self = NULL;
+    const GBinderRpcProtocol* protocol;
 
     if (!dev || !dev[0]) dev = GBINDER_DEFAULT_BINDER;
+    protocol = gbinder_rpc_protocol_for_device(dev); /* Never returns NULL */
+
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
     if (gbinder_ipc_table) {

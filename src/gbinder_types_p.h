@@ -48,6 +48,7 @@ typedef struct gbinder_ipc_looper_tx GBinderIpcLooperTx;
 
 #define GBINDER_INLINE_FUNC static inline
 #define GBINDER_INTERNAL G_GNUC_INTERNAL
+#define GBINDER_DESTRUCTOR __attribute__((destructor))
 
 #define GBINDER_TRANSACTION(c2,c3,c4)     GBINDER_FOURCC('_',c2,c3,c4)
 #define GBINDER_PING_TRANSACTION          GBINDER_TRANSACTION('P','N','G')

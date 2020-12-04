@@ -64,7 +64,6 @@ typedef struct gbinder_servicemanager_class {
 
     const char* iface;
     const char* default_device;
-    const GBinderRpcProtocol* rpc_protocol;
 
     /* Methods (synchronous) */
     char** (*list)(GBinderServiceManager* self);
@@ -86,6 +85,9 @@ typedef struct gbinder_servicemanager_class {
 
 GType gbinder_servicemanager_get_type(void) GBINDER_INTERNAL;
 #define GBINDER_TYPE_SERVICEMANAGER (gbinder_servicemanager_get_type())
+#define GBINDER_SERVICEMANAGER_CLASS(klass) \
+    G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER, \
+    GBinderServiceManagerClass)
 
 GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
@@ -98,6 +100,19 @@ gbinder_servicemanager_service_registered(
     GBinderServiceManager* self,
     const char* name)
     GBINDER_INTERNAL;
+
+/* Declared for unit tests */
+void
+gbinder_servicemanager_exit(
+    void)
+    GBINDER_INTERNAL
+    GBINDER_DESTRUCTOR;
+
+/* Derived types */
+
+GType gbinder_servicemanager_aidl_get_type(void) GBINDER_INTERNAL;
+GType gbinder_servicemanager_aidl2_get_type(void) GBINDER_INTERNAL;
+GType gbinder_servicemanager_hidl_get_type(void) GBINDER_INTERNAL;
 
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */
 

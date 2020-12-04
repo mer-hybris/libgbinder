@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,7 +31,6 @@
  */
 
 #include "gbinder_servicemanager_p.h"
-#include "gbinder_rpc_protocol.h"
 #include "gbinder_log.h"
 
 #include <gbinder_client.h>
@@ -42,30 +41,30 @@
 #include <gbinder_reader.h>
 
 #include <errno.h>
-#include <pthread.h>
 
-typedef struct gbinder_hwservicemanager_watch {
+typedef struct gbinder_servicemanager_hidl_watch {
     char* name;
     GBinderLocalObject* callback;
-} GBinderHwServiceManagerWatch;
+} GBinderServiceManagerHidlWatch;
 
-typedef GBinderServiceManagerClass GBinderHwServiceManagerClass;
-typedef struct gbinder_hwservicemanager {
+typedef GBinderServiceManagerClass GBinderServiceManagerHidlClass;
+typedef struct gbinder_servicemanager_hidl {
     GBinderServiceManager manager;
     GHashTable* watch_table;
-} GBinderHwServiceManager;
+} GBinderServiceManagerHidl;
 
-G_DEFINE_TYPE(GBinderHwServiceManager,
-    gbinder_hwservicemanager,
+G_DEFINE_TYPE(GBinderServiceManagerHidl,
+    gbinder_servicemanager_hidl,
     GBINDER_TYPE_SERVICEMANAGER)
 
-#define PARENT_CLASS gbinder_hwservicemanager_parent_class
-#define GBINDER_TYPE_HWSERVICEMANAGER (gbinder_hwservicemanager_get_type())
-#define GBINDER_HWSERVICEMANAGER(obj) \
-    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_HWSERVICEMANAGER, \
-    GBinderHwServiceManager)
+#define PARENT_CLASS gbinder_servicemanager_hidl_parent_class
+#define GBINDER_TYPE_SERVICEMANAGER_HIDL \
+    gbinder_servicemanager_hidl_get_type()
+#define GBINDER_SERVICEMANAGER_HIDL(obj) \
+    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_SERVICEMANAGER_HIDL, \
+    GBinderServiceManagerHidl)
 
-enum gbinder_hwservicemanager_calls {
+enum gbinder_servicemanager_hidl_calls {
     GET_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
     ADD_TRANSACTION,
     GET_TRANSPORT_TRANSACTION,
@@ -76,18 +75,18 @@ enum gbinder_hwservicemanager_calls {
     REGISTER_PASSTHROUGH_CLIENT_TRANSACTION
 };
 
-enum gbinder_hwservicemanager_notifications {
+enum gbinder_servicemanager_hidl_notifications {
     ON_REGISTRATION_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION
 };
 
-#define HWSERVICEMANAGER_IFACE  "android.hidl.manager@1.0::IServiceManager"
-#define HWSERVICEMANAGER_NOTIFICATION_IFACE \
+#define SERVICEMANAGER_HIDL_IFACE  "android.hidl.manager@1.0::IServiceManager"
+#define SERVICEMANAGER_HIDL_NOTIFICATION_IFACE \
     "android.hidl.manager@1.0::IServiceNotification"
 
 static
 void
-gbinder_hwservicemanager_handle_registration(
-    GBinderHwServiceManager* self,
+gbinder_servicemanager_hidl_handle_registration(
+    GBinderServiceManagerHidl* self,
     GBinderReader* reader)
 {
     char* fqname = gbinder_reader_read_hidl_string(reader);
@@ -111,7 +110,7 @@ gbinder_hwservicemanager_handle_registration(
 
 static
 GBinderLocalReply*
-gbinder_hwservicemanager_notification(
+gbinder_servicemanager_hidl_notification(
     GBinderLocalObject* obj,
     GBinderRemoteRequest* req,
     guint code,
@@ -119,22 +118,22 @@ gbinder_hwservicemanager_notification(
     int* status,
     void* user_data)
 {
-    GBinderHwServiceManager* self = GBINDER_HWSERVICEMANAGER(user_data);
+    GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(user_data);
     const char* iface = gbinder_remote_request_interface(req);
 
-    if (!g_strcmp0(iface, HWSERVICEMANAGER_NOTIFICATION_IFACE)) {
+    if (!g_strcmp0(iface, SERVICEMANAGER_HIDL_NOTIFICATION_IFACE)) {
         GBinderReader reader;
 
         gbinder_remote_request_init_reader(req, &reader);
         switch (code) {
         case ON_REGISTRATION_TRANSACTION:
-            GDEBUG(HWSERVICEMANAGER_NOTIFICATION_IFACE " %u onRegistration",
+            GDEBUG(SERVICEMANAGER_HIDL_NOTIFICATION_IFACE " %u onRegistration",
                 code);
-            gbinder_hwservicemanager_handle_registration(self, &reader);
+            gbinder_servicemanager_hidl_handle_registration(self, &reader);
             *status = GBINDER_STATUS_OK;
             break;
         default:
-            GDEBUG(HWSERVICEMANAGER_NOTIFICATION_IFACE " %u", code);
+            GDEBUG(SERVICEMANAGER_HIDL_NOTIFICATION_IFACE " %u", code);
             *status = GBINDER_STATUS_FAILED;
             break;
         }
@@ -145,17 +144,9 @@ gbinder_hwservicemanager_notification(
     return NULL;
 }
 
-GBinderServiceManager*
-gbinder_hwservicemanager_new(
-    const char* dev)
-{
-    return gbinder_servicemanager_new_with_type
-        (gbinder_hwservicemanager_get_type(), dev);
-}
-
 static
 char**
-gbinder_hwservicemanager_list(
+gbinder_servicemanager_hidl_list(
     GBinderServiceManager* self)
 {
     GBinderLocalRequest* req = gbinder_client_new_request(self->client);
@@ -184,7 +175,7 @@ gbinder_hwservicemanager_list(
 
 static
 GBinderRemoteObject*
-gbinder_hwservicemanager_get_service(
+gbinder_servicemanager_hidl_get_service(
     GBinderServiceManager* self,
     const char* fqinstance,
     int* status)
@@ -231,7 +222,7 @@ gbinder_hwservicemanager_get_service(
 
 static
 int
-gbinder_hwservicemanager_add_service(
+gbinder_servicemanager_hidl_add_service(
     GBinderServiceManager* self,
     const char* name,
     GBinderLocalObject* obj)
@@ -254,10 +245,10 @@ gbinder_hwservicemanager_add_service(
 
 static
 void
-gbinder_hwservicemanager_watch_free(
+gbinder_servicemanager_hidl_watch_free(
     gpointer data)
 {
-    GBinderHwServiceManagerWatch* watch = data;
+    GBinderServiceManagerHidlWatch* watch = data;
 
     g_free(watch->name);
     gbinder_local_object_drop(watch->callback);
@@ -266,7 +257,7 @@ gbinder_hwservicemanager_watch_free(
 
 static
 GBINDER_SERVICEMANAGER_NAME_CHECK
-gbinder_hwservicemanager_check_name(
+gbinder_servicemanager_hidl_check_name(
     GBinderServiceManager* self,
     const char* name)
 {
@@ -287,32 +278,32 @@ gbinder_hwservicemanager_check_name(
 
 static
 char*
-gbinder_hwservicemanager_normalize_name(
+gbinder_servicemanager_hidl_normalize_name(
     GBinderServiceManager* self,
     const char* name)
 {
-    /* Slash must be there, see gbinder_hwservicemanager_check_name() above */
+    /* Slash must be there, see gbinder_servicemanager_hidl_check_name() */
     return g_strndup(name, strchr(name, '/') - name);
 }
 
 static
 gboolean
-gbinder_hwservicemanager_watch(
+gbinder_servicemanager_hidl_watch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    GBinderHwServiceManager* self = GBINDER_HWSERVICEMANAGER(manager);
+    GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(manager);
     GBinderLocalRequest* req = gbinder_client_new_request(manager->client);
     GBinderRemoteReply* reply;
-    GBinderHwServiceManagerWatch* watch =
-        g_new0(GBinderHwServiceManagerWatch, 1);
+    GBinderServiceManagerHidlWatch* watch =
+        g_new0(GBinderServiceManagerHidlWatch, 1);
     gboolean success = FALSE;
     int status;
 
     watch->name = g_strdup(name);
     watch->callback = gbinder_servicemanager_new_local_object(manager,
-        HWSERVICEMANAGER_NOTIFICATION_IFACE,
-        gbinder_hwservicemanager_notification, self);
+        SERVICEMANAGER_HIDL_NOTIFICATION_IFACE,
+        gbinder_servicemanager_hidl_notification, self);
     g_hash_table_replace(self->watch_table, watch->name, watch);
 
     /* registerForNotifications(string fqName, string name,
@@ -344,28 +335,29 @@ gbinder_hwservicemanager_watch(
 
 static
 void
-gbinder_hwservicemanager_unwatch(
+gbinder_servicemanager_hidl_unwatch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    g_hash_table_remove(GBINDER_HWSERVICEMANAGER(manager)->watch_table, name);
+    g_hash_table_remove(GBINDER_SERVICEMANAGER_HIDL(manager)->
+        watch_table, name);
 }
 
 static
 void
-gbinder_hwservicemanager_init(
-    GBinderHwServiceManager* self)
+gbinder_servicemanager_hidl_init(
+    GBinderServiceManagerHidl* self)
 {
     self->watch_table = g_hash_table_new_full(g_str_hash, g_str_equal,
-        NULL, gbinder_hwservicemanager_watch_free);
+        NULL, gbinder_servicemanager_hidl_watch_free);
 }
 
 static
 void
-gbinder_hwservicemanager_finalize(
+gbinder_servicemanager_hidl_finalize(
     GObject* object)
 {
-    GBinderHwServiceManager* self = GBINDER_HWSERVICEMANAGER(object);
+    GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(object);
 
     g_hash_table_destroy(self->watch_table);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
@@ -373,21 +365,20 @@ gbinder_hwservicemanager_finalize(
 
 static
 void
-gbinder_hwservicemanager_class_init(
-    GBinderHwServiceManagerClass* klass)
+gbinder_servicemanager_hidl_class_init(
+    GBinderServiceManagerHidlClass* klass)
 {
-    klass->iface = HWSERVICEMANAGER_IFACE;
+    klass->iface = SERVICEMANAGER_HIDL_IFACE;
     klass->default_device = GBINDER_DEFAULT_HWBINDER;
-    klass->rpc_protocol = &gbinder_rpc_protocol_hwbinder;
 
-    klass->list = gbinder_hwservicemanager_list;
-    klass->get_service = gbinder_hwservicemanager_get_service;
-    klass->add_service = gbinder_hwservicemanager_add_service;
-    klass->check_name = gbinder_hwservicemanager_check_name;
-    klass->normalize_name = gbinder_hwservicemanager_normalize_name;
-    klass->watch = gbinder_hwservicemanager_watch;
-    klass->unwatch = gbinder_hwservicemanager_unwatch;
-    G_OBJECT_CLASS(klass)->finalize = gbinder_hwservicemanager_finalize;
+    klass->list = gbinder_servicemanager_hidl_list;
+    klass->get_service = gbinder_servicemanager_hidl_get_service;
+    klass->add_service = gbinder_servicemanager_hidl_add_service;
+    klass->check_name = gbinder_servicemanager_hidl_check_name;
+    klass->normalize_name = gbinder_servicemanager_hidl_normalize_name;
+    klass->watch = gbinder_servicemanager_hidl_watch;
+    klass->unwatch = gbinder_servicemanager_hidl_unwatch;
+    G_OBJECT_CLASS(klass)->finalize = gbinder_servicemanager_hidl_finalize;
 }
 
 /*

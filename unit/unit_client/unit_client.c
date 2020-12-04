@@ -54,7 +54,7 @@ test_client_new(
     guint handle,
     const char* iface)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, handle);
     GBinderClient* client = gbinder_client_new(obj, iface);
@@ -97,7 +97,7 @@ void
 test_basic(
     void)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, 0);
     const char* iface = "foo";
@@ -123,7 +123,7 @@ void
 test_interfaces(
     void)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, 0);
     static const GBinderClientIfaceInfo ifaces[] = {

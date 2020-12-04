@@ -44,7 +44,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 
 CC ?= $(CROSS_COMPILE)gcc
 LD = $(CC)
-WARNINGS += -Wall
+WARNINGS += -Wall -Wno-deprecated-declarations
 INCLUDES += -I$(COMMON_DIR) -I$(LIB_DIR)/src -I$(LIB_DIR)/include
 BASE_FLAGS = -fPIC
 BASE_LDFLAGS = $(BASE_FLAGS) $(LDFLAGS)

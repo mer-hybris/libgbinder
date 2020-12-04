@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Jolla Ltd.
+ * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,39 +30,44 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_RPC_PROTOCOL_H
-#define GBINDER_RPC_PROTOCOL_H
+#ifndef GBINDER_CONFIG_H
+#define GBINDER_CONFIG_H
 
 #include "gbinder_types_p.h"
 
-/*
- * There are several versions of binder RPC protocol with diffferent
- * transaction headers and transaction codes.
- */
+typedef
+gconstpointer
+(*GBinderConfigValueMapFunc)(
+    const char* value);
 
-struct gbinder_rpc_protocol {
-    const char* name;
-    guint32 ping_tx;
-    void (*write_ping)(GBinderWriter* writer);
-    void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
-    const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
-        char** iface);
-};
-
-/* Returns one of the above based on the device name */
-const GBinderRpcProtocol*
-gbinder_rpc_protocol_for_device(
-    const char* dev)
+GHashTable*
+gbinder_config_load(
+    const char* group,
+    GBinderConfigValueMapFunc map)
     GBINDER_INTERNAL;
 
-/* Runs at exit, declared here strictly for unit tests */
-void
-gbinder_rpc_protocol_exit(
+GKeyFile* /* autoreleased */
+gbinder_config_get(
     void)
-    GBINDER_DESTRUCTOR
     GBINDER_INTERNAL;
 
-#endif /* GBINDER_RPC_PROTOCOL_H */
+/* This one declared strictly for unit tests */
+void
+gbinder_config_exit(
+    void)
+    GBINDER_INTERNAL
+    GBINDER_DESTRUCTOR;
+
+/* And these too */
+extern const char* gbinder_config_file GBINDER_INTERNAL;
+extern const char* gbinder_config_dir GBINDER_INTERNAL;
+
+/* Configuration groups and special value */
+#define GBINDER_CONFIG_GROUP_PROTOCOL "Protocol"
+#define GBINDER_CONFIG_GROUP_SERVICEMANAGER "ServiceManager"
+#define GBINDER_CONFIG_VALUE_DEFAULT "Default"
+
+#endif /* GBINDER_CONFIG_H */
 
 /*
  * Local Variables:

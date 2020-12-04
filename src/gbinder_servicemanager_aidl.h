@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Jolla Ltd.
+ * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,39 +30,32 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_RPC_PROTOCOL_H
-#define GBINDER_RPC_PROTOCOL_H
+#ifndef GBINDER_SERVICEMANAGER_AIDL_H
+#define GBINDER_SERVICEMANAGER_AIDL_H
 
-#include "gbinder_types_p.h"
+#include "gbinder_servicemanager_p.h"
 
-/*
- * There are several versions of binder RPC protocol with diffferent
- * transaction headers and transaction codes.
- */
+typedef struct gbinder_servicemanager_aidl_priv GBinderServiceManagerAidlPriv;
+typedef struct gbinder_servicemanager_aidl {
+    GBinderServiceManager manager;
+    GBinderServiceManagerAidlPriv* priv;
+} GBinderServiceManagerAidl;
 
-struct gbinder_rpc_protocol {
-    const char* name;
-    guint32 ping_tx;
-    void (*write_ping)(GBinderWriter* writer);
-    void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
-    const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
-        char** iface);
-};
+typedef struct gbinder_servicemanager_aidl_class {
+    GBinderServiceManagerClass parent;
+    GBinderLocalRequest* (*list_services_req)
+        (GBinderClient* client, gint32 index);
+    GBinderLocalRequest* (*add_service_req)
+        (GBinderClient* client, const char* name, GBinderLocalObject* obj);
+} GBinderServiceManagerAidlClass;
 
-/* Returns one of the above based on the device name */
-const GBinderRpcProtocol*
-gbinder_rpc_protocol_for_device(
-    const char* dev)
-    GBINDER_INTERNAL;
+#define GBINDER_TYPE_SERVICEMANAGER_AIDL \
+    gbinder_servicemanager_aidl_get_type()
+#define GBINDER_SERVICEMANAGER_AIDL_CLASS(klass) \
+    G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
+    GBinderServiceManagerAidlClass)
 
-/* Runs at exit, declared here strictly for unit tests */
-void
-gbinder_rpc_protocol_exit(
-    void)
-    GBINDER_DESTRUCTOR
-    GBINDER_INTERNAL;
-
-#endif /* GBINDER_RPC_PROTOCOL_H */
+#endif /* GBINDER_SERVICEMANAGER_AIDL_H */
 
 /*
  * Local Variables:
