@@ -45,7 +45,8 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl2,
     GBINDER_TYPE_SERVICEMANAGER_AIDL)
 
 #define PARENT_CLASS gbinder_servicemanager_aidl2_parent_class
-#define DUMP_FLAG_PRIORITY_DEFAULT (8)
+#define DUMP_FLAG_PRIORITY_DEFAULT (0x08)
+#define DUMP_FLAG_PRIORITY_ALL     (0x0f)
 
 static
 GBinderLocalRequest*
@@ -56,7 +57,7 @@ gbinder_servicemanager_aidl2_list_services_req(
     GBinderLocalRequest* req = gbinder_client_new_request(client);
 
     gbinder_local_request_append_int32(req, index);
-    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
+    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_ALL);
     return req;
 }
 
