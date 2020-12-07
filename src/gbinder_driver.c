@@ -953,7 +953,7 @@ gbinder_driver_read(
     if (ret >= 0) {
         /* Loop until we have handled all the incoming commands */
         gbinder_driver_handle_commands(self, reg, handler, &rb);
-        while (rb.buf.consumed) {
+        while (rb.buf.consumed && gbinder_handler_can_loop(handler)) {
             ret = gbinder_driver_write_read(self, NULL, &rb.buf);
             if (ret >= 0) {
                 gbinder_driver_handle_commands(self, reg, handler, &rb);
