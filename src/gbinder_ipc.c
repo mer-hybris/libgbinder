@@ -1763,6 +1763,14 @@ gbinder_ipc_cancel(
     }
 }
 
+gboolean
+gbinder_ipc_set_max_threads(
+    GBinderIpc* self,
+    gint max)
+{
+    return g_thread_pool_set_max_threads(self->priv->tx_pool, max, NULL);
+}
+
 /*==========================================================================*
  * Internals
  *==========================================================================*/
