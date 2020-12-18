@@ -115,6 +115,7 @@ gbinder_remote_object_reanimate(
         if (gbinder_driver_ping(ipc->driver, reg, self->handle) == 0) {
             /* Wow, it's alive! */
             self->dead = FALSE;
+            gbinder_ipc_looper_check(self->ipc); /* For death notifications */
             gbinder_driver_acquire(ipc->driver, self->handle);
             gbinder_driver_request_death_notification(ipc->driver, self);
         }
@@ -151,6 +152,7 @@ gbinder_remote_object_new(
         self->ipc = gbinder_ipc_ref(ipc);
         self->handle = handle;
         if (!(self->dead = dead)) {
+            gbinder_ipc_looper_check(self->ipc); /* For death notifications */
             gbinder_driver_acquire(ipc->driver, handle);
             gbinder_driver_request_death_notification(ipc->driver, self);
         }
