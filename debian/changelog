@@ -1,3 +1,12 @@
+libgbinder (1.1.1) unstable; urgency=low
+
+  * Handle corner cases for abandoned loopers
+  * Pass 0x0f priority to aidl2 service list request.
+  * Improved binder simulation for unit tests
+  * Added servicemanager_aidl unit test
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 22 Dec 2020 15:15:10 +0200
+
 libgbinder (1.1.0) unstable; urgency=low
 
   * Made RPC protocol configurable per binder device
