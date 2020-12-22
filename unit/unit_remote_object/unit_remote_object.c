@@ -128,6 +128,7 @@ test_dead(
     gbinder_remote_object_remove_handler(obj, 0); /* has no effect */
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
