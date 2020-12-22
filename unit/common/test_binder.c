@@ -50,6 +50,7 @@ static GHashTable* test_node_map = NULL;
 static GPrivate test_looper;
 
 G_LOCK_DEFINE_STATIC(test_binder);
+static GCond test_node_map_cond;
 
 #define PUBLIC (0)
 #define PRIVATE (1)
@@ -307,16 +308,10 @@ void
 test_binder_exit_wait(
     void)
 {
-    struct timespec wait;
-
-    wait.tv_nsec = 100 * 1000000; /* 100 ms */
-    wait.tv_sec = 0;
     G_LOCK(test_binder);
     while (test_node_map) {
         GDEBUG("Waiting for loopers to exit...");
-        G_UNLOCK(test_binder);
-        nanosleep(&wait, &wait);
-        G_LOCK(test_binder);
+        g_cond_wait(&test_node_map_cond, &G_LOCK_NAME(test_binder));
     }
     G_UNLOCK(test_binder);
 }
@@ -874,6 +869,7 @@ test_binder_node_clear(
     g_hash_table_remove(test_node_map, node->path);
     if (!g_hash_table_size(test_node_map)) {
         g_hash_table_unref(test_node_map);
+        g_cond_broadcast(&test_node_map_cond);
         test_node_map = NULL;
     }
     close(node->fd);
