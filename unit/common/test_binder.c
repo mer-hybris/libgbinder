@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -30,6 +30,8 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "test_binder.h"
+#include "gbinder_local_object.h"
 #include "gbinder_system.h"
 
 #define GLOG_MODULE_NAME test_binder_log
@@ -47,11 +49,19 @@ static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
 static GPrivate test_looper;
 
-#define public_fd  fd[0]
-#define private_fd fd[1]
+G_LOCK_DEFINE_STATIC(test_binder);
+
+#define PUBLIC (0)
+#define PRIVATE (1)
+#define public_fd  node[PUBLIC].fd
+#define private_fd node[PRIVATE].fd
 
 #define BINDER_VERSION _IOWR('b', 9, gint32)
 #define BINDER_SET_MAX_THREADS _IOW('b', 5, guint32)
+
+#define B_TYPE_LARGE 0x85
+#define BINDER_TYPE_BINDER  GBINDER_FOURCC('s', 'b', '*', B_TYPE_LARGE)
+#define BINDER_TYPE_HANDLE  GBINDER_FOURCC('s', 'h', '*', B_TYPE_LARGE)
 
 #define TF_ONE_WAY     0x01
 #define TF_ROOT_OBJECT 0x04
@@ -59,7 +69,6 @@ static GPrivate test_looper;
 #define TF_ACCEPT_FDS  0x10
 
 typedef struct test_binder_io TestBinderIo;
-typedef struct test_binder TestBinder;
 
 typedef
 void
@@ -77,23 +86,33 @@ typedef struct test_binder_submit_thread {
 } TestBinderSubmitThread;
 
 typedef struct test_binder_node {
+    int fd;
     char* path;
-    int refcount;
-    const TestBinderIo* io;
-    GHashTable* destroy_map;
+    TestBinder* binder;
+    gboolean looper_enabled;
 } TestBinderNode;
 
-typedef struct test_binder {
+typedef struct test_binder_fd {
+    int fd;
+    GHashTable* destroy_map;
     TestBinderNode* node;
+} TestBinderFd;
+
+typedef struct test_binder {
+    gint refcount;
+    const TestBinderIo* io;
+    GHashTable* object_map; /* GBinderLocalObject* => handle */
+    GHashTable* handle_map; /* handle => GBinderLocalObject* */
     TestBinderSubmitThread* submit_thread;
-    gboolean looper_enabled;
-    int fd[2];
+    GMutex mutex;
+    gboolean passthrough;
+    TestBinderNode node[2];
 } TestBinder;
 
 struct test_binder_io {
     int version;
     int write_read_request;
-    int (*handle_write_read)(TestBinder* binder, void* data);
+    int (*handle_write_read)(TestBinderFd* fd, void* data);
 };
 
 typedef struct binder_write_read_64 {
@@ -127,6 +146,13 @@ typedef struct binder_handle_cookie_64 {
   guint32 handle;
   guint64 cookie;
 } __attribute__((packed)) BinderHandleCookie64;
+
+typedef struct binder_object_64 {
+  guint32 type;
+  guint32 flags;
+  guint64 object;
+  guint64 cookie;
+} BinderObject64;
 
 #define BC_TRANSACTION_64       _IOW('c', 0, BinderTransactionData64)
 #define BC_REPLY_64             _IOW('c', 1, BinderTransactionData64)
@@ -259,74 +285,202 @@ test_binder_submit_later(
 static
 void
 test_io_free_buffer(
-    TestBinder* binder,
+    TestBinderFd* fd,
     void* ptr)
 {
     if (ptr) {
-        TestBinderNode* node = binder->node;
-        GDestroyNotify destroy = g_hash_table_lookup(node->destroy_map, ptr);
+        GDestroyNotify destroy;
 
+        G_LOCK(test_binder);
+        destroy = g_hash_table_lookup(fd->destroy_map, ptr);
         if (destroy) {
-            g_hash_table_remove(node->destroy_map, ptr);
+            g_hash_table_remove(fd->destroy_map, ptr);
             destroy(ptr);
         } else {
             g_free(ptr);
         }
+        G_UNLOCK(test_binder);
     }
+}
+
+void
+test_binder_exit_wait(
+    void)
+{
+    struct timespec wait;
+
+    wait.tv_nsec = 100 * 1000000; /* 100 ms */
+    wait.tv_sec = 0;
+    G_LOCK(test_binder);
+    while (test_node_map) {
+        GDEBUG("Waiting for loopers to exit...");
+        G_UNLOCK(test_binder);
+        nanosleep(&wait, &wait);
+        G_LOCK(test_binder);
+    }
+    G_UNLOCK(test_binder);
+}
+
+static
+guint64
+test_io_passthough_fix_handle(
+    TestBinder* binder,
+    guint64 handle)
+{
+    gpointer key = GSIZE_TO_POINTER(handle);
+
+    /* Invoked under lock */
+    if (g_hash_table_contains(binder->object_map, key)) {
+        gpointer value = g_hash_table_lookup(binder->object_map, key);
+
+        handle = GPOINTER_TO_SIZE(value);
+        GDEBUG("Object %p => handle %u", key, (guint) handle);
+    } else if (g_hash_table_contains(binder->handle_map, key)) {
+        gpointer obj = g_hash_table_lookup(binder->handle_map, key);
+
+        GDEBUG("Handle %u => object %p", (guint) handle, obj);
+        handle = GPOINTER_TO_SIZE(obj);
+    }
+    return handle;
+}
+
+static
+gssize
+test_io_passthough_write_64(
+    TestBinderFd* fd,
+    const void* bytes,
+    gsize bytes_to_write)
+{
+    const guint code = *(guint32*)bytes;
+    TestBinderNode* node = fd->node;
+    TestBinder* binder = node->binder;
+    BinderTransactionData64* tx = NULL;
+    gssize bytes_written;
+    guint extra;
+    guint32* cmd;
+    void* data;
+
+    /* Just ignore some codes for now */
+    switch (code) {
+    case BC_ACQUIRE:
+    case BC_RELEASE:
+    case BC_REQUEST_DEATH_NOTIFICATION_64:
+    case BC_CLEAR_DEATH_NOTIFICATION_64:
+        return bytes_to_write;
+    default:
+        break;
+    }
+
+    cmd = g_memdup(bytes, bytes_to_write);
+    data = cmd + 1;
+    switch (*cmd) {
+    case BR_TRANSACTION_64:
+        *cmd = BC_TRANSACTION_64;
+        tx = data;
+        break;
+    case BC_TRANSACTION_64:
+        *cmd = BR_TRANSACTION_64;
+         tx = data;
+       break;
+    case BR_REPLY_64:
+        *cmd = BC_REPLY_64;
+        tx = data;
+        break;
+    case BC_REPLY_64:
+        extra = BR_TRANSACTION_COMPLETE;
+        write(fd->fd, &extra, sizeof(extra));
+        *cmd = BR_REPLY_64;
+        tx = data;
+        break;
+    }
+    if (tx) {
+        guint32* data_buffer = g_memdup(GSIZE_TO_POINTER(tx->data_buffer),
+            tx->data_size);
+        void* data_offsets = g_memdup(GSIZE_TO_POINTER(tx->data_offsets),
+            tx->offsets_size);
+
+        G_LOCK(test_binder);
+        tx->handle = test_io_passthough_fix_handle(binder, tx->handle);
+        if (data_buffer && tx->data_size > sizeof(BinderObject64)) {
+            /* Replace BINDER_TYPE_BINDER with BINDER_TYPE_HANDLE */
+            guint32* data_ptr = data_buffer;
+            const guint32* data_end = data_buffer + (tx->data_size -
+                sizeof(BinderObject64))/sizeof(guint32);
+
+            /*
+             * Objects are supposed to be aligned at 32-bit boundary, so we
+             * can scanning the data buffer with 4-byte step.
+             */
+            for (data_ptr = data_buffer; data_ptr < data_end; data_ptr++) {
+                if (*data_ptr == BINDER_TYPE_BINDER) {
+                    BinderObject64* object = (BinderObject64*) data_ptr;
+
+                    object->type = BINDER_TYPE_HANDLE;
+                    object->object = test_io_passthough_fix_handle(binder,
+                        object->object);
+                    data_ptr += sizeof(object)/sizeof(guint32) - 1;
+                }
+            }
+        }
+        g_hash_table_replace(fd->destroy_map, data_offsets, NULL);
+        G_UNLOCK(test_binder);
+        tx->data_buffer = GPOINTER_TO_SIZE(data_buffer);
+        tx->data_offsets = GPOINTER_TO_SIZE(data_offsets);
+    }
+    bytes_written = write(fd->fd, cmd, bytes_to_write);
+    g_free(cmd);
+    return bytes_written;
 }
 
 static
 int
 test_io_handle_write_read_64(
-    TestBinder* binder,
+    TestBinderFd* fd,
     void* data)
 {
+    TestBinderNode* node = fd->node;
+    TestBinder* binder = node->binder;
     BinderWriteRead64* wr = data;
     gssize bytes_left = wr->write_size - wr->write_consumed;
-    const guint8* write_ptr = (void*)(gsize)
-        (wr->write_buffer + wr->write_consumed);
+    const guint8* write_ptr = (void*)(gsize)(wr->write_buffer +
+        wr->write_consumed);
     gboolean is_looper;
 
     while (bytes_left >= sizeof(guint32)) {
         const guint cmd = *(guint32*)write_ptr;
         const guint cmdsize = _IOC_SIZE(cmd);
+        const void* cmddata = write_ptr + sizeof(guint32);
+        const gsize bytes_to_write = sizeof(guint32) + cmdsize;
 
-        GASSERT(bytes_left >= (sizeof(guint32) + cmdsize));
-        if (bytes_left >= (sizeof(guint32) + cmdsize)) {
-            wr->write_consumed += sizeof(guint32);
-            write_ptr += sizeof(guint32);
-            bytes_left -= sizeof(guint32);
+        GASSERT(bytes_left >= bytes_to_write);
+        if (bytes_left >= bytes_to_write) {
+            gssize bytes_written = bytes_to_write;
 
             switch (cmd) {
-            case BC_TRANSACTION_64:
-            case BC_REPLY_64:
-                /* Is there anything special about transactions and replies? */
-                break;
             case BC_FREE_BUFFER_64:
-                test_io_free_buffer(binder,
-                    GSIZE_TO_POINTER(*(guint64*)write_ptr));
+                test_io_free_buffer(fd, GSIZE_TO_POINTER(*(guint64*)cmddata));
                 break;
             case BC_ENTER_LOOPER:
-                 g_private_set(&test_looper, GINT_TO_POINTER(TRUE));
-                 break;
+                g_private_set(&test_looper, GINT_TO_POINTER(TRUE));
+                break;
             case BC_EXIT_LOOPER:
-                 g_private_set(&test_looper, NULL);
-                 break;
-            case BC_REQUEST_DEATH_NOTIFICATION_64:
-            case BC_CLEAR_DEATH_NOTIFICATION_64:
-            case BC_INCREFS:
-            case BC_ACQUIRE:
-            case BC_RELEASE:
-            case BC_DECREFS:
+                g_private_set(&test_looper, NULL);
                 break;
             default:
-#pragma message("TODO: implement more BINDER_WRITE_READ commands")
-                GDEBUG("Unhandled command 0x%08x", cmd);
+                if (binder->passthrough) {
+                    bytes_written = test_io_passthough_write_64(fd,
+                        write_ptr, bytes_to_write);
+                }
                 break;
             }
-            wr->write_consumed += cmdsize;
-            write_ptr += cmdsize;
-            bytes_left -= cmdsize;
+            if (bytes_written >= 0) {
+                wr->write_consumed += bytes_written;
+                write_ptr += bytes_written;
+                bytes_left -= bytes_written;
+            } else {
+                GDEBUG("Write failed, %s", strerror(errno));
+                return -1;
+            }
         } else {
             /* Partial command in the buffer */
             errno = EINVAL;
@@ -335,17 +489,17 @@ test_io_handle_write_read_64(
     }
 
     is_looper = g_private_get(&test_looper) ? TRUE : FALSE;
-    if (binder->looper_enabled || !is_looper) {
+    if (node->looper_enabled || !is_looper) {
         /* Now read the data from the socket */
         int bytes_available = 0;
-        int err = ioctl(binder->public_fd, FIONREAD, &bytes_available);
+        int err = ioctl(fd->fd, FIONREAD, &bytes_available);
 
         if (err >= 0) {
             int bytes_read = 0;
 
             if (bytes_available >= 4) {
-                bytes_read = read(binder->public_fd,
-                    (void*)(gsize)(wr->read_buffer + wr->read_consumed),
+                bytes_read = read(fd->fd, (void*)(gsize)
+                   (wr->read_buffer + wr->read_consumed),
                     wr->read_size - wr->read_consumed);
             } else {
                 struct timespec wait;
@@ -387,26 +541,26 @@ test_binder_ioctl_version(
     TestBinder* binder,
     int* version)
 {
-    *version = binder->node->io->version;
+    *version = binder->io->version;
     return 0;
 }
 
 static
-void
-test_binder_node_unref(
-    TestBinderNode* node)
+TestBinderFd*
+test_binder_fd_from_fd(
+    int fd)
 {
-    node->refcount--;
-    if (!node->refcount) {
-        g_hash_table_remove(test_node_map, node->path);
-        g_hash_table_destroy(node->destroy_map);
-        g_free(node->path);
-        g_free(node);
+    TestBinderFd* binder_fd = NULL;
+
+    G_LOCK(test_binder);
+    GASSERT(test_fd_map);
+    if (test_fd_map) {
+        binder_fd = g_hash_table_lookup(test_fd_map, GINT_TO_POINTER(fd));
+        GASSERT(binder_fd);
     }
-    if (!g_hash_table_size(test_node_map)) {
-        g_hash_table_unref(test_node_map);
-        test_node_map = NULL;
-    }
+    G_UNLOCK(test_binder);
+
+    return binder_fd;
 }
 
 static
@@ -414,13 +568,9 @@ TestBinder*
 test_binder_from_fd(
     int fd)
 {
-    TestBinder* binder = NULL;
-    GASSERT(test_fd_map);
-    if (test_fd_map) {
-        binder = g_hash_table_lookup(test_fd_map, GINT_TO_POINTER(fd));
-        GASSERT(binder);
-    }
-    return binder;
+    TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
+
+    return binder_fd ? binder_fd->node->binder : NULL;
 }
 
 static
@@ -436,10 +586,21 @@ test_binder_set_looper_enabled(
     int fd,
     gboolean enabled)
 {
+    TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
+
+    g_assert(binder_fd);
+    binder_fd->node->looper_enabled = enabled;
+}
+
+void
+test_binder_set_passthrough(
+    int fd,
+    gboolean passthrough)
+{
     TestBinder* binder = test_binder_from_fd(fd);
 
     g_assert(binder);
-    binder->looper_enabled = enabled;
+    binder->passthrough = passthrough;
 }
 
 void
@@ -448,13 +609,13 @@ test_binder_set_destroy(
     gpointer ptr,
     GDestroyNotify destroy)
 {
-    TestBinder* binder = test_binder_from_fd(fd);
+    TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
 
-    if (binder) {
-        TestBinderNode* node = binder->node;
-
-        g_hash_table_replace(node->destroy_map, ptr,
+    if (binder_fd) {
+        G_LOCK(test_binder);
+        g_hash_table_replace(binder_fd->destroy_map, ptr,
             destroy ? destroy : test_io_destroy_none);
+        G_UNLOCK(test_binder);
     }
 }
 
@@ -704,44 +865,219 @@ test_binder_br_reply_status_later(
     test_binder_br_reply_status1(fd, status, test_binder_push_data_later);
 }
 
+static
+void
+test_binder_node_clear(
+    TestBinderNode* node)
+{
+    GDEBUG("Done with %s", node->path);
+    g_hash_table_remove(test_node_map, node->path);
+    if (!g_hash_table_size(test_node_map)) {
+        g_hash_table_unref(test_node_map);
+        test_node_map = NULL;
+    }
+    close(node->fd);
+    g_free(node->path);
+}
+
+static
+TestBinder*
+test_binder_ref(
+    TestBinder* binder)
+{
+    if (binder) {
+        g_atomic_int_inc(&binder->refcount);
+    }
+    return binder;
+}
+
+static
+void
+test_binder_unregister_objects_internal(
+    TestBinder* binder,
+    gboolean need_lock)
+{
+    GSList* objects = NULL;
+    GHashTableIter it;
+    gpointer value;
+
+    if (need_lock) {
+        G_LOCK(test_binder);
+    }
+    g_assert(binder);
+    g_hash_table_iter_init(&it, binder->handle_map);
+    while (g_hash_table_iter_next(&it, NULL, &value)) {
+        objects = g_slist_append(objects, value);
+    }
+    g_hash_table_remove_all(binder->object_map);
+    g_hash_table_remove_all(binder->handle_map);
+    if (need_lock) {
+        G_UNLOCK(test_binder);
+    }
+    /* Unref GBinderLocalObjects outside the lock */
+    g_slist_free_full(objects, (GDestroyNotify) gbinder_local_object_unref);
+}
+
+static
+void
+test_binder_unref_internal(
+    TestBinder* binder,
+    gboolean need_lock)
+{
+    if (binder && g_atomic_int_dec_and_test(&binder->refcount)) {
+        if (need_lock) {
+            G_LOCK(test_binder);
+        }
+        test_binder_node_clear(binder->node + 0);
+        test_binder_node_clear(binder->node + 1);
+        if (need_lock) {
+            G_UNLOCK(test_binder);
+        }
+        test_binder_submit_thread_free(binder->submit_thread);
+        test_binder_unregister_objects_internal(binder, need_lock);
+        g_hash_table_destroy(binder->object_map);
+        g_hash_table_destroy(binder->handle_map);
+        g_mutex_clear(&binder->mutex);
+        g_free(binder);
+    }
+}
+
+guint
+test_binder_register_object(
+    int fd,
+    GBinderLocalObject* obj,
+    guint h)
+{
+    TestBinder* binder = test_binder_from_fd(fd);
+
+    g_assert(binder);
+    g_assert(obj);
+
+    G_LOCK(test_binder);
+    g_assert(!g_hash_table_contains(binder->object_map, obj));
+    g_assert(!g_hash_table_contains(binder->handle_map, GINT_TO_POINTER(h)));
+    if (h == AUTO_HANDLE) {
+        h = 1;
+        while (g_hash_table_contains(binder->handle_map, GINT_TO_POINTER(h)) ||
+            g_hash_table_contains(binder->object_map, GINT_TO_POINTER(h))) {
+            h++;
+        }
+    }
+    GDEBUG("Object %p <=> handle %u", obj, h);
+    g_hash_table_insert(binder->handle_map, GINT_TO_POINTER(h), obj);
+    g_hash_table_insert(binder->object_map, obj, GINT_TO_POINTER(h));
+    G_UNLOCK(test_binder);
+
+    gbinder_local_object_ref(obj);
+    return h;
+}
+
+void
+test_binder_unregister_objects(
+    int fd)
+{
+    test_binder_unregister_objects_internal(test_binder_from_fd(fd), TRUE);
+}
+
+static
+void
+test_fd_map_free(
+    gpointer entry)
+{
+    TestBinderFd* binder_fd = entry;
+    GHashTableIter it;
+    gpointer key, value;
+
+    g_hash_table_iter_init(&it, binder_fd->destroy_map);
+    while (g_hash_table_iter_next(&it, &key, &value)) {
+        if (value) {
+            ((GDestroyNotify)value)(key);
+        } else {
+            g_free(key);
+        }
+    }
+    g_hash_table_destroy(binder_fd->destroy_map);
+    test_binder_unref_internal(binder_fd->node->binder, FALSE);
+    close(binder_fd->fd);
+    g_free(binder_fd);
+}
+
+static
+TestBinderFd*
+test_binder_fd_new(
+    TestBinderNode* node)
+{
+    TestBinderFd* binder_fd = g_new0(TestBinderFd, 1);
+
+    test_binder_ref(node->binder);
+    binder_fd->node = node;
+    binder_fd->fd = dup(node->fd);
+    binder_fd->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    return binder_fd;
+}
+
 int
 gbinder_system_open(
     const char* path,
     int flags)
 {
-    if (path && g_str_has_prefix(path, "/dev") &&
-        g_str_has_suffix(path, "binder")) {
-        TestBinderNode* node = NULL;
-        TestBinder* binder = NULL;
-        int fd;
+    static const char binder_suffix[] = "binder";
+    static const char binder_private_suffix[] = "binder-private";
+    static const char private_suffix[] = "-private";
 
-        if (test_node_map) {
-            node = g_hash_table_lookup(test_node_map, path);
-        }
-        if (node) {
-            node->refcount++;
-        } else {
-            node = g_new0(TestBinderNode, 1);
-            node->path = g_strdup(path);
-            node->refcount = 1;
-            node->io = &test_io_64;
-            node->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    if (path && g_str_has_prefix(path, "/dev/") &&
+        (g_str_has_suffix(path, binder_suffix) ||
+         g_str_has_suffix(path, binder_private_suffix))) {
+        TestBinderFd* fd;
+        TestBinderNode* node;
+
+        G_LOCK(test_binder);
+        node = test_node_map ? g_hash_table_lookup(test_node_map, path) : NULL;
+        if (!node) {
+            int i, fds[2];
+            TestBinder* binder = g_new0(TestBinder, 1);
+
+            binder->io = &test_io_64;
+            g_mutex_init(&binder->mutex);
+            g_assert(!socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+
+            if (g_str_has_suffix(path, binder_suffix)) {
+                node = binder->node + PUBLIC;
+                node->path = g_strdup(path);
+                binder->node[PRIVATE].path = g_strconcat(path,
+                    private_suffix, NULL);
+            } else {
+                node = binder->node + PRIVATE;
+                node->path = g_strdup(path);
+                binder->node[PUBLIC].path = g_strndup(path,
+                    strlen(path) - strlen(private_suffix) - 1);
+            }
+
             if (!test_node_map) {
                 test_node_map = g_hash_table_new(g_str_hash, g_str_equal);
             }
-            g_hash_table_replace(test_node_map, node->path, node);
+            for (i = 0; i < 2; i++) {
+                binder->node[i].binder = binder;
+                binder->node[i].fd = fds[i];
+                g_hash_table_replace(test_node_map, binder->node[i].path,
+                    binder->node + i);
+            }
+            binder->object_map = g_hash_table_new
+                (g_direct_hash, g_direct_equal);
+            binder->handle_map = g_hash_table_new
+                (g_direct_hash, g_direct_equal);
+            GDEBUG("Created %s <=> %s binder", binder->node[0].path,
+                binder->node[1].path);
         }
-
-        binder = g_new0(TestBinder, 1);
-        binder->node = node;
-        socketpair(AF_UNIX, SOCK_STREAM, 0, binder->fd);
-        fd = binder->public_fd;
-
+        fd = test_binder_fd_new(node);
         if (!test_fd_map) {
-            test_fd_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+            test_fd_map = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+                NULL, test_fd_map_free);
         }
-        g_hash_table_replace(test_fd_map, GINT_TO_POINTER(fd), binder);
-        return fd;
+        g_hash_table_replace(test_fd_map, GINT_TO_POINTER(fd->fd), fd);
+        G_UNLOCK(test_binder);
+
+        return fd->fd;
     } else {
         errno = ENOENT;
         return -1;
@@ -752,23 +1088,22 @@ int
 gbinder_system_close(
     int fd)
 {
-    TestBinder* binder = test_binder_from_fd(fd);
+    int ret;
 
-    if (binder) {
-        g_hash_table_remove(test_fd_map, GINT_TO_POINTER(fd));
+    G_LOCK(test_binder);
+    if (g_hash_table_remove(test_fd_map, GINT_TO_POINTER(fd))) {
         if (!g_hash_table_size(test_fd_map)) {
             g_hash_table_unref(test_fd_map);
             test_fd_map = NULL;
         }
-        test_binder_submit_thread_free(binder->submit_thread);
-        test_binder_node_unref(binder->node);
-        close(binder->public_fd);
-        close(binder->private_fd);
-        g_free(binder);
-        return 0;
+        ret = 0;
+    } else {
+        errno = EBADF;
+        ret = -1;
     }
-    errno = EBADF;
-    return -1;
+    G_UNLOCK(test_binder);
+
+    return ret;
 }
 
 int
@@ -777,9 +1112,11 @@ gbinder_system_ioctl(
     int request,
     void* data)
 {
-    TestBinder* binder = test_binder_from_fd(fd);
-    if (binder) {
-        const TestBinderIo* io = binder->node->io;
+    TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
+
+    if (binder_fd) {
+        TestBinder* binder = binder_fd->node->binder;
+        const TestBinderIo* io = binder->io;
 
         switch (request) {
         case BINDER_VERSION:
@@ -788,7 +1125,7 @@ gbinder_system_ioctl(
             return 0;
         default:
             if (request == io->write_read_request) {
-                return io->handle_write_read(binder, data);
+                return io->handle_write_read(binder_fd, data);
             } else {
                 errno = EINVAL;
                 return -1;

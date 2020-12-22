@@ -36,6 +36,7 @@
 #include "gbinder_types_p.h"
 
 typedef struct gbinder_handler_functions {
+    gboolean (*can_loop)(GBinderHandler* handler);
     GBinderLocalReply* (*transact)(GBinderHandler* handler,
         GBinderLocalObject* obj, GBinderRemoteRequest* req, guint code,
         guint flags, int* status);
@@ -46,6 +47,14 @@ struct gbinder_handler {
 };
 
 /* Inline wrappers */
+
+GBINDER_INLINE_FUNC
+gboolean
+gbinder_handler_can_loop(
+    GBinderHandler* self)
+{
+    return self && self->f->can_loop && self->f->can_loop(self);
+}
 
 GBINDER_INLINE_FUNC
 GBinderLocalReply*

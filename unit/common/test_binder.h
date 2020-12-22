@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -34,6 +34,8 @@
 #define TEST_BINDER_H
 
 #include "test_common.h"
+
+typedef struct test_binder TestBinder;
 
 void
 test_binder_br_noop(
@@ -117,10 +119,31 @@ test_binder_set_looper_enabled(
     gboolean enabled);
 
 void
+test_binder_set_passthrough(
+    int fd,
+    gboolean passthrough);
+
+guint
+test_binder_register_object(
+    int fd,
+    GBinderLocalObject* obj,
+    guint handle);
+
+#define AUTO_HANDLE ((guint)-1)
+
+void
+test_binder_unregister_objects(
+    int fd);
+
+void
 test_binder_set_destroy(
     int fd,
     gpointer ptr,
     GDestroyNotify destroy);
+
+void
+test_binder_exit_wait(
+    void);
 
 #endif /* TEST_BINDER_H */
 

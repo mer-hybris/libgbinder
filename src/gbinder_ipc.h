@@ -169,6 +169,13 @@ gbinder_ipc_remote_object_disposed(
     GBinderRemoteObject* obj)
     GBINDER_INTERNAL;
 
+/* Needed by unit tests */
+gboolean
+gbinder_ipc_set_max_threads(
+    GBinderIpc* self,
+    gint max_threads)
+    GBINDER_INTERNAL;
+
 /* Declared for unit tests */
 void
 gbinder_ipc_exit(

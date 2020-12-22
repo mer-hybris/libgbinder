@@ -129,6 +129,7 @@ test_basic(
     g_assert(!gbinder_ipc_new("invalid path"));
 
     gbinder_ipc_exit();
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -191,6 +192,7 @@ test_sync_oneway(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -235,6 +237,7 @@ test_sync_reply_ok_status(
     gbinder_local_reply_unref(reply);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
 }
 
 static
@@ -278,6 +281,7 @@ test_sync_reply_error(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -348,6 +352,7 @@ test_transact_ok(
     gbinder_local_reply_unref(reply);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -395,6 +400,7 @@ test_transact_dead(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -442,6 +448,7 @@ test_transact_failed(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -491,6 +498,7 @@ test_transact_status(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -523,6 +531,7 @@ test_transact_custom(
     gbinder_ipc_exit();
     gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -554,6 +563,7 @@ test_transact_custom2(
     gbinder_ipc_exit();
     gbinder_ipc_unref(ipc);
     g_main_loop_unref(loop);
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -586,6 +596,7 @@ test_transact_custom3(
 
     /* Reference to GBinderIpc is released by test_transact_custom3_exec */
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -635,6 +646,7 @@ test_transact_cancel(
 
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -680,6 +692,7 @@ test_transact_cancel2(
 
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -769,6 +782,7 @@ test_transact_2way(
 
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+    test_binder_exit_wait();
 }
 
 /*==========================================================================*
@@ -840,6 +854,7 @@ test_transact_incoming(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -904,6 +919,7 @@ test_transact_status_reply(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -1011,6 +1027,7 @@ test_transact_async(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -1084,6 +1101,7 @@ test_transact_async_sync(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -1126,6 +1144,7 @@ test_drop_remote_refs(
     /* gbinder_ipc_exit will drop the remote reference */
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
@@ -1163,6 +1182,7 @@ test_cancel_on_exit(
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
+    test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
 
