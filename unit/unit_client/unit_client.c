@@ -208,6 +208,7 @@ test_dead(
 
     gbinder_client_unref(client);
     g_main_loop_unref(loop);
+    gbinder_ipc_exit();
 }
 
 /*==========================================================================*

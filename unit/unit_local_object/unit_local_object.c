@@ -642,6 +642,7 @@ test_increfs(
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -685,6 +686,7 @@ test_decrefs(
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -726,6 +728,7 @@ test_acquire(
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -768,6 +771,7 @@ test_release(
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 

@@ -815,6 +815,7 @@ test_death(
     gbinder_servicemanager_remove_all_handlers(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -886,6 +887,7 @@ test_reanimate(
     gbinder_servicemanager_remove_all_handlers(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 

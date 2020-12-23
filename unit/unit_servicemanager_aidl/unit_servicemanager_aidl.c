@@ -276,6 +276,7 @@ test_get()
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
@@ -353,6 +354,7 @@ test_list()
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     test_binder_exit_wait();
 
     g_strfreev(test.list);
@@ -415,6 +417,7 @@ test_notify()
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     test_binder_exit_wait();
     g_main_loop_unref(loop);
 }
