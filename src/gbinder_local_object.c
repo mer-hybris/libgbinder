@@ -339,36 +339,48 @@ gbinder_local_object_new(
     if (G_LIKELY(ipc)) {
         GBinderLocalObject* self = g_object_new
             (GBINDER_TYPE_LOCAL_OBJECT, NULL);
-        GBinderLocalObjectPriv* priv = self->priv;
-        guint i = 0, n = gutil_strv_length((char**)ifaces);
-        gboolean append_base_interface;
 
-        if (g_strcmp0(gutil_strv_last((char**)ifaces), hidl_base_interface)) {
-            append_base_interface = TRUE;
-            n++;
-        } else {
-            append_base_interface = FALSE;
-        }
-
-        priv->ifaces = g_new(char*, n + 1);
-        if (ifaces) {
-            while (*ifaces) {
-                priv->ifaces[i++] = g_strdup(*ifaces++);
-            }
-        }
-        if (append_base_interface) {
-            priv->ifaces[i++] = g_strdup(hidl_base_interface);
-        }
-        priv->ifaces[i] = NULL;
-
-        self->ipc = gbinder_ipc_ref(ipc);
-        self->ifaces = (const char**)priv->ifaces;
-        priv->txproc = txproc;
-        priv->user_data = user_data;
+        gbinder_local_object_init_base(self, ipc, ifaces, txproc, user_data);
         gbinder_ipc_register_local_object(ipc, self);
         return self;
     }
     return NULL;
+}
+
+void
+gbinder_local_object_init_base(
+    GBinderLocalObject* self,
+    GBinderIpc* ipc,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc txproc,
+    void* user_data)
+{
+    GBinderLocalObjectPriv* priv = self->priv;
+    guint i = 0, n = gutil_strv_length((char**)ifaces);
+    gboolean append_base_interface;
+
+    if (g_strcmp0(gutil_strv_last((char**)ifaces), hidl_base_interface)) {
+        append_base_interface = TRUE;
+        n++;
+    } else {
+        append_base_interface = FALSE;
+    }
+
+    priv->ifaces = g_new(char*, n + 1);
+    if (ifaces) {
+        while (*ifaces) {
+            priv->ifaces[i++] = g_strdup(*ifaces++);
+        }
+    }
+    if (append_base_interface) {
+        priv->ifaces[i++] = g_strdup(hidl_base_interface);
+    }
+    priv->ifaces[i] = NULL;
+
+    self->ipc = gbinder_ipc_ref(ipc);
+    self->ifaces = (const char**)priv->ifaces;
+    priv->txproc = txproc;
+    priv->user_data = user_data;
 }
 
 GBinderLocalObject*

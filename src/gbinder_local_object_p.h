@@ -83,9 +83,20 @@ GType gbinder_local_object_get_type(void) GBINDER_INTERNAL;
 #define GBINDER_TYPE_LOCAL_OBJECT (gbinder_local_object_get_type())
 #define GBINDER_LOCAL_OBJECT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         GBINDER_TYPE_LOCAL_OBJECT, GBinderLocalObject))
+#define GBINDER_LOCAL_OBJECT_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
+        GBINDER_TYPE_LOCAL_OBJECT, GBinderLocalObjectClass)
 
 #define gbinder_local_object_dev(obj) (gbinder_driver_dev((obj)->ipc->driver))
 #define gbinder_local_object_io(obj) (gbinder_driver_io((obj)->ipc->driver))
+
+void
+gbinder_local_object_init_base(
+    GBinderLocalObject* self,
+    GBinderIpc* ipc,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc txproc,
+    void* user_data)
+    GBINDER_INTERNAL;
 
 gulong
 gbinder_local_object_add_weak_refs_changed_handler(
