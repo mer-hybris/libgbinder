@@ -713,7 +713,7 @@ gbinder_driver_new(
                             max_threads, strerror(errno));
                     }
                     /* Choose the protocol based on the device name
-                     * if none is explicitely specified */
+                     * if none is explicitly specified */
                     self->protocol = protocol ? protocol :
                         gbinder_rpc_protocol_for_device(dev);
                     return self;

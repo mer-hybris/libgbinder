@@ -404,7 +404,7 @@ test_io_passthough_write_64(
 
             /*
              * Objects are supposed to be aligned at 32-bit boundary, so we
-             * can scanning the data buffer with 4-byte step.
+             * can scan the data buffer with 4-byte step.
              */
             for (data_ptr = data_buffer; data_ptr < data_end; data_ptr++) {
                 if (*data_ptr == BINDER_TYPE_BINDER) {
