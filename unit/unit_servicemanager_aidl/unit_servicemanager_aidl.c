@@ -33,21 +33,17 @@
 #include "test_binder.h"
 
 #include "gbinder_driver.h"
-#include "gbinder_config.h"
 #include "gbinder_ipc.h"
 #include "gbinder_reader.h"
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_rpc_protocol.h"
-#include "gbinder_local_object.h"
+#include "gbinder_local_object_p.h"
 #include "gbinder_local_reply.h"
 #include "gbinder_remote_request.h"
 #include "gbinder_remote_object.h"
 
 #include <gutil_strv.h>
-#include <gutil_macros.h>
 #include <gutil_log.h>
-
-#include <errno.h>
 
 static TestOpt test_opt;
 
@@ -70,7 +66,7 @@ gbinder_servicemanager_aidl2_get_type()
  *==========================================================================*/
 
 #define SVCMGR_HANDLE (0)
-static const char SVCMGR[] = "android.os.IServiceManager";
+static const char SVCMGR_IFACE[] = "android.os.IServiceManager";
 enum servicemanager_aidl_tx {
     GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
     CHECK_SERVICE_TRANSACTION,
@@ -78,12 +74,20 @@ enum servicemanager_aidl_tx {
     LIST_SERVICES_TRANSACTION
 };
 
-const char* const servicemanager_aidl_ifaces[] = { SVCMGR, NULL };
+const char* const servicemanager_aidl_ifaces[] = { SVCMGR_IFACE, NULL };
 
-typedef struct test_service_manager {
-    GBinderLocalObject* obj;
+typedef GBinderLocalObjectClass ServiceManagerAidlClass;
+typedef struct service_manager_aidl {
+    GBinderLocalObject parent;
     GHashTable* objects;
-} TestServiceManager;
+    gboolean handle_on_looper_thread;
+} ServiceManagerAidl;
+
+#define SERVICE_MANAGER_AIDL_TYPE (service_manager_aidl_get_type())
+#define SERVICE_MANAGER_AIDL(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        SERVICE_MANAGER_AIDL_TYPE, ServiceManagerAidl))
+G_DEFINE_TYPE(ServiceManagerAidl, service_manager_aidl, \
+        GBINDER_TYPE_LOCAL_OBJECT)
 
 static
 GBinderLocalReply*
@@ -95,7 +99,7 @@ servicemanager_aidl_handler(
     int* status,
     void* user_data)
 {
-    TestServiceManager* self = user_data;
+    ServiceManagerAidl* self = user_data;
     GBinderLocalReply* reply = NULL;
     GBinderReader reader;
     GBinderRemoteObject* remote_obj;
@@ -103,7 +107,7 @@ servicemanager_aidl_handler(
     char* str;
 
     g_assert(!flags);
-    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,SVCMGR);
+    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,SVCMGR_IFACE);
     *status = -1;
     switch (code) {
     case GET_SERVICE_TRANSACTION:
@@ -161,20 +165,22 @@ servicemanager_aidl_handler(
 }
 
 static
-TestServiceManager*
+ServiceManagerAidl*
 servicemanager_aidl_new(
-    const char* dev)
+    const char* dev,
+    gboolean handle_on_looper_thread)
 {
-    TestServiceManager* self = g_new0(TestServiceManager, 1);
+    ServiceManagerAidl* self = g_object_new(SERVICE_MANAGER_AIDL_TYPE, NULL);
+    GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
     GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
 
-    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-        (GDestroyNotify) gbinder_remote_object_unref);
-    self->obj = gbinder_local_object_new(ipc, servicemanager_aidl_ifaces,
+    self->handle_on_looper_thread = handle_on_looper_thread;
+    gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
         servicemanager_aidl_handler, self);
     test_binder_set_looper_enabled(fd, TRUE);
-    test_binder_register_object(fd, self->obj, SVCMGR_HANDLE);
+    test_binder_register_object(fd, obj, SVCMGR_HANDLE);
+    gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
     return self;
 }
@@ -182,11 +188,79 @@ servicemanager_aidl_new(
 static
 void
 servicemanager_aidl_free(
-    TestServiceManager* self)
+    ServiceManagerAidl* self)
 {
-    gbinder_local_object_drop(self->obj);
+    gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(self));
+}
+
+static
+GBINDER_LOCAL_TRANSACTION_SUPPORT
+service_manager_aidl_can_handle_transaction(
+    GBinderLocalObject* object,
+    const char* iface,
+    guint code)
+{
+    ServiceManagerAidl* self = SERVICE_MANAGER_AIDL(object);
+
+    if (self->handle_on_looper_thread && !g_strcmp0(SVCMGR_IFACE, iface)) {
+        return GBINDER_LOCAL_TRANSACTION_LOOPER;
+    } else {
+        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
+            can_handle_transaction(object, iface, code);
+    }
+}
+
+static
+GBinderLocalReply*
+service_manager_aidl_handle_looper_transaction(
+    GBinderLocalObject* object,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status)
+{
+    if (!g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE)) {
+        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
+            handle_transaction(object, req, code, flags, status);
+    } else {
+        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
+            handle_looper_transaction(object, req, code, flags, status);
+    }
+}
+
+static
+void
+service_manager_aidl_finalize(
+    GObject* object)
+{
+    ServiceManagerAidl* self = SERVICE_MANAGER_AIDL(object);
+
     g_hash_table_destroy(self->objects);
-    g_free(self);
+    G_OBJECT_CLASS(service_manager_aidl_parent_class)->finalize(object);
+}
+
+static
+void
+service_manager_aidl_init(
+    ServiceManagerAidl* self)
+{
+    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+        (GDestroyNotify) gbinder_remote_object_unref);
+}
+
+static
+void
+service_manager_aidl_class_init(
+    ServiceManagerAidlClass* klass)
+{
+    GObjectClass* object = G_OBJECT_CLASS(klass);
+    GBinderLocalObjectClass* local_object = GBINDER_LOCAL_OBJECT_CLASS(klass);
+
+    object->finalize = service_manager_aidl_finalize;
+    local_object->can_handle_transaction =
+        service_manager_aidl_can_handle_transaction;
+    local_object->handle_looper_transaction =
+        service_manager_aidl_handle_looper_transaction;
 }
 
 /*==========================================================================*
@@ -239,7 +313,7 @@ test_get()
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    TestServiceManager* smsvc = servicemanager_aidl_new(other_dev);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -266,7 +340,7 @@ test_get()
     g_assert_cmpuint(g_hash_table_size(smsvc->objects), == ,1);
     g_assert(g_hash_table_contains(smsvc->objects, name));
 
-    /* Query the object (it should be there not) and wait for completion */
+    /* Query the object (this time it must be there) and wait for completion */
     GDEBUG("Querying '%s' again", name);
     g_assert(gbinder_servicemanager_get_service(sm, name, test_get_cb, loop));
     test_run(&test_opt, loop);
@@ -313,7 +387,7 @@ test_list()
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    TestServiceManager* smsvc = servicemanager_aidl_new(other_dev);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -384,7 +458,7 @@ test_notify()
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev);
-    TestServiceManager* smsvc = servicemanager_aidl_new(other_dev);
+    ServiceManagerAidl* svc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -414,6 +488,65 @@ test_notify()
 
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
+    servicemanager_aidl_free(svc);
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
+    test_binder_exit_wait();
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * notify2
+ *==========================================================================*/
+
+static
+void
+test_notify2()
+{
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, TRUE);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderServiceManager* sm;
+    const char* name1 = "name1";
+    const char* name2 = "name2";
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    gulong id1, id2;
+
+    /* Set up binder simulator */
+    test_binder_register_object(fd, obj, AUTO_HANDLE);
+    test_binder_set_passthrough(fd, TRUE);
+    sm = gbinder_servicemanager_new(dev);
+    gbinder_ipc_set_max_threads(ipc, 1);
+
+    /* Register the object synchronously (twice)*/
+    GDEBUG("Registering object '%s' => %p", name1, obj);
+    g_assert_cmpint(gbinder_servicemanager_add_service_sync(sm,name1,obj),==,0);
+    g_assert(gbinder_servicemanager_get_service_sync(sm, name1, NULL));
+    GDEBUG("Registering object '%s' => %p", name2, obj);
+    g_assert_cmpint(gbinder_servicemanager_add_service_sync(sm,name2,obj),==,0);
+    g_assert(gbinder_servicemanager_get_service_sync(sm, name2, NULL));
+
+    /* Watch for the first name to create internal name watcher */
+    id1 = gbinder_servicemanager_add_registration_handler(sm, name1,
+        test_notify_cb, loop);
+    g_assert(id1);
+    test_run(&test_opt, loop);
+
+    /* Now watch for the second name */
+    id2 = gbinder_servicemanager_add_registration_handler(sm, name2,
+        test_notify_cb, loop);
+    g_assert(id2);
+    test_run(&test_opt, loop);
+
+    gbinder_servicemanager_remove_handler(sm, id1);
+    gbinder_servicemanager_remove_handler(sm, id2);
+
+    test_binder_unregister_objects(fd);
+    gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
@@ -434,6 +567,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("get"), test_get);
     g_test_add_func(TEST_("list"), test_list);
     g_test_add_func(TEST_("notify"), test_notify);
+    g_test_add_func(TEST_("notify2"), test_notify2);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
