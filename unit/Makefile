@@ -20,6 +20,7 @@ all:
 	@$(MAKE) -C unit_remote_request $*
 	@$(MAKE) -C unit_servicemanager $*
 	@$(MAKE) -C unit_servicemanager_aidl $*
+	@$(MAKE) -C unit_servicemanager_aidl2 $*
 	@$(MAKE) -C unit_servicename $*
 	@$(MAKE) -C unit_servicepoll $*
 	@$(MAKE) -C unit_writer $*
