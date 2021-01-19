@@ -397,6 +397,15 @@ GBINDER_IO_FN(decode_binder_object)(
                 *out = gbinder_object_registry_get_remote(reg, obj->handle);
             }
             return sizeof(*obj);
+        case BINDER_TYPE_BINDER:
+            if (!obj->binder) {
+                /* That's a NULL reference */
+                if (out) {
+                    *out = NULL;
+                }
+                return sizeof(*obj);
+            }
+            /* fallthrough */
         default:
             GERR("Unsupported binder object type 0x%08x", obj->hdr.type);
             break;
