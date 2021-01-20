@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -209,6 +209,23 @@ static
 GBinderIpcLooper*
 gbinder_ipc_looper_new(
     GBinderIpc* ipc);
+
+static
+GBinderRemoteReply*
+gbinder_ipc_transact_sync_reply_worker(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status);
+
+static
+int
+gbinder_ipc_transact_sync_oneway_worker(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req);
 
 /*==========================================================================*
  * Utilities
@@ -1433,30 +1450,15 @@ void
 gbinder_ipc_tx_internal_exec(
     GBinderIpcTxPriv* priv)
 {
-    static const GBinderHandlerFunctions handler_fn = {
-        .can_loop = NULL,
-        .transact = gbinder_ipc_tx_handler_transact
-    };
     GBinderIpcTxInternal* tx = gbinder_ipc_tx_internal_cast(priv);
-    GBinderIpcTx* pub = &priv->pub;
-    GBinderIpc* self = pub->ipc;
-    GBinderObjectRegistry* reg = &self->priv->object_registry;
-    GBinderHandler handler = { &handler_fn };
+    GBinderIpc* ipc = priv->pub.ipc;
 
-    /* Perform synchronous transaction */
     if (tx->flags & GBINDER_TX_FLAG_ONEWAY) {
-        tx->status = gbinder_driver_transact(self->driver, reg, &handler,
-            tx->handle, tx->code, tx->req, NULL);
+        tx->status = gbinder_ipc_transact_sync_oneway_worker(ipc, tx->handle,
+            tx->code, tx->req);
     } else {
-        tx->reply = gbinder_remote_reply_new(&self->priv->object_registry);
-        tx->status = gbinder_driver_transact(self->driver, reg, &handler,
-            tx->handle, tx->code, tx->req, tx->reply);
-        if (tx->status != GBINDER_STATUS_OK &&
-            gbinder_remote_reply_is_empty(tx->reply)) {
-            /* Drop useless reply */
-            gbinder_remote_reply_unref(tx->reply);
-            tx->reply = NULL;
-        }
+        tx->reply = gbinder_ipc_transact_sync_reply_worker(ipc, tx->handle,
+            tx->code, tx->req, &tx->status);
     }
 }
 
@@ -1580,6 +1582,128 @@ gbinder_ipc_tx_proc(
 }
 
 /*==========================================================================*
+ * GBinderIpcSyncApi for worker threads
+ *==========================================================================*/
+
+static
+GBinderRemoteReply*
+gbinder_ipc_transact_sync_reply_worker(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status)
+{
+    /* Must be invoked on worker thread */
+    if (G_LIKELY(self)) {
+        static const GBinderHandlerFunctions handler_fn = {
+            .can_loop = NULL,
+            .transact = gbinder_ipc_tx_handler_transact
+        };
+        GBinderHandler handler = { &handler_fn };
+        GBinderIpcPriv* priv = self->priv;
+        GBinderObjectRegistry* reg = &priv->object_registry;
+        GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
+        int ret = gbinder_driver_transact(self->driver, reg, &handler,
+            handle, code, req, reply);
+
+        if (status) *status = ret;
+        if (ret == GBINDER_STATUS_OK || !gbinder_remote_reply_is_empty(reply)) {
+            return reply;
+        } else {
+            gbinder_remote_reply_unref(reply);
+        }
+    } else {
+        if (status) *status = (-EINVAL);
+    }
+    return NULL;
+}
+
+static
+int
+gbinder_ipc_transact_sync_oneway_worker(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req)
+{
+    /* Must be invoked on worker thread */
+    if (G_LIKELY(self)) {
+        static const GBinderHandlerFunctions handler_fn = {
+            .can_loop = NULL,
+            .transact = gbinder_ipc_tx_handler_transact
+        };
+        GBinderHandler handler = { &handler_fn };
+        GBinderIpcPriv* priv = self->priv;
+
+        return gbinder_driver_transact(self->driver, &priv->object_registry,
+            &handler, handle, code, req, NULL);
+    } else {
+        return (-EINVAL);
+    }
+}
+
+const GBinderIpcSyncApi gbinder_ipc_sync_worker = {
+    .sync_reply = gbinder_ipc_transact_sync_reply_worker,
+    .sync_oneway = gbinder_ipc_transact_sync_oneway_worker
+};
+
+/*==========================================================================*
+ * GBinderIpcSyncApi for the main thread
+ *==========================================================================*/
+
+static
+GBinderRemoteReply*
+gbinder_ipc_transact_sync_reply(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status)
+{
+    if (G_LIKELY(self)) {
+        GBinderIpcPriv* priv = self->priv;
+        GBinderObjectRegistry* reg = &priv->object_registry;
+        GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
+        int ret = gbinder_driver_transact(self->driver, reg, NULL, handle,
+            code, req, reply);
+
+        if (status) *status = ret;
+        if (ret == GBINDER_STATUS_OK || !gbinder_remote_reply_is_empty(reply)) {
+            return reply;
+        } else {
+            gbinder_remote_reply_unref(reply);
+        }
+    } else {
+        if (status) *status = (-EINVAL);
+    }
+    return NULL;
+}
+
+static
+int
+gbinder_ipc_transact_sync_oneway(
+    GBinderIpc* self,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req)
+{
+    if (G_LIKELY(self)) {
+        GBinderIpcPriv* priv = self->priv;
+
+        return gbinder_driver_transact(self->driver, &priv->object_registry,
+            NULL, handle, code, req, NULL);
+    } else {
+        return (-EINVAL);
+    }
+}
+
+const GBinderIpcSyncApi gbinder_ipc_sync_main = {
+    .sync_reply = gbinder_ipc_transact_sync_reply,
+    .sync_oneway = gbinder_ipc_transact_sync_oneway
+};
+
+/*==========================================================================*
  * Interface
  *==========================================================================*/
 
@@ -1650,50 +1774,6 @@ gbinder_ipc_object_registry(
 {
     /* Only used by unit tests */
     return G_LIKELY(self) ? &self->priv->object_registry : NULL;
-}
-
-GBinderRemoteReply*
-gbinder_ipc_transact_sync_reply(
-    GBinderIpc* self,
-    guint32 handle,
-    guint32 code,
-    GBinderLocalRequest* req,
-    int* status)
-{
-    if (G_LIKELY(self)) {
-        GBinderIpcPriv* priv = self->priv;
-        GBinderObjectRegistry* reg = &priv->object_registry;
-        GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
-        int ret = gbinder_driver_transact(self->driver, reg, NULL, handle,
-            code, req, reply);
-
-        if (status) *status = ret;
-        if (ret == GBINDER_STATUS_OK || !gbinder_remote_reply_is_empty(reply)) {
-            return reply;
-        } else {
-            gbinder_remote_reply_unref(reply);
-        }
-    } else {
-        if (status) *status = (-EINVAL);
-    }
-    return NULL;
-}
-
-int
-gbinder_ipc_transact_sync_oneway(
-    GBinderIpc* self,
-    guint32 handle,
-    guint32 code,
-    GBinderLocalRequest* req)
-{
-    if (G_LIKELY(self)) {
-        GBinderIpcPriv* priv = self->priv;
-
-        return gbinder_driver_transact(self->driver, &priv->object_registry,
-            NULL, handle, code, req, NULL);
-    } else {
-        return (-EINVAL);
-    }
 }
 
 gulong

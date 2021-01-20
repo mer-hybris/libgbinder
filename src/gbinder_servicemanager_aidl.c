@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,9 +35,9 @@
 #include "gbinder_servicemanager_aidl.h"
 #include "gbinder_servicepoll.h"
 #include "gbinder_eventloop_p.h"
+#include "gbinder_client_p.h"
 #include "gbinder_log.h"
 
-#include <gbinder_client.h>
 #include <gbinder_local_request.h>
 #include <gbinder_remote_reply.h>
 
@@ -172,7 +172,8 @@ gbinder_servicemanager_aidl_add_service_req(
 static
 char**
 gbinder_servicemanager_aidl_list(
-    GBinderServiceManager* manager)
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
 {
     GPtrArray* list = g_ptr_array_new();
     GBinderClient* client = manager->client;
@@ -181,8 +182,8 @@ gbinder_servicemanager_aidl_list(
     GBinderLocalRequest* req = klass->list_services_req(client, 0);
     GBinderRemoteReply* reply;
 
-    while ((reply = gbinder_client_transact_sync_reply(client,
-        LIST_SERVICES_TRANSACTION, req, NULL)) != NULL) {
+    while ((reply = gbinder_client_transact_sync_reply2(client,
+        LIST_SERVICES_TRANSACTION, req, NULL, api)) != NULL) {
         char* service = gbinder_remote_reply_read_string16(reply);
 
         gbinder_remote_reply_unref(reply);
@@ -205,15 +206,16 @@ GBinderRemoteObject*
 gbinder_servicemanager_aidl_get_service(
     GBinderServiceManager* self,
     const char* name,
-    int* status)
+    int* status,
+    const GBinderIpcSyncApi* api)
 {
     GBinderRemoteObject* obj;
     GBinderRemoteReply* reply;
     GBinderLocalRequest* req = gbinder_client_new_request(self->client);
 
     gbinder_local_request_append_string16(req, name);
-    reply = gbinder_client_transact_sync_reply(self->client,
-        CHECK_SERVICE_TRANSACTION, req, status);
+    reply = gbinder_client_transact_sync_reply2(self->client,
+        CHECK_SERVICE_TRANSACTION, req, status, api);
 
     obj = gbinder_remote_reply_read_object(reply);
     gbinder_remote_reply_unref(reply);
@@ -226,14 +228,15 @@ int
 gbinder_servicemanager_aidl_add_service(
     GBinderServiceManager* manager,
     const char* name,
-    GBinderLocalObject* obj)
+    GBinderLocalObject* obj,
+    const GBinderIpcSyncApi* api)
 {
     int status;
     GBinderClient* client = manager->client;
     GBinderLocalRequest* req = GBINDER_SERVICEMANAGER_AIDL_GET_CLASS
         (manager)->add_service_req(client, name, obj);
-    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply(client,
-        ADD_SERVICE_TRANSACTION, req, &status);
+    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply2(client,
+        ADD_SERVICE_TRANSACTION, req, &status, api);
 
     gbinder_remote_reply_unref(reply);
     gbinder_local_request_unref(req);

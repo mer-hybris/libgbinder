@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -67,6 +67,31 @@ void
     int status,
     void* user_data);
 
+typedef
+GBinderRemoteReply*
+(*GBinderIpcSyncReplyFunc)(
+    GBinderIpc* ipc,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status);
+
+typedef
+int
+(*GBinderIpcSyncOnewayFunc)(
+    GBinderIpc* ipc,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req);
+
+struct gbinder_ipc_sync_api {
+    GBinderIpcSyncReplyFunc sync_reply;
+    GBinderIpcSyncOnewayFunc sync_oneway;
+};
+
+extern const GBinderIpcSyncApi gbinder_ipc_sync_main GBINDER_INTERNAL;
+extern const GBinderIpcSyncApi gbinder_ipc_sync_worker GBINDER_INTERNAL;
+
 GBinderIpc*
 gbinder_ipc_new(
     const char* dev)
@@ -109,23 +134,6 @@ void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* ipc,
     guint32 handle)
-    GBINDER_INTERNAL;
-
-GBinderRemoteReply*
-gbinder_ipc_transact_sync_reply(
-    GBinderIpc* ipc,
-    guint32 handle,
-    guint32 code,
-    GBinderLocalRequest* req,
-    int* status)
-    GBINDER_INTERNAL;
-
-int
-gbinder_ipc_transact_sync_oneway(
-    GBinderIpc* ipc,
-    guint32 handle,
-    guint32 code,
-    GBinderLocalRequest* req)
     GBINDER_INTERNAL;
 
 gulong

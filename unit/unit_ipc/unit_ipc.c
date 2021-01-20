@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -84,10 +84,16 @@ test_null(
 
     g_assert(!gbinder_ipc_ref(null));
     gbinder_ipc_unref(null);
-    g_assert(!gbinder_ipc_transact_sync_reply(null, 0, 0, NULL, NULL));
-    g_assert(!gbinder_ipc_transact_sync_reply(null, 0, 0, NULL, &status));
-    g_assert(status == (-EINVAL));
-    g_assert(gbinder_ipc_transact_sync_oneway(null, 0, 0, NULL) == (-EINVAL));
+    g_assert(!gbinder_ipc_sync_main.sync_reply(null, 0, 0, NULL, NULL));
+    g_assert(!gbinder_ipc_sync_main.sync_reply(null, 0, 0, NULL, &status));
+    g_assert_cmpint(status, == ,-EINVAL);
+    g_assert(!gbinder_ipc_sync_worker.sync_reply(null, 0, 0, NULL, NULL));
+    g_assert(!gbinder_ipc_sync_worker.sync_reply(null, 0, 0, NULL, &status));
+    g_assert_cmpint(status, == ,-EINVAL);
+    g_assert_cmpint(gbinder_ipc_sync_main.sync_oneway(null, 0, 0, NULL), == ,
+        -EINVAL);
+    g_assert_cmpint(gbinder_ipc_sync_worker.sync_oneway(null, 0, 0, NULL), == ,
+        -EINVAL);
     g_assert(!gbinder_ipc_transact(null, 0, 0, 0, NULL, NULL, NULL, NULL));
     g_assert(!gbinder_ipc_transact_custom(null, NULL, NULL, NULL, NULL));
     g_assert(!gbinder_ipc_object_registry(null));
@@ -187,8 +193,7 @@ test_sync_oneway(
     GBinderLocalRequest* req = gbinder_local_request_new(io, NULL);
 
     test_binder_br_transaction_complete(fd);
-    g_assert(gbinder_ipc_transact_sync_oneway(ipc, 0, 1, req) ==
-        GBINDER_STATUS_OK);
+    g_assert_cmpint(gbinder_ipc_sync_main.sync_oneway(ipc, 0, 1, req), == ,0);
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
@@ -225,7 +230,7 @@ test_sync_reply_ok_status(
     test_binder_br_noop(fd);
     test_binder_br_reply(fd, handle, code, data->bytes);
 
-    tx_reply = gbinder_ipc_transact_sync_reply(ipc, handle, code, req, status);
+    tx_reply = gbinder_ipc_sync_main.sync_reply(ipc, handle, code, req, status);
     g_assert(tx_reply);
 
     result_out = gbinder_remote_reply_read_string16(tx_reply);
@@ -275,7 +280,7 @@ test_sync_reply_error(
     test_binder_br_noop(fd);
     test_binder_br_reply_status(fd, expected_status);
 
-    g_assert(!gbinder_ipc_transact_sync_reply(ipc, handle, code, req, &status));
+    g_assert(!gbinder_ipc_sync_main.sync_reply(ipc,handle,code,req,&status));
     g_assert(status == expected_status);
 
     gbinder_local_request_unref(req);

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -66,12 +66,11 @@ typedef struct gbinder_servicemanager_class {
     const char* default_device;
 
     /* Methods (synchronous) */
-    char** (*list)(GBinderServiceManager* self);
-    GBinderRemoteObject* (*get_service)
-        (GBinderServiceManager* self, const char* name, int* status);
-    int (*add_service)
-        (GBinderServiceManager* self, const char* name,
-            GBinderLocalObject* obj);
+    char** (*list)(GBinderServiceManager* self, const GBinderIpcSyncApi* api);
+    GBinderRemoteObject* (*get_service)(GBinderServiceManager* self,
+        const char* name, int* status, const GBinderIpcSyncApi* api);
+    int (*add_service)(GBinderServiceManager* self, const char* name,
+        GBinderLocalObject* obj, const GBinderIpcSyncApi* api);
 
     /* Checking/normalizing watch names */
     GBINDER_SERVICEMANAGER_NAME_CHECK (*check_name)
