@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -86,12 +86,14 @@ typedef struct test_binder_submit_thread {
     TestBinder* binder;
 } TestBinderSubmitThread;
 
-typedef struct test_binder_node {
+typedef struct test_binder_node TestBinderNode;
+struct test_binder_node {
     int fd;
     char* path;
     TestBinder* binder;
+    TestBinderNode* other;
     gboolean looper_enabled;
-} TestBinderNode;
+};
 
 typedef struct test_binder_fd {
     int fd;
@@ -138,6 +140,11 @@ typedef struct binder_transaction_data_64 {
     guint64 data_offsets;
 } BinderTransactionData64;
 
+typedef struct binder_transaction_data_sg_64 {
+    BinderTransactionData64 tx;
+    guint64 buffers_size;
+} BinderTransactionDataSg64;
+
 typedef struct binder_pre_cookie_64 {
     guint64 ptr;
     guint64 cookie;
@@ -166,6 +173,8 @@ typedef struct binder_object_64 {
 #define BC_EXIT_LOOPER           _IO('c', 13)
 #define BC_REQUEST_DEATH_NOTIFICATION_64 _IOW('c', 14, BinderHandleCookie64)
 #define BC_CLEAR_DEATH_NOTIFICATION_64   _IOW('c', 15, BinderHandleCookie64)
+#define BC_TRANSACTION_SG_64    _IOW('c', 17, BinderTransactionDataSg64)
+#define BC_REPLY_SG_64          _IOW('c', 18, BinderTransactionDataSg64)
 
 #define BR_TRANSACTION_64       _IOR('r', 2, BinderTransactionData64)
 #define BR_REPLY_64             _IOR('r', 3, BinderTransactionData64)
@@ -353,6 +362,7 @@ test_io_passthough_write_64(
     gssize bytes_written;
     guint extra;
     guint32* cmd;
+    guint32 bytes_to_really_write;
     void* data;
 
     /* Just ignore some codes for now */
@@ -374,6 +384,7 @@ test_io_passthough_write_64(
         tx = data;
         break;
     case BC_TRANSACTION_64:
+    case BC_TRANSACTION_SG_64:
         *cmd = BR_TRANSACTION_64;
          tx = data;
        break;
@@ -382,6 +393,7 @@ test_io_passthough_write_64(
         tx = data;
         break;
     case BC_REPLY_64:
+    case BC_REPLY_SG_64:
         extra = BR_TRANSACTION_COMPLETE;
         write(fd->fd, &extra, sizeof(extra));
         *cmd = BR_REPLY_64;
@@ -399,8 +411,8 @@ test_io_passthough_write_64(
         if (data_buffer && tx->data_size > sizeof(BinderObject64)) {
             /* Replace BINDER_TYPE_BINDER with BINDER_TYPE_HANDLE */
             guint32* data_ptr = data_buffer;
-            const guint32* data_end = data_buffer + (tx->data_size -
-                sizeof(BinderObject64))/sizeof(guint32);
+            const guint32* data_end = data_buffer + ((tx->data_size -
+                sizeof(BinderObject64))/sizeof(guint32) + 1);
 
             /*
              * Objects are supposed to be aligned at 32-bit boundary, so we
@@ -410,9 +422,11 @@ test_io_passthough_write_64(
                 if (*data_ptr == BINDER_TYPE_BINDER) {
                     BinderObject64* object = (BinderObject64*) data_ptr;
 
-                    object->type = BINDER_TYPE_HANDLE;
-                    object->object = test_io_passthough_fix_handle(binder,
-                        object->object);
+                    if (object->object) {
+                        object->type = BINDER_TYPE_HANDLE;
+                        object->object = test_io_passthough_fix_handle(binder,
+                            object->object);
+                    }
                     data_ptr += sizeof(object)/sizeof(guint32) - 1;
                 }
             }
@@ -422,9 +436,13 @@ test_io_passthough_write_64(
         tx->data_buffer = GPOINTER_TO_SIZE(data_buffer);
         tx->data_offsets = GPOINTER_TO_SIZE(data_offsets);
     }
-    bytes_written = write(fd->fd, cmd, bytes_to_write);
+
+    /* Real number of bytes to write may have changed */
+    bytes_to_really_write = sizeof(guint32) + _IOC_SIZE(*cmd);
+    bytes_written = write(fd->fd, cmd, bytes_to_really_write);
     g_free(cmd);
-    return bytes_written;
+    g_assert(bytes_written == bytes_to_really_write || bytes_written <= 0);
+    return (bytes_written >= 0) ? bytes_to_write : bytes_written;
 }
 
 static
@@ -484,15 +502,18 @@ test_io_handle_write_read_64(
     }
 
     is_looper = g_private_get(&test_looper) ? TRUE : FALSE;
-    if (node->looper_enabled || !is_looper) {
-        /* Now read the data from the socket */
+    if ((node->looper_enabled || !is_looper) &&
+        (wr->read_size > wr->read_consumed)) {
+        /* Do we have anything to read? */
         int bytes_available = 0;
         int err = ioctl(fd->fd, FIONREAD, &bytes_available);
 
-        if (err >= 0) {
+        /* Re-check the looper_enabled flag */
+        if (err >= 0 && (node->looper_enabled || !is_looper)) {
             int bytes_read = 0;
 
             if (bytes_available >= 4) {
+                /* Read the data from the socket */
                 bytes_read = read(fd->fd, (void*)(gsize)
                    (wr->read_buffer + wr->read_consumed),
                     wr->read_size - wr->read_consumed);
@@ -622,10 +643,10 @@ test_binder_push_data(
 {
     const guint32* cmd = data;
     const int len = sizeof(*cmd) + _IOC_SIZE(*cmd);
-    TestBinder* binder = test_binder_from_fd(fd);
+    TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
+    TestBinderNode* node = binder_fd->node;
 
-    g_assert(binder);
-    g_assert(write(binder->private_fd, data, len) == len);
+    g_assert(write(node->other->fd, data, len) == len);
 }
 
 static
@@ -1055,6 +1076,7 @@ gbinder_system_open(
             for (i = 0; i < 2; i++) {
                 binder->node[i].binder = binder;
                 binder->node[i].fd = fds[i];
+                binder->node[i].other = binder->node + ((i + 1) % 2);
                 g_hash_table_replace(test_node_map, binder->node[i].path,
                     binder->node + i);
             }
