@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -101,7 +101,8 @@ G_DEFINE_TYPE(TestServiceManager, test_servicemanager,
 static
 char**
 test_servicemanager_list(
-    GBinderServiceManager* manager)
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
 {
     char** ret;
     TestServiceManager* self = TEST_SERVICEMANAGER(manager);
@@ -118,7 +119,8 @@ GBinderRemoteObject*
 test_servicemanager_get_service(
     GBinderServiceManager* manager,
     const char* name,
-    int* status)
+    int* status,
+    const GBinderIpcSyncApi* api)
 {
     *status = (-ENOENT);
     return NULL;
@@ -129,7 +131,8 @@ int
 test_servicemanager_add_service(
     GBinderServiceManager* manager,
     const char* name,
-    GBinderLocalObject* obj)
+    GBinderLocalObject* obj,
+    const GBinderIpcSyncApi* api)
 {
     TestServiceManager* self = TEST_SERVICEMANAGER(manager);
 

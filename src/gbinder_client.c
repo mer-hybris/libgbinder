@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -179,6 +179,66 @@ gbinder_client_transact_destroy(
 }
 
 /*==========================================================================*
+ * Internal interface
+ *==========================================================================*/
+
+GBinderRemoteReply*
+gbinder_client_transact_sync_reply2(
+    GBinderClient* self,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status,
+    const GBinderIpcSyncApi* api)
+{
+    if (G_LIKELY(self)) {
+        GBinderRemoteObject* obj = self->remote;
+
+        if (G_LIKELY(!obj->dead)) {
+            if (!req) {
+                const GBinderClientIfaceRange* r = gbinder_client_find_range
+                    (gbinder_client_cast(self), code);
+
+                /* Default empty request (just the header, no parameters) */
+                if (r) {
+                    req = r->basic_req;
+                }
+            }
+            return api->sync_reply(obj->ipc, obj->handle, code, req, status);
+        }
+        GDEBUG("Refusing to perform transaction with a dead object");
+    }
+    return NULL;
+}
+
+int
+gbinder_client_transact_sync_oneway2(
+    GBinderClient* self,
+    guint32 code,
+    GBinderLocalRequest* req,
+    const GBinderIpcSyncApi* api)
+{
+    if (G_LIKELY(self)) {
+        GBinderRemoteObject* obj = self->remote;
+
+        if (G_LIKELY(!obj->dead)) {
+            if (!req) {
+                const GBinderClientIfaceRange* r = gbinder_client_find_range
+                    (gbinder_client_cast(self), code);
+
+                /* Default empty request (just the header, no parameters) */
+                if (r) {
+                    req = r->basic_req;
+                }
+            }
+            return api->sync_oneway(obj->ipc, obj->handle, code, req);
+        }
+        GDEBUG("Refusing to perform transaction with a dead object");
+        return (-ESTALE);
+    }
+    return (-EINVAL);
+}
+
+/*==========================================================================*
  * Interface
  *==========================================================================*/
 
@@ -319,25 +379,8 @@ gbinder_client_transact_sync_reply(
     GBinderLocalRequest* req,
     int* status)
 {
-    if (G_LIKELY(self)) {
-        GBinderRemoteObject* obj = self->remote;
-
-        if (G_LIKELY(!obj->dead)) {
-            if (!req) {
-                const GBinderClientIfaceRange* r = gbinder_client_find_range
-                    (gbinder_client_cast(self), code);
-
-                /* Default empty request (just the header, no parameters) */
-                if (r) {
-                    req = r->basic_req;
-                }
-            }
-            return gbinder_ipc_transact_sync_reply(obj->ipc, obj->handle,
-                code, req, status);
-        }
-        GDEBUG("Refusing to perform transaction with a dead object");
-    }
-    return NULL;
+    return gbinder_client_transact_sync_reply2(self, code, req, status,
+        &gbinder_ipc_sync_main);
 }
 
 int
@@ -346,26 +389,8 @@ gbinder_client_transact_sync_oneway(
     guint32 code,
     GBinderLocalRequest* req)
 {
-    if (G_LIKELY(self)) {
-        GBinderRemoteObject* obj = self->remote;
-
-        if (G_LIKELY(!obj->dead)) {
-            if (!req) {
-                const GBinderClientIfaceRange* r = gbinder_client_find_range
-                    (gbinder_client_cast(self), code);
-
-                /* Default empty request (just the header, no parameters) */
-                if (r) {
-                    req = r->basic_req;
-                }
-            }
-            return gbinder_ipc_transact_sync_oneway(obj->ipc, obj->handle,
-                code, req);
-        }
-        GDEBUG("Refusing to perform transaction with a dead object");
-        return (-ESTALE);
-    }
-    return (-EINVAL);
+    return gbinder_client_transact_sync_oneway2(self, code, req,
+        &gbinder_ipc_sync_main);
 }
 
 gulong

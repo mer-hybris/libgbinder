@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -76,16 +76,20 @@ typedef struct gbinder_parent GBinderParent;
 
 /* Basic HIDL types */
 
+#define GBINDER_ALIGNED(x) __attribute__ ((aligned(x)))
+
 typedef struct gbinder_hidl_vec {
     union {
         guint64 value;
         const void* ptr;
     } data;
     guint32 count;
-    guint32 owns_buffer;
+    guint8 owns_buffer;
+    guint8 pad[3];
 } GBinderHidlVec;
 
 #define GBINDER_HIDL_VEC_BUFFER_OFFSET (0)
+G_STATIC_ASSERT(sizeof(GBinderHidlVec) == 16);
 
 typedef struct gbinder_hidl_string {
     union {
@@ -93,10 +97,51 @@ typedef struct gbinder_hidl_string {
         const char* str;
     } data;
     guint32 len;
-    guint32 owns_buffer;
+    guint8 owns_buffer;
+    guint8 pad[3];
 } GBinderHidlString;
 
 #define GBINDER_HIDL_STRING_BUFFER_OFFSET (0)
+G_STATIC_ASSERT(sizeof(GBinderHidlString) == 16);
+
+typedef struct gbinder_fds {
+    guint32 version GBINDER_ALIGNED(4);
+    guint32 num_fds GBINDER_ALIGNED(4);
+    guint32 num_ints GBINDER_ALIGNED(4);
+} GBINDER_ALIGNED(4) GBinderFds;  /* Since 1.1.4 */
+
+/* Actual fds immediately follow GBinderFds: */
+#define gbinder_fds_get_fd(fds,i) (((const int*)((fds) + 1))[i])
+
+#define GBINDER_HIDL_FDS_VERSION (12)
+G_STATIC_ASSERT(sizeof(GBinderFds) == GBINDER_HIDL_FDS_VERSION);
+
+typedef struct gbinder_hidl_handle {
+    union {
+        guint64 value;
+        const GBinderFds* fds;
+    } data;
+    guint8 owns_handle;
+    guint8 pad[7];
+} GBinderHidlHandle; /* Since 1.1.4 */
+
+#define GBINDER_HIDL_HANDLE_VALUE_OFFSET (0)
+G_STATIC_ASSERT(sizeof(GBinderHidlHandle) == 16);
+
+typedef struct gbinder_hidl_memory {
+    union {
+        guint64 value;
+        const GBinderFds* fds;
+    } data;
+    guint8 owns_buffer;
+    guint8 pad[7];
+    guint64 size;
+    GBinderHidlString name;
+} GBinderHidlMemory; /* Since 1.1.4 */
+
+#define GBINDER_HIDL_MEMORY_PTR_OFFSET (0)
+#define GBINDER_HIDL_MEMORY_NAME_OFFSET (24)
+G_STATIC_ASSERT(sizeof(GBinderHidlMemory) == 40);
 
 /*
  * Each RPC call is identified by the interface name returned

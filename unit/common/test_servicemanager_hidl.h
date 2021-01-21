@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,38 +30,36 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_CLIENT_PRIVATE_H
-#define GBINDER_CLIENT_PRIVATE_H
+#ifndef TEST_SERVICEMANAGER_HIDL_H
+#define TEST_SERVICEMANAGER_HIDL_H
 
-#include <gbinder_client.h>
+#include <gbinder_types.h>
 
-#include "gbinder_types_p.h"
+typedef struct test_servicemanager_hidl TestServiceManagerHidl;
 
-struct gbinder_client {
-    GBinderRemoteObject* remote;
-};
+TestServiceManagerHidl*
+test_servicemanager_hidl_new(
+    GBinderIpc* ipc,
+    gboolean handle_on_looper_thread);
 
-GBinderRemoteReply*
-gbinder_client_transact_sync_reply2(
-    GBinderClient* self,
-    guint32 code,
-    GBinderLocalRequest* req,
-    int* status,
-    const GBinderIpcSyncApi* api)
-    G_GNUC_WARN_UNUSED_RESULT
-    GBINDER_INTERNAL;
+void
+test_servicemanager_hidl_free(
+    TestServiceManagerHidl* sm);
 
-int
-gbinder_client_transact_sync_oneway2(
-    GBinderClient* self,
-    guint32 code,
-    GBinderLocalRequest* req,
-    const GBinderIpcSyncApi* api)
-    GBINDER_INTERNAL;
+GBinderIpc*
+test_servicemanager_hidl_ipc(
+    TestServiceManagerHidl* self);
 
-#define gbinder_client_ipc(client) ((client)->remote->ipc)
+guint
+test_servicemanager_hidl_object_count(
+    TestServiceManagerHidl* self);
 
-#endif /* GBINDER_CLIENT_PRIVATE_H */
+GBinderRemoteObject*
+test_servicemanager_hidl_lookup(
+    TestServiceManagerHidl* self,
+    const char* name);
+
+#endif /* TEST_SERVICEMANAGER_HIDL_H */
 
 /*
  * Local Variables:

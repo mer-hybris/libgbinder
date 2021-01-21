@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -118,7 +118,7 @@ GBINDER_IO_FN(encode_pointer)(
     return sizeof(*dest);
 }
 
-/* Encodes flat_buffer_object */
+/* Encodes flat_binder_object */
 static
 guint
 GBINDER_IO_FN(encode_local_object)(
@@ -163,12 +163,12 @@ GBINDER_IO_FN(encode_fd_object)(
     void* out,
     int fd)
 {
-    struct flat_binder_object* dest = out;
+    struct binder_fd_object* dest = out;
 
     memset(dest, 0, sizeof(*dest));
     dest->hdr.type = BINDER_TYPE_FD;
-    dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
-    dest->handle = fd;
+    dest->pad_flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
+    dest->fd = fd;
     return sizeof(*dest);
 }
 
@@ -226,9 +226,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     tr->code = code;
     tr->data_size = payload->len;
     tr->data.ptr.buffer = (uintptr_t)payload->data;
-    if (flags & GBINDER_TX_FLAG_ONEWAY) {
-        tr->flags |= TF_ONE_WAY;
-    }
+    tr->flags |= (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS;
     if (offsets && offsets->count) {
         guint i;
         binder_size_t* tx_offsets = g_new(binder_size_t, offsets->count);
@@ -399,6 +397,15 @@ GBINDER_IO_FN(decode_binder_object)(
                 *out = gbinder_object_registry_get_remote(reg, obj->handle);
             }
             return sizeof(*obj);
+        case BINDER_TYPE_BINDER:
+            if (!obj->binder) {
+                /* That's a NULL reference */
+                if (out) {
+                    *out = NULL;
+                }
+                return sizeof(*obj);
+            }
+            /* fallthrough */
         default:
             GERR("Unsupported binder object type 0x%08x", obj->hdr.type);
             break;
