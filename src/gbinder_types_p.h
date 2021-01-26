@@ -42,6 +42,7 @@ typedef struct gbinder_handler GBinderHandler;
 typedef struct gbinder_io GBinderIo;
 typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;
+typedef struct gbinder_proxy_object GBinderProxyObject;
 typedef struct gbinder_rpc_protocol GBinderRpcProtocol;
 typedef struct gbinder_servicepoll GBinderServicePoll;
 typedef struct gbinder_ipc_looper_tx GBinderIpcLooperTx;

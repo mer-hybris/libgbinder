@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,37 +30,51 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_LOCAL_REQUEST_PRIVATE_H
-#define GBINDER_LOCAL_REQUEST_PRIVATE_H
+#ifndef GBINDER_BRIDGE_H
+#define GBINDER_BRIDGE_H
 
-#include <gbinder_local_request.h>
+#include "gbinder_types.h"
 
-#include "gbinder_types_p.h"
+/* Since 1.1.4 */
 
-GBinderLocalRequest*
-gbinder_local_request_new(
-    const GBinderIo* io,
-    GBytes* init)
-    GBINDER_INTERNAL;
+/*
+ * As of time of this writing, bridging only works for binder transactions
+ * which only involve passing serialized data back and forth. It doesn't
+ * work with transactions which pass references to remote objects.
+ */
 
-GBinderOutputData*
-gbinder_local_request_data(
-    GBinderLocalRequest* req)
-    GBINDER_INTERNAL;
+G_BEGIN_DECLS
 
-GBinderLocalRequest*
-gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer)
-    GBINDER_INTERNAL;
+/*
+ * A binder bridge object.
+ *
+ * For example, bridging "foobar" with interfaces ["example@1.0::IFoo",
+ * "example@1.0::IBar"] would:
+ *
+ * 1. Watch "example@1.0::IFoo/foobar" and "example@1.0::IBar/foobar" on dest
+ * 2. When those names appears, register objects with the same name on src
+ * 3. Pass calls coming from src to the dest objects and replies in the
+ *    opposite direction
+ * 4. When dest objects disappear, remove the corresponding bridging objects
+ *    from src
+ *
+ * and so on.
+ */
+
+GBinderBridge*
+gbinder_bridge_new(
+    const char* name,
+    const char* const* ifaces,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest);
 
 void
-gbinder_local_request_append_contents(
-    GBinderLocalRequest* req,
-    GBinderBuffer* buffer,
-    gsize offset)
-    GBINDER_INTERNAL;
+gbinder_bridge_free(
+    GBinderBridge* bridge);
 
-#endif /* GBINDER_LOCAL_REQUEST_PRIVATE_H */
+G_END_DECLS
+
+#endif /* GBINDER_BRIDGE_H */
 
 /*
  * Local Variables:

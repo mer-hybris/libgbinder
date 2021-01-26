@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -76,6 +76,7 @@ typedef struct gbinder_local_object_class {
     GBinderLocalReply* (*handle_looper_transaction)
         (GBinderLocalObject* self, GBinderRemoteRequest* req, guint code,
             guint flags, int* status);
+    void (*drop)(GBinderLocalObject* self);
     /* Need to add some placeholders if this class becomes public */
 } GBinderLocalObjectClass;
 
@@ -88,6 +89,15 @@ GType gbinder_local_object_get_type(void) GBINDER_INTERNAL;
 
 #define gbinder_local_object_dev(obj) (gbinder_driver_dev((obj)->ipc->driver))
 #define gbinder_local_object_io(obj) (gbinder_driver_io((obj)->ipc->driver))
+
+GBinderLocalObject*
+gbinder_local_object_new_with_type(
+    GType type,
+    GBinderIpc* ipc,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc txproc,
+    void* user_data)
+    GBINDER_INTERNAL;
 
 void
 gbinder_local_object_init_base(

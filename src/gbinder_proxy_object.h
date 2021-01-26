@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,37 +30,32 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_LOCAL_REQUEST_PRIVATE_H
-#define GBINDER_LOCAL_REQUEST_PRIVATE_H
+#ifndef GBINDER_PROXY_OBJECT_H
+#define GBINDER_PROXY_OBJECT_H
 
-#include <gbinder_local_request.h>
+#include "gbinder_local_object_p.h"
 
-#include "gbinder_types_p.h"
+typedef struct gbinder_proxy_object_priv GBinderProxyObjectPriv;
 
-GBinderLocalRequest*
-gbinder_local_request_new(
-    const GBinderIo* io,
-    GBytes* init)
+struct gbinder_proxy_object {
+    GBinderLocalObject parent;
+    GBinderProxyObjectPriv* priv;
+    GBinderRemoteObject* remote;
+};
+
+GType gbinder_proxy_object_get_type(void) GBINDER_INTERNAL;
+#define GBINDER_TYPE_PROXY_OBJECT gbinder_proxy_object_get_type()
+#define GBINDER_PROXY_OBJECT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        GBINDER_TYPE_PROXY_OBJECT, GBinderProxyObject))
+
+/* Registers with src and forwards all transactions to the remote */
+GBinderProxyObject*
+gbinder_proxy_object_new(
+    GBinderIpc* src,
+    GBinderRemoteObject* remote)
     GBINDER_INTERNAL;
 
-GBinderOutputData*
-gbinder_local_request_data(
-    GBinderLocalRequest* req)
-    GBINDER_INTERNAL;
-
-GBinderLocalRequest*
-gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer)
-    GBINDER_INTERNAL;
-
-void
-gbinder_local_request_append_contents(
-    GBinderLocalRequest* req,
-    GBinderBuffer* buffer,
-    gsize offset)
-    GBINDER_INTERNAL;
-
-#endif /* GBINDER_LOCAL_REQUEST_PRIVATE_H */
+#endif /* GBINDER_PROXY_OBJECT_H */
 
 /*
  * Local Variables:

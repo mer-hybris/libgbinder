@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -74,6 +74,11 @@ gbinder_driver_io(
     GBinderDriver* driver)
     GBINDER_INTERNAL;
 
+const GBinderRpcProtocol*
+gbinder_driver_protocol(
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
+
 gboolean
 gbinder_driver_request_death_notification(
     GBinderDriver* driver,
@@ -112,7 +117,7 @@ gbinder_driver_release(
 
 void
 gbinder_driver_close_fds(
-    GBinderDriver* self,
+    GBinderDriver* driver,
     void** objects,
     const void* end)
     GBINDER_INTERNAL;
@@ -160,7 +165,7 @@ gbinder_driver_ping(
 
 GBinderLocalRequest*
 gbinder_driver_local_request_new(
-    GBinderDriver* self,
+    GBinderDriver* driver,
     const char* iface)
     GBINDER_INTERNAL;
 

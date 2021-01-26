@@ -6,7 +6,7 @@ License: BSD
 URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
 
-%define libglibutil_version 1.0.35
+%define libglibutil_version 1.0.49
 
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}

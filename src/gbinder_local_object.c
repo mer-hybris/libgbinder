@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -53,6 +53,7 @@ struct gbinder_local_object_priv {
 
 G_DEFINE_TYPE(GBinderLocalObject, gbinder_local_object, G_TYPE_OBJECT)
 
+#define PARENT_CLASS gbinder_local_object_parent_class
 #define GBINDER_LOCAL_OBJECT_GET_CLASS(obj) \
     G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_LOCAL_OBJECT, \
     GBinderLocalObjectClass)
@@ -258,6 +259,18 @@ gbinder_local_object_default_handle_looper_transaction(
 
 static
 void
+gbinder_local_object_default_drop(
+    GBinderLocalObject* self)
+{
+    GBinderLocalObjectPriv* priv = self->priv;
+
+    /* Clear the transaction callback */
+    priv->txproc = NULL;
+    priv->user_data = NULL;
+}
+
+static
+void
 gbinder_local_object_handle_later(
     GBinderLocalObject* self,
     GSourceFunc function)
@@ -336,13 +349,24 @@ gbinder_local_object_new(
     GBinderLocalTransactFunc txproc,
     void* user_data) /* Since 1.0.30 */
 {
-    if (G_LIKELY(ipc)) {
-        GBinderLocalObject* self = g_object_new
-            (GBINDER_TYPE_LOCAL_OBJECT, NULL);
+    return gbinder_local_object_new_with_type(GBINDER_TYPE_LOCAL_OBJECT,
+        ipc, ifaces, txproc, user_data);
+}
 
-        gbinder_local_object_init_base(self, ipc, ifaces, txproc, user_data);
-        gbinder_ipc_register_local_object(ipc, self);
-        return self;
+GBinderLocalObject*
+gbinder_local_object_new_with_type(
+    GType type,
+    GBinderIpc* ipc,
+    const char* const* ifaces,
+    GBinderLocalTransactFunc txproc,
+    void* arg)
+{
+    if (G_LIKELY(ipc)) {
+        GBinderLocalObject* obj = g_object_new(type, NULL);
+
+        gbinder_local_object_init_base(obj, ipc, ifaces, txproc, arg);
+        gbinder_ipc_register_local_object(ipc, obj);
+        return obj;
     }
     return NULL;
 }
@@ -409,11 +433,7 @@ gbinder_local_object_drop(
     GBinderLocalObject* self)
 {
     if (G_LIKELY(self)) {
-        GBinderLocalObjectPriv* priv = self->priv;
-
-        /* Clear the transaction callback */
-        priv->txproc = NULL;
-        priv->user_data = NULL;
+        GBINDER_LOCAL_OBJECT_GET_CLASS(self)->drop(self);
         g_object_unref(GBINDER_LOCAL_OBJECT(self));
     }
 }
@@ -555,26 +575,26 @@ gbinder_local_object_init(
 static
 void
 gbinder_local_object_dispose(
-    GObject* local)
+    GObject* object)
 {
-    GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(local);
+    GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(object);
 
     gbinder_ipc_local_object_disposed(self->ipc, self);
-    G_OBJECT_CLASS(gbinder_local_object_parent_class)->dispose(local);
+    G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static
 void
 gbinder_local_object_finalize(
-    GObject* local)
+    GObject* object)
 {
-    GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(local);
+    GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(object);
     GBinderLocalObjectPriv* priv = self->priv;
 
     GASSERT(!self->strong_refs);
     gbinder_ipc_unref(self->ipc);
     g_strfreev(priv->ifaces);
-    G_OBJECT_CLASS(gbinder_local_object_parent_class)->finalize(local);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
@@ -594,6 +614,7 @@ gbinder_local_object_class_init(
         gbinder_local_object_default_handle_looper_transaction;
     klass->can_handle_transaction =
         gbinder_local_object_default_can_handle_transaction;
+    klass->drop = gbinder_local_object_default_drop;
 
     gbinder_local_object_signals[SIGNAL_WEAK_REFS_CHANGED] =
         g_signal_new(SIGNAL_WEAK_REFS_CHANGED_NAME,

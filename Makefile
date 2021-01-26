@@ -75,6 +75,7 @@ LIB = $(LIB_NAME).a
 #
 
 SRC = \
+  gbinder_bridge.c \
   gbinder_buffer.c \
   gbinder_cleanup.c \
   gbinder_client.c \
@@ -88,6 +89,7 @@ SRC = \
   gbinder_local_reply.c \
   gbinder_local_request.c \
   gbinder_log.c \
+  gbinder_proxy_object.c \
   gbinder_reader.c \
   gbinder_remote_object.c \
   gbinder_remote_reply.c \

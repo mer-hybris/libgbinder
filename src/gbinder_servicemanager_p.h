@@ -88,6 +88,8 @@ GType gbinder_servicemanager_get_type(void) GBINDER_INTERNAL;
     G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER, \
     GBinderServiceManagerClass)
 
+#define gbinder_servicemanager_ipc(sm) gbinder_client_ipc(sm->client)
+
 GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
     GType type,

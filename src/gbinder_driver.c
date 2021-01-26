@@ -813,6 +813,13 @@ gbinder_driver_io(
     return self->io;
 }
 
+const GBinderRpcProtocol*
+gbinder_driver_protocol(
+    GBinderDriver* self)
+{
+    return self->protocol;
+}
+
 gboolean
 gbinder_driver_request_death_notification(
     GBinderDriver* self,
