@@ -39,8 +39,7 @@ typedef struct test_servicemanager_hidl TestServiceManagerHidl;
 
 TestServiceManagerHidl*
 test_servicemanager_hidl_new(
-    GBinderIpc* ipc,
-    gboolean handle_on_looper_thread);
+    GBinderIpc* ipc);
 
 void
 test_servicemanager_hidl_free(
