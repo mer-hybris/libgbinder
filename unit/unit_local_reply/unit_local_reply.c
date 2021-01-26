@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -88,7 +88,7 @@ test_null(
     gbinder_local_reply_init_writer(NULL, NULL);
     gbinder_local_reply_init_writer(NULL, &writer);
     g_assert(!gbinder_local_reply_data(NULL));
-    g_assert(!gbinder_local_reply_new_from_data(NULL));
+    g_assert(!gbinder_local_reply_set_contents(NULL, NULL));
 
     gbinder_local_reply_cleanup(NULL, NULL, &count);
     gbinder_local_reply_cleanup(NULL, test_int_inc, &count);
@@ -479,7 +479,8 @@ test_remote_reply(
 
     /* Copy flat structures (no binder objects) */
     buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_reply_new_from_data(buffer);
+    req2 = gbinder_local_reply_new(io);
+    g_assert(gbinder_local_reply_set_contents(req2, buffer) == req2);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_reply_data(req2);
