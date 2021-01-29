@@ -149,7 +149,8 @@ test_binder_set_destroy(
 
 void
 test_binder_exit_wait(
-    void);
+    const TestOpt* opt,
+    GMainLoop* loop);
 
 #endif /* TEST_BINDER_H */
 

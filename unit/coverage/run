@@ -5,6 +5,7 @@
 #
 
 TESTS="\
+unit_bridge \
 unit_buffer \
 unit_cleanup \
 unit_client \
@@ -17,6 +18,7 @@ unit_local_reply \
 unit_local_request \
 unit_log \
 unit_protocol \
+unit_proxy_object \
 unit_reader \
 unit_remote_object \
 unit_remote_reply \

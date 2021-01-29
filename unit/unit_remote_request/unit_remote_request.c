@@ -54,6 +54,8 @@ static TestOpt test_opt;
     TEST_INT32_BYTES(3), \
     TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'), \
     TEST_INT16_BYTES('o'), 0x00, 0x00
+#define HIDL_RPC_HEADER \
+    'f', 'o', 'o', 0x00
 
 #define BINDER_TYPE_BINDER GBINDER_FOURCC('s', 'b', '*', 0x85)
 #define BINDER_OBJECT_SIZE_64 (GBINDER_MAX_BINDER_OBJECT_SIZE)
@@ -87,7 +89,6 @@ test_null(
     g_assert(!gbinder_remote_request_read_string8(NULL));
     g_assert(!gbinder_remote_request_read_string16(NULL));
     g_assert(!gbinder_remote_request_read_object(NULL));
-    g_assert(!gbinder_remote_request_translate_to_local(NULL, NULL));
 }
 
 /*==========================================================================*
@@ -266,8 +267,20 @@ test_to_local(
         TEST_INT64_BYTES(0),                    /* handle */
         TEST_INT64_BYTES(0)                     /* cookie */
     };
+    static const guint8 request_data_hidl [] = {
+        HIDL_RPC_HEADER,
+        /* 32-bit integer */
+        TEST_INT32_BYTES(42),
+        /* 64-bit NULL flat_binder_object */
+        TEST_INT32_BYTES(BINDER_TYPE_BINDER),   /* hdr.type */
+        TEST_INT32_BYTES(0x17f),                /* flags */
+        TEST_INT64_BYTES(0),                    /* handle */
+        TEST_INT64_BYTES(0)                     /* cookie */
+    };
     const char* dev = GBINDER_DEFAULT_BINDER;
+    const char* dev2 = GBINDER_DEFAULT_HWBINDER;
     GBinderDriver* driver = gbinder_driver_new(dev, NULL);
+    GBinderDriver* driver2 = gbinder_driver_new(dev2, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
     GBinderLocalRequest* req2;
@@ -294,10 +307,38 @@ test_to_local(
     g_assert(offsets->data[0] == 4);
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(bytes->len == sizeof(request_data));
+    g_assert(!memcmp(request_data, bytes->data, bytes->len));
+    gbinder_local_request_unref(req2);
+
+    /* The same with gbinder_remote_request_translate_to_local() */
+    req2 = gbinder_remote_request_translate_to_local(req, NULL);
+    data = gbinder_local_request_data(req2);
+    offsets = gbinder_output_data_offsets(data);
+    bytes = data->bytes;
+    g_assert(offsets);
+    g_assert(offsets->count == 1);
+    g_assert(offsets->data[0] == 4);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(bytes->len == sizeof(request_data));
+    g_assert(!memcmp(request_data, bytes->data, bytes->len));
+    gbinder_local_request_unref(req2);
+
+    /* Different driver actually requires translation */
+    req2 = gbinder_remote_request_translate_to_local(req, driver2);
+    data = gbinder_local_request_data(req2);
+    offsets = gbinder_output_data_offsets(data);
+    bytes = data->bytes;
+    g_assert(offsets);
+    g_assert(offsets->count == 1);
+    g_assert(offsets->data[0] == 4);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(bytes->len == sizeof(request_data_hidl));
+    g_assert(!memcmp(request_data_hidl, bytes->data, bytes->len));
+    gbinder_local_request_unref(req2);
 
     gbinder_remote_request_unref(req);
-    gbinder_local_request_unref(req2);
     gbinder_driver_unref(driver);
+    gbinder_driver_unref(driver2);
 }
 
 /*==========================================================================*

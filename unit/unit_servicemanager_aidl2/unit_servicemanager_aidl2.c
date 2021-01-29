@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -327,7 +327,7 @@ test_context_deinit(
     gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(test->service));
     gbinder_servicemanager_unref(test->client);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, NULL);
     remove(test->config_file);
     remove(test->config_dir);
     g_free(test->config_file);

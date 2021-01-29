@@ -55,7 +55,7 @@ static GHashTable* test_node_map = NULL;
 static GPrivate test_looper;
 
 G_LOCK_DEFINE_STATIC(test_binder);
-static GCond test_node_map_cond;
+static GMainLoop* test_binder_exit_loop = NULL;
 
 #define PUBLIC (0)
 #define PRIVATE (1)
@@ -194,6 +194,7 @@ typedef  struct binder_buffer_64 {
 #define BC_EXIT_LOOPER           _IO('c', 13)
 #define BC_REQUEST_DEATH_NOTIFICATION_64 _IOW('c', 14, BinderHandleCookie64)
 #define BC_CLEAR_DEATH_NOTIFICATION_64   _IOW('c', 15, BinderHandleCookie64)
+#define BC_DEAD_BINDER_DONE     _IOW('c', 16, guint64)
 #define BC_TRANSACTION_SG_64    _IOW('c', 17, BinderTransactionDataSg64)
 #define BC_REPLY_SG_64          _IOW('c', 18, BinderTransactionDataSg64)
 
@@ -336,12 +337,26 @@ test_io_free_buffer(
 
 void
 test_binder_exit_wait(
-    void)
+    const TestOpt* opt,
+    GMainLoop* loop)
 {
     G_LOCK(test_binder);
-    while (test_node_map) {
+    if (test_node_map) {
+        g_assert(!test_binder_exit_loop);
+        if (loop) {
+            g_main_loop_ref(loop);
+        } else {
+            loop = g_main_loop_new(NULL, FALSE);
+        }
+        test_binder_exit_loop = loop;
         GDEBUG("Waiting for loopers to exit...");
-        g_cond_wait(&test_node_map_cond, &G_LOCK_NAME(test_binder));
+        G_UNLOCK(test_binder);
+
+        test_run(opt, loop);
+
+        G_LOCK(test_binder);
+        test_binder_exit_loop = NULL;
+        g_main_loop_unref(loop);
     }
     G_UNLOCK(test_binder);
 }
@@ -354,6 +369,7 @@ test_binder_local_object_gone(
 {
     TestBinder* binder = data;
     gpointer handle;
+    guint32 cmd[3];
 
     G_LOCK(test_binder);
     GDEBUG("Object %p is gone", obj);
@@ -361,6 +377,12 @@ test_binder_local_object_gone(
     handle = g_hash_table_lookup(binder->object_map, obj);
     g_hash_table_remove(binder->handle_map, handle);
     g_hash_table_remove(binder->object_map, obj);
+
+    /* Send DEAD_BINDER to both ends of the socket */
+    cmd[0] = BR_DEAD_BINDER_64;
+    *(guint64*)(cmd + 1) = GPOINTER_TO_SIZE(handle);
+    write(binder->node[0].fd, cmd, sizeof(cmd));
+    write(binder->node[1].fd, cmd, sizeof(cmd));
     G_UNLOCK(test_binder);
 }
 
@@ -390,30 +412,47 @@ test_binder_register_object_locked(
 
 static
 guint64
-test_io_passthough_fix_handle(
+test_io_passthough_handle_to_object(
     TestBinder* binder,
     guint64 handle)
 {
     gpointer key = GSIZE_TO_POINTER(handle);
 
     /* Invoked under lock */
-    if (g_hash_table_contains(binder->object_map, key)) {
-        gpointer value = g_hash_table_lookup(binder->object_map, key);
-
-        handle = GPOINTER_TO_SIZE(value);
-        GDEBUG("Object %p => handle %u %s", key, (guint) handle,
-            binder->node[0].path);
-    } else if (g_hash_table_contains(binder->handle_map, key)) {
+    if (g_hash_table_contains(binder->handle_map, key)) {
         gpointer obj = g_hash_table_lookup(binder->handle_map, key);
 
         GDEBUG("Handle %u => object %p %s", (guint) handle, obj,
             binder->node[0].path);
-        handle = GPOINTER_TO_SIZE(obj);
-    } else if (handle) {
+        return GPOINTER_TO_SIZE(obj);
+    }
+    GDEBUG("Unexpected handle %u %s", (guint) handle, binder->node[0].path);
+    return 0;
+}
+
+static
+guint64
+test_io_passthough_object_to_handle(
+    TestBinder* binder,
+    guint64 object)
+{
+    gpointer key = GSIZE_TO_POINTER(object);
+
+    /* Invoked under lock */
+    if (g_hash_table_contains(binder->object_map, key)) {
+        gpointer value = g_hash_table_lookup(binder->object_map, key);
+        guint64 handle = GPOINTER_TO_SIZE(value);
+
+        GDEBUG("Object %p => handle %u %s", key, (guint) handle,
+            binder->node[0].path);
+        return handle;
+    } else if (key) {
         GDEBUG("Auto-registering object %p %s", key, binder->node[0].path);
         return test_binder_register_object_locked(binder, key, AUTO_HANDLE);
+    } else {
+        GDEBUG("Unexpected object %p %s", key, binder->node[0].path);
+        return 0;
     }
-    return handle;
 }
 
 static
@@ -560,6 +599,13 @@ test_binder_node_read(
 }
 
 static
+void
+test_io_short_wait()
+{
+    usleep(100000); /* 100 ms */
+}
+
+static
 gssize
 test_io_passthough_write_64(
     TestBinderFd* fd,
@@ -582,6 +628,7 @@ test_io_passthough_write_64(
     case BC_RELEASE:
     case BC_REQUEST_DEATH_NOTIFICATION_64:
     case BC_CLEAR_DEATH_NOTIFICATION_64:
+    case BC_DEAD_BINDER_DONE:
         return bytes_to_write;
     default:
         break;
@@ -598,16 +645,19 @@ test_io_passthough_write_64(
     case BC_TRANSACTION_SG_64:
         *cmd = BR_TRANSACTION_64;
         tx = data;
-        if (g_atomic_pointer_compare_and_exchange(&node->tx_thread, NULL,
+        while (!g_atomic_pointer_compare_and_exchange(&node->tx_thread, NULL,
             g_thread_self())) {
-            GDEBUG("Transaction thread %ld %p", gettid(), g_thread_self());
-            if (tx->flags & TF_ONE_WAY) {
-                const guint32 c = BR_TRANSACTION_COMPLETE;
+            GDEBUG("Thread %ld %p is waiting to become a transacton thread",
+                gettid(), g_thread_self());
+            test_io_short_wait();
+        }
+        GDEBUG("Transaction thread %ld %p", gettid(), g_thread_self());
+        if (tx->flags & TF_ONE_WAY) {
+            const guint32 c = BR_TRANSACTION_COMPLETE;
 
-                GDEBUG("Thread %ld inserting BR_TRANSACTION_COMPLETE for "
-                    "one-way transaction", gettid());
-                g_assert(write(node->other->fd, &c, sizeof(c)) == sizeof(c));
-            }
+            GDEBUG("Thread %ld inserting BR_TRANSACTION_COMPLETE for "
+                "one-way transaction", gettid());
+            g_assert(write(node->other->fd, &c, sizeof(c)) == sizeof(c));
         }
         break;
     case BR_REPLY_64:
@@ -639,7 +689,7 @@ test_io_passthough_write_64(
             tx->offsets_size);
 
         G_LOCK(test_binder);
-        tx->handle = test_io_passthough_fix_handle(binder, tx->handle);
+        tx->handle = test_io_passthough_handle_to_object(binder, tx->handle);
         for (i = 0; i < tx->offsets_size/sizeof(guint64); i++) {
             guint32* obj_ptr = (guint32*)(data_buffer + data_offsets[i]);
 
@@ -648,8 +698,8 @@ test_io_passthough_write_64(
 
                 if (object->object) {
                     object->type = BINDER_TYPE_HANDLE;
-                    object->object = test_io_passthough_fix_handle(binder,
-                        object->object);
+                    object->object = test_io_passthough_object_to_handle
+                        (binder, object->object);
                 }
             } else if (*obj_ptr == BINDER_TYPE_PTR) {
                 BinderBuffer64* buffer = (BinderBuffer64*) obj_ptr;
@@ -810,10 +860,10 @@ test_io_handle_write_read_64(
             return nbytes;
         } else if (!total) {
             /* Nothing was read */
-            usleep(100000); /* 100 ms */
+            test_io_short_wait();
         }
     } else if (wr->read_size > 0) {
-        usleep(100000); /* 100 ms */
+        test_io_short_wait();
     }
     return 0;
 }
@@ -1184,8 +1234,10 @@ test_binder_node_clear(
     g_hash_table_remove(test_node_map, node->path);
     if (!g_hash_table_size(test_node_map)) {
         g_hash_table_unref(test_node_map);
-        g_cond_broadcast(&test_node_map_cond);
         test_node_map = NULL;
+        if (test_binder_exit_loop) {
+            g_main_loop_quit(test_binder_exit_loop);
+        }
     }
     close(node->fd);
     g_mutex_clear(&node->mutex);
