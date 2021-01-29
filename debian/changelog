@@ -1,3 +1,13 @@
+libgbinder (1.1.5) unstable; urgency=low
+
+  * Fixed gbinder_remote_reply_copy_to_local() for empty replies
+  * Improved binder simulation
+  * Added GBinderBridge object
+  * Added proxy_object and bridge unit tests
+  * Added binder-bridge to libgbinder-tools package
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 29 Jan 2021 04:00:09 +0200
+
 libgbinder (1.1.4) unstable; urgency=low
 
   * Fixed a threading issue

@@ -59,7 +59,7 @@ G_BEGIN_DECLS
  * 6. Reader parses the data coming with RemoteRequest and RemoteReply
  */
 
-typedef struct gbinder_bridge GBinderBridge;
+typedef struct gbinder_bridge GBinderBridge; /* Since 1.1.5 */
 typedef struct gbinder_buffer GBinderBuffer;
 typedef struct gbinder_client GBinderClient;
 typedef struct gbinder_ipc GBinderIpc;

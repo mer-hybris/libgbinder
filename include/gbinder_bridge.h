@@ -35,7 +35,7 @@
 
 #include "gbinder_types.h"
 
-/* Since 1.1.4 */
+/* Since 1.1.5 */
 
 /*
  * As of time of this writing, bridging only works for binder transactions
@@ -66,11 +66,12 @@ gbinder_bridge_new(
     const char* name,
     const char* const* ifaces,
     GBinderServiceManager* src,
-    GBinderServiceManager* dest);
+    GBinderServiceManager* dest) /* Since 1.1.5 */
+    G_GNUC_WARN_UNUSED_RESULT;
 
 void
 gbinder_bridge_free(
-    GBinderBridge* bridge);
+    GBinderBridge* bridge); /* Since 1.1.5 */
 
 G_END_DECLS
 
