@@ -30,12 +30,14 @@ This package contains the development library for %{name}.
 
 %build
 make LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
+make -C test/binder-bridge release
 make -C test/binder-list release
 make -C test/binder-ping release
 
 %install
 rm -rf %{buildroot}
 make LIBDIR=%{_libdir} DESTDIR=%{buildroot} install-dev
+make -C test/binder-bridge DESTDIR=%{buildroot} install
 make -C test/binder-list DESTDIR=%{buildroot} install
 make -C test/binder-ping DESTDIR=%{buildroot} install
 
@@ -60,11 +62,13 @@ make -C unit test
 
 %package tools
 Summary: Binder tools
+Requires: %{name} >= %{version}
 
 %description tools
 Binder command line utilities
 
 %files tools
 %defattr(-,root,root,-)
+%{_bindir}/binder-bridge
 %{_bindir}/binder-list
 %{_bindir}/binder-ping

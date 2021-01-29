@@ -8,11 +8,13 @@ LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 override_dh_auto_build:
 	dh_auto_build -- LIBDIR=$(LIBDIR) release pkgconfig debian/libgbinder.install debian/libgbinder-dev.install
+	dh_auto_build -- -C test/binder-bridge release
 	dh_auto_build -- -C test/binder-list release
 	dh_auto_build -- -C test/binder-ping release
 
 override_dh_auto_install:
 	dh_auto_install -- LIBDIR=$(LIBDIR) install-dev
+	dh_auto_install -- -C test/binder-bridge
 	dh_auto_install -- -C test/binder-list
 	dh_auto_install -- -C test/binder-ping
 

@@ -138,3 +138,17 @@ libgbinder-debug:
 
 libgbinder-release:
 	@make $(SUBMAKE_OPTS) -C $(LIB_DIR) $(RELEASE_SO_FILE) $(RELEASE_LINK_FILE)
+
+#
+# Install
+#
+
+INSTALL = install
+
+INSTALL_BIN_DIR = $(DESTDIR)/usr/bin
+
+install: release $(INSTALL_BIN_DIR)
+	$(INSTALL) -m 755 $(RELEASE_EXE) $(INSTALL_BIN_DIR)
+
+$(INSTALL_BIN_DIR):
+	$(INSTALL) -d $@
