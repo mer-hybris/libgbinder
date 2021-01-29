@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,6 +35,7 @@
 
 /* Convenience header to pull in everything at once */
 
+#include "gbinder_bridge.h"
 #include "gbinder_buffer.h"
 #include "gbinder_client.h"
 #include "gbinder_local_object.h"

@@ -30,35 +30,32 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TEST_SERVICEMANAGER_HIDL_H
-#define TEST_SERVICEMANAGER_HIDL_H
+#ifndef GBINDER_PROXY_OBJECT_H
+#define GBINDER_PROXY_OBJECT_H
 
-#include <gbinder_types.h>
+#include "gbinder_local_object_p.h"
 
-typedef struct test_servicemanager_hidl TestServiceManagerHidl;
+typedef struct gbinder_proxy_object_priv GBinderProxyObjectPriv;
 
-TestServiceManagerHidl*
-test_servicemanager_hidl_new(
-    GBinderIpc* ipc);
+struct gbinder_proxy_object {
+    GBinderLocalObject parent;
+    GBinderProxyObjectPriv* priv;
+    GBinderRemoteObject* remote;
+};
 
-void
-test_servicemanager_hidl_free(
-    TestServiceManagerHidl* sm);
+GType gbinder_proxy_object_get_type(void) GBINDER_INTERNAL;
+#define GBINDER_TYPE_PROXY_OBJECT gbinder_proxy_object_get_type()
+#define GBINDER_PROXY_OBJECT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        GBINDER_TYPE_PROXY_OBJECT, GBinderProxyObject))
 
-GBinderIpc*
-test_servicemanager_hidl_ipc(
-    TestServiceManagerHidl* self);
+/* Registers with src and forwards all transactions to the remote */
+GBinderProxyObject*
+gbinder_proxy_object_new(
+    GBinderIpc* src,
+    GBinderRemoteObject* remote)
+    GBINDER_INTERNAL;
 
-guint
-test_servicemanager_hidl_object_count(
-    TestServiceManagerHidl* self);
-
-GBinderRemoteObject*
-test_servicemanager_hidl_lookup(
-    TestServiceManagerHidl* self,
-    const char* name);
-
-#endif /* TEST_SERVICEMANAGER_HIDL_H */
+#endif /* GBINDER_PROXY_OBJECT_H */
 
 /*
  * Local Variables:

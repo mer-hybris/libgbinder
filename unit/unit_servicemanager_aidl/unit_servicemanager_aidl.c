@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -351,7 +351,7 @@ test_get()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -429,7 +429,7 @@ test_list()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, test.loop);
 
     g_strfreev(test.list);
     g_main_loop_unref(test.loop);
@@ -492,7 +492,7 @@ test_notify()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -551,7 +551,7 @@ test_notify2()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 

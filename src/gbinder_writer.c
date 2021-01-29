@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -68,25 +68,35 @@ gbinder_writer_data_set_contents(
     GBinderWriterData* data,
     GBinderBuffer* buffer)
 {
-    gsize bufsize;
-    const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
-    const GBinderIo* io = gbinder_buffer_io(buffer);
-    GBinderBufferContents* contents = gbinder_buffer_contents(buffer);
-
-    GASSERT(data->io == io);
     g_byte_array_set_size(data->bytes, 0);
     gutil_int_array_set_count(data->offsets, 0);
     data->buffers_size = 0;
     gbinder_cleanup_reset(data->cleanup);
+    gbinder_writer_data_append_contents(data, buffer, 0);
+}
 
-    g_byte_array_append(data->bytes, bufdata, bufsize);
+void
+gbinder_writer_data_append_contents(
+    GBinderWriterData* data,
+    GBinderBuffer* buffer,
+    gsize off)
+{
+    GBinderBufferContents* contents = gbinder_buffer_contents(buffer);
+
     if (contents) {
+        gsize bufsize;
+        const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
         void** objects = gbinder_buffer_objects(buffer);
 
+        if (off < bufsize) {
+            g_byte_array_append(data->bytes, bufdata + off, bufsize - off);
+        }
         data->cleanup = gbinder_cleanup_add(data->cleanup,
             gbinder_writer_data_buffer_cleanup,
             gbinder_buffer_contents_ref(contents));
         if (objects && *objects) {
+            const GBinderIo* io = gbinder_buffer_io(buffer);
+
             if (!data->offsets) {
                 data->offsets = gutil_int_array_new();
             }

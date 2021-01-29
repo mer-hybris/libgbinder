@@ -30,35 +30,51 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TEST_SERVICEMANAGER_HIDL_H
-#define TEST_SERVICEMANAGER_HIDL_H
+#ifndef GBINDER_BRIDGE_H
+#define GBINDER_BRIDGE_H
 
-#include <gbinder_types.h>
+#include "gbinder_types.h"
 
-typedef struct test_servicemanager_hidl TestServiceManagerHidl;
+/* Since 1.1.4 */
 
-TestServiceManagerHidl*
-test_servicemanager_hidl_new(
-    GBinderIpc* ipc);
+/*
+ * As of time of this writing, bridging only works for binder transactions
+ * which only involve passing serialized data back and forth. It doesn't
+ * work with transactions which pass references to remote objects.
+ */
+
+G_BEGIN_DECLS
+
+/*
+ * A binder bridge object.
+ *
+ * For example, bridging "foobar" with interfaces ["example@1.0::IFoo",
+ * "example@1.0::IBar"] would:
+ *
+ * 1. Watch "example@1.0::IFoo/foobar" and "example@1.0::IBar/foobar" on dest
+ * 2. When those names appears, register objects with the same name on src
+ * 3. Pass calls coming from src to the dest objects and replies in the
+ *    opposite direction
+ * 4. When dest objects disappear, remove the corresponding bridging objects
+ *    from src
+ *
+ * and so on.
+ */
+
+GBinderBridge*
+gbinder_bridge_new(
+    const char* name,
+    const char* const* ifaces,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest);
 
 void
-test_servicemanager_hidl_free(
-    TestServiceManagerHidl* sm);
+gbinder_bridge_free(
+    GBinderBridge* bridge);
 
-GBinderIpc*
-test_servicemanager_hidl_ipc(
-    TestServiceManagerHidl* self);
+G_END_DECLS
 
-guint
-test_servicemanager_hidl_object_count(
-    TestServiceManagerHidl* self);
-
-GBinderRemoteObject*
-test_servicemanager_hidl_lookup(
-    TestServiceManagerHidl* self,
-    const char* name);
-
-#endif /* TEST_SERVICEMANAGER_HIDL_H */
+#endif /* GBINDER_BRIDGE_H */
 
 /*
  * Local Variables:

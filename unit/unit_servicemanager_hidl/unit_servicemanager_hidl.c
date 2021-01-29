@@ -34,18 +34,10 @@
 #include "test_servicemanager_hidl.h"
 
 #include "gbinder_ipc.h"
-#include "gbinder_cleanup.h"
 #include "gbinder_config.h"
-#include "gbinder_client_p.h"
 #include "gbinder_driver.h"
-#include "gbinder_reader.h"
-#include "gbinder_writer.h"
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_local_object_p.h"
-#include "gbinder_local_reply.h"
-#include "gbinder_local_request.h"
-#include "gbinder_remote_request.h"
-#include "gbinder_remote_object_p.h"
 
 #include <gutil_log.h>
 #include <gutil_strv.h>
@@ -118,15 +110,13 @@ test_config_deinit(
 static
 TestServiceManagerHidl*
 test_servicemanager_impl_new(
-    const char* dev,
-    gboolean handle_on_looper_thread)
+    const char* dev)
 {
     GBinderIpc* ipc = gbinder_ipc_new(dev);
     const int fd = gbinder_driver_fd(ipc->driver);
-    TestServiceManagerHidl* sm =
-        test_servicemanager_hidl_new(ipc, handle_on_looper_thread);
+    TestServiceManagerHidl* sm = test_servicemanager_hidl_new(ipc);
 
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_binder_register_object(fd, GBINDER_LOCAL_OBJECT(sm),
         GBINDER_SERVICEMANAGER_HANDLE);
     gbinder_ipc_unref(ipc);
@@ -192,13 +182,14 @@ test_get()
 
     test_config_init(&config, NULL);
     ipc = gbinder_ipc_new(MAIN_DEV);
-    smsvc = test_servicemanager_impl_new(OTHER_DEV, FALSE);
+    smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
     test_binder_set_passthrough(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     sm = gbinder_servicemanager_new(MAIN_DEV);
 
     /* This one fails because of unexpected name format */
@@ -230,7 +221,7 @@ test_get()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
 }
@@ -278,13 +269,14 @@ test_list()
 
     test_config_init(&config, NULL);
     ipc = gbinder_ipc_new(MAIN_DEV);
-    smsvc = test_servicemanager_impl_new(OTHER_DEV, FALSE);
+    smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
     test_binder_set_passthrough(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     sm = gbinder_servicemanager_new(MAIN_DEV);
 
     /* Request the list and wait for completion */
@@ -314,7 +306,7 @@ test_list()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
 
     g_strfreev(test.list);
@@ -368,17 +360,11 @@ test_notify_cb(
     void* user_data)
 {
     TestNotify* test = user_data;
-    GBinderIpc* ipc = test_servicemanager_hidl_ipc(test->smsvc);
-    int fd = gbinder_driver_fd(ipc->driver);
-    
+
     g_assert(name);
     GDEBUG("'%s' is registered", name);
     g_assert_cmpint(test->notify_count, == ,0);
     test->notify_count++;
-    /* We want BR_TRANSACTION_COMPLETE to be handled by the transaction
-     * thread, disable the looper before pushing the data. */
-    test_binder_set_looper_enabled(fd, FALSE);
-    test_binder_br_transaction_complete(fd);
     /* Exit the loop after both things happen */
     if (test->name_added) {
         g_main_loop_quit(test->loop);
@@ -403,13 +389,14 @@ test_notify()
 
     test_config_init(&config, NULL);
     ipc = gbinder_ipc_new(MAIN_DEV);
-    test.smsvc = test_servicemanager_impl_new(OTHER_DEV, TRUE);
+    test.smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
     test_binder_set_passthrough(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     sm = gbinder_servicemanager_new(MAIN_DEV);
 
     /* This one fails because of invalid names */
@@ -440,7 +427,7 @@ test_notify()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
-    test_binder_exit_wait();
+    test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);
 }

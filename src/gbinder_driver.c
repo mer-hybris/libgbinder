@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -175,9 +175,11 @@ gbinder_driver_write(
         gbinder_driver_verbose_dump('<',
             buf->ptr +  buf->consumed,
             buf->size - buf->consumed);
-        GVERBOSE_("%u/%u", (guint)buf->consumed, (guint)buf->size);
+        GVERBOSE("gbinder_driver_write(%d) %u/%u", self->fd,
+            (guint)buf->consumed, (guint)buf->size);
         err = self->io->write_read(self->fd, buf, NULL);
-        GVERBOSE_("%u/%u err %d", (guint)buf->consumed, (guint)buf->size, err);
+        GVERBOSE("gbinder_driver_write(%d) %u/%u err %d", self->fd,
+            (guint)buf->consumed, (guint)buf->size, err);
     }
     return err;
 }
@@ -200,21 +202,23 @@ gbinder_driver_write_read(
                     write->ptr +  write->consumed,
                     write->size - write->consumed);
             }
-            GVERBOSE_("write %u/%u read %u/%u",
-              (guint)(write ? write->consumed : 0),
-              (guint)(write ? write->size : 0),
-              (guint)(read ? read->consumed : 0),
-              (guint)(read ? read->size : 0));
+            GVERBOSE("gbinder_driver_write_read(%d) "
+                "write %u/%u read %u/%u", self->fd,
+                (guint)(write ? write->consumed : 0),
+                (guint)(write ? write->size : 0),
+                (guint)(read ? read->consumed : 0),
+                (guint)(read ? read->size : 0));
         }
 #endif /* GUTIL_LOG_VERBOSE */
         err = self->io->write_read(self->fd, write, read);
 #if GUTIL_LOG_VERBOSE
         if (GLOG_ENABLED(GLOG_LEVEL_VERBOSE)) {
-            GVERBOSE_("write %u/%u read %u/%u err %d",
-              (guint)(write ? write->consumed : 0),
-              (guint)(write ? write->size : 0),
-              (guint)(read ? read->consumed : 0),
-              (guint)(read ? read->size : 0), err);
+            GVERBOSE("gbinder_driver_write_read(%d) "
+                "write %u/%u read %u/%u err %d", self->fd,
+                (guint)(write ? write->consumed : 0),
+                (guint)(write ? write->size : 0),
+                (guint)(read ? read->consumed : 0),
+                (guint)(read ? read->size : 0), err);
             if (read) {
                 gbinder_driver_verbose_dump('>',
                     read->ptr + were_consumed,
@@ -807,6 +811,13 @@ gbinder_driver_io(
     GBinderDriver* self)
 {
     return self->io;
+}
+
+const GBinderRpcProtocol*
+gbinder_driver_protocol(
+    GBinderDriver* self)
+{
+    return self->protocol;
 }
 
 gboolean
