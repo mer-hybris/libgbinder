@@ -689,7 +689,10 @@ test_io_passthough_write_64(
             tx->offsets_size);
 
         G_LOCK(test_binder);
-        tx->handle = test_io_passthough_handle_to_object(binder, tx->handle);
+        if (*cmd != BR_REPLY_64) {
+            tx->handle = test_io_passthough_handle_to_object(binder,
+                tx->handle);
+        }
         for (i = 0; i < tx->offsets_size/sizeof(guint64); i++) {
             guint32* obj_ptr = (guint32*)(data_buffer + data_offsets[i]);
 
