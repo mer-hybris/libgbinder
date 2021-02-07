@@ -40,8 +40,9 @@
 #include <glib-object.h>
 
 /*
- * Some if this stuff may become public if we decide to allow the clients
- * to derive their classes from GBinderLocalObject
+ * Some of this stuff may become public if we decide to allow the clients
+ * to derive their own classes from GBinderLocalObject. For now it's all
+ * private.
  */
 
 typedef
