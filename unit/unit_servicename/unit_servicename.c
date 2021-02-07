@@ -349,6 +349,7 @@ test_present(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -479,6 +480,7 @@ test_cancel(
     test_run(&test_opt, loop);
 
     gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
