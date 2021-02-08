@@ -319,6 +319,7 @@ test_get()
     const char* name = "name";
     GBinderServiceManager* sm;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GMainContext* context = g_main_loop_get_context(loop);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
@@ -345,11 +346,20 @@ test_get()
     g_assert(gbinder_servicemanager_get_service(sm, name, test_get_cb, loop));
     test_run(&test_opt, loop);
 
+    /*
+     * Synchronize deletion of objects with the threads that may
+     * still be running.
+     */
+    while (!g_main_context_acquire(context)) {
+        GDEBUG("Acquiring the context");
+    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    g_main_context_release(context);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
@@ -392,6 +402,7 @@ test_list()
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
     GBinderServiceManager* sm;
+    GMainContext* context;
     TestList test;
 
     memset(&test, 0, sizeof(test));
@@ -423,11 +434,21 @@ test_list()
     g_assert_cmpuint(gutil_strv_length(test.list), == ,1);
     g_assert_cmpstr(test.list[0], == ,name);
 
+    /*
+     * Synchronize deletion of objects with the threads that may
+     * still be running.
+     */
+    context = g_main_loop_get_context(test.loop);
+    while (!g_main_context_acquire(context)) {
+        GDEBUG("Acquiring the context");
+    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    g_main_context_release(context);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
 
@@ -464,6 +485,7 @@ test_notify()
     const char* name = "name";
     GBinderServiceManager* sm;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GMainContext* context = g_main_loop_get_context(loop);
     gulong id;
 
     /* Set up binder simulator */
@@ -486,11 +508,20 @@ test_notify()
     test_run(&test_opt, loop);
     gbinder_servicemanager_remove_handler(sm, id);
 
+    /*
+     * Synchronize deletion of objects with the threads that may
+     * still be running.
+     */
+    while (!g_main_context_acquire(context)) {
+        GDEBUG("Acquiring the context");
+    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(svc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    g_main_context_release(context);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
@@ -514,6 +545,7 @@ test_notify2()
     const char* name1 = "name1";
     const char* name2 = "name2";
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GMainContext* context = g_main_loop_get_context(loop);
     gulong id1, id2;
 
     /* Set up binder simulator */
@@ -545,11 +577,20 @@ test_notify2()
     gbinder_servicemanager_remove_handler(sm, id1);
     gbinder_servicemanager_remove_handler(sm, id2);
 
+    /*
+     * Synchronize deletion of objects with the threads that may
+     * still be running.
+     */
+    while (!g_main_context_acquire(context)) {
+        GDEBUG("Acquiring the context");
+    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+    g_main_context_release(context);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);

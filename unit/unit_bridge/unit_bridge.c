@@ -315,9 +315,9 @@ test_basic_reply(
 }
 
 static
-void
-test_basic(
-    void)
+gboolean
+test_basic_run(
+    gpointer main_loop)
 {
     TestBasic test;
     TestConfig config;
@@ -413,8 +413,8 @@ test_basic(
     test_run(&test_opt, test.loop);
 
     GDEBUG("Done");
-    gbinder_bridge_free(bridge);
 
+    gbinder_bridge_free(bridge);
     gbinder_local_object_unref(&obj->parent);
     gbinder_remote_object_unref(src_obj);
     test_servicemanager_hidl_free(test.src_impl);
@@ -428,10 +428,34 @@ test_basic(
     gbinder_ipc_unref(src_priv_ipc);
     gbinder_ipc_unref(dest_ipc);
     gbinder_ipc_unref(dest_priv_ipc);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);
+
+    /* And exit the test loop */
+    g_main_loop_quit((GMainLoop*)main_loop);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_basic(
+    void)
+{
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+
+    /*
+     * This makes sure that we own the context for the entire duration
+     * of the test. That prevents many race conditions - all callbacks
+     * that are supposed to be invoked on the main thread, are actually
+     * invoked on the main thread (rather than a worker thread which
+     * happens to acquire the context).
+     */
+    g_idle_add(test_basic_run, loop);
+    test_run(&test_opt, loop);
+    g_main_loop_unref(loop);
 }
 
 /*==========================================================================*
