@@ -79,6 +79,7 @@ test_basic(
     gbinder_driver_unref(driver);
 
     g_assert(!gbinder_handler_transact(NULL, NULL, NULL, 0, 0, NULL));
+    g_assert(!gbinder_handler_can_loop(NULL));
 }
 
 /*==========================================================================*

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -230,6 +230,8 @@ test_callback(
 
     gbinder_eventloop_set(NULL);
     cb = gbinder_idle_callback_new(test_quit_cb, loop, NULL);
+    g_assert(gbinder_idle_callback_ref(cb) == cb);
+    gbinder_idle_callback_unref(cb);
     gbinder_idle_callback_schedule(cb);
     test_run(&test_opt, loop);
     gbinder_idle_callback_unref(cb);
