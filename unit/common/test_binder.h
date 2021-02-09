@@ -129,6 +129,11 @@ test_binder_set_passthrough(
     int fd,
     gboolean passthrough);
 
+int
+test_binder_handle(
+    int fd,
+    GBinderLocalObject* obj);
+
 guint
 test_binder_register_object(
     int fd,
