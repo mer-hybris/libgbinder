@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -159,7 +159,7 @@ gbinder_servicename_unref(
             gbinder_servicemanager_unref(priv->sm);
             gbinder_local_object_unref(priv->object);
             g_free(priv->name);
-            g_slice_free(GBinderServiceName, self);
+            gutil_slice_free(priv);
         }
     }
 }
