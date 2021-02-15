@@ -209,7 +209,7 @@ GBINDER_IO_FN(encode_death_notification)(
     return sizeof(*dest);
 }
 
-/* Encodes BC_TRANSACTION data */
+/* Fills binder_transaction_data for BC_TRANSACTION/REPLY */
 static
 void
 GBINDER_IO_FN(fill_transaction_data)(
@@ -217,7 +217,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     guint32 handle,
     guint32 code,
     const GByteArray* payload,
-    guint flags,
+    guint tx_flags,
     GUtilIntArray* offsets,
     void** offsets_buf)
 {
@@ -226,7 +226,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     tr->code = code;
     tr->data_size = payload->len;
     tr->data.ptr.buffer = (uintptr_t)payload->data;
-    tr->flags |= (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS;
+    tr->flags = tx_flags;
     if (offsets && offsets->count) {
         guint i;
         binder_size_t* tx_offsets = g_new(binder_size_t, offsets->count);
@@ -242,6 +242,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     }
 }
 
+/* Encodes BC_TRANSACTION data */
 static
 guint
 GBINDER_IO_FN(encode_transaction)(
@@ -255,7 +256,8 @@ GBINDER_IO_FN(encode_transaction)(
 {
     struct binder_transaction_data* tr = out;
 
-    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload, flags,
+    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload,
+        (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS,
         offsets, offsets_buf);
     return sizeof(*tr);
 }
@@ -276,13 +278,53 @@ GBINDER_IO_FN(encode_transaction_sg)(
     struct binder_transaction_data_sg* sg = out;
 
     GBINDER_IO_FN(fill_transaction_data)(&sg->transaction_data, handle, code,
-        payload, flags, offsets, offsets_buf);
+        payload, (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS,
+        offsets, offsets_buf);
     /* The driver seems to require buffers to be 8-byte aligned */
     sg->buffers_size = G_ALIGN8(buffers_size);
     return sizeof(*sg);
 }
 
-/* Encode BC_REPLY */
+/* Encodes BC_REPLY data */
+static
+guint
+GBINDER_IO_FN(encode_reply)(
+    void* out,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* payload,
+    GUtilIntArray* offsets,
+    void** offsets_buf)
+{
+    struct binder_transaction_data* tr = out;
+
+    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload, 0,
+        offsets, offsets_buf);
+    return sizeof(*tr);
+}
+
+/* Encodes BC_REPLY_SG data */
+static
+guint
+GBINDER_IO_FN(encode_reply_sg)(
+    void* out,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* payload,
+    GUtilIntArray* offsets,
+    void** offsets_buf,
+    gsize buffers_size)
+{
+    struct binder_transaction_data_sg* sg = out;
+
+    GBINDER_IO_FN(fill_transaction_data)(&sg->transaction_data, handle, code,
+        payload, 0, offsets, offsets_buf);
+    /* The driver seems to require buffers to be 8-byte aligned */
+    sg->buffers_size = G_ALIGN8(buffers_size);
+    return sizeof(*sg);
+}
+
+/* Encode BC_REPLY with just status */
 static
 guint
 GBINDER_IO_FN(encode_status_reply)(
@@ -521,6 +563,8 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .encode_death_notification = GBINDER_IO_FN(encode_death_notification),
     .encode_transaction = GBINDER_IO_FN(encode_transaction),
     .encode_transaction_sg = GBINDER_IO_FN(encode_transaction_sg),
+    .encode_reply = GBINDER_IO_FN(encode_reply),
+    .encode_reply_sg = GBINDER_IO_FN(encode_reply_sg),
     .encode_status_reply = GBINDER_IO_FN(encode_status_reply),
 
     /* Decoders */

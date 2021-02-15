@@ -401,18 +401,18 @@ gbinder_driver_reply_data(
     GUtilIntArray* offsets = gbinder_output_data_offsets(data);
     void* offsets_buf = NULL;
 
-    /* Build BC_TRANSACTION */
+    /* Build BC_REPLY */
     if (extra_buffers) {
         GVERBOSE("< BC_REPLY_SG %u bytes", (guint)extra_buffers);
         gbinder_driver_verbose_dump_bytes(' ', data->bytes);
         *cmd = io->bc.reply_sg;
-        len += io->encode_transaction_sg(buf + len, 0, 0, data->bytes, 0,
+        len += io->encode_reply_sg(buf + len, 0, 0, data->bytes,
             offsets, &offsets_buf, extra_buffers);
     } else {
         GVERBOSE("< BC_REPLY");
         gbinder_driver_verbose_dump_bytes(' ', data->bytes);
         *cmd = io->bc.reply;
-        len += io->encode_transaction(buf + len, 0, 0, data->bytes, 0,
+        len += io->encode_reply(buf + len, 0, 0, data->bytes,
             offsets, &offsets_buf);
     }
 

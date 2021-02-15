@@ -149,17 +149,24 @@ struct gbinder_io {
 #define GBINDER_MAX_DEATH_NOTIFICATION_SIZE (12)
     guint (*encode_death_notification)(void* out, GBinderRemoteObject* obj);
 
-    /* Encode BC_TRANSACTION/REPLY data */
+    /* Encode BC_TRANSACTION/BC_TRANSACTION_SG data */
 #define GBINDER_MAX_BC_TRANSACTION_SIZE (64)
     guint (*encode_transaction)(void* out, guint32 handle, guint32 code,
         const GByteArray* data, guint flags /* See below */,
         GUtilIntArray* offsets, void** offsets_buf);
-
-    /* Encode BC_TRANSACTION_SG/REPLY_SG data */
 #define GBINDER_MAX_BC_TRANSACTION_SG_SIZE (72)
     guint (*encode_transaction_sg)(void* out, guint32 handle, guint32 code,
         const GByteArray* data, guint flags /* GBINDER_TX_FLAG_xxx */,
         GUtilIntArray* offsets, void** offsets_buf,
+        gsize buffers_size);
+
+    /* Encode BC_REPLY/REPLY_SG data */
+#define GBINDER_MAX_BC_REPLY_SIZE GBINDER_MAX_BC_TRANSACTION_SIZE
+    guint (*encode_reply)(void* out, guint32 handle, guint32 code,
+        const GByteArray* data, GUtilIntArray* offsets, void** offsets_buf);
+#define GBINDER_MAX_BC_REPLY_SG_SIZE GBINDER_MAX_BC_TRANSACTION_SG_SIZE
+    guint (*encode_reply_sg)(void* out, guint32 handle, guint32 code,
+        const GByteArray* data, GUtilIntArray* offsets, void** offsets_buf,
         gsize buffers_size);
 
     /* Encode BC_REPLY */
