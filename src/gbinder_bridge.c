@@ -96,6 +96,7 @@ gbinder_bridge_interface_deactivate(
     }
     if (bi->src_name) {
         gbinder_servicename_unref(bi->src_name);
+        bi->src_name = NULL;
     }
 }
 
@@ -123,7 +124,7 @@ gbinder_bridge_dest_death_proc(
     GBinderBridgeInterface* bi = user_data;
 
     GDEBUG("%s has died", bi->fqname);
-    gbinder_bridge_dest_drop_remote_object(bi);
+    gbinder_bridge_interface_deactivate(bi);
 }
 
 static
