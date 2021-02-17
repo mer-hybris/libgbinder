@@ -36,10 +36,12 @@
 #include <gbinder_types.h>
 
 typedef struct gbinder_buffer_contents GBinderBufferContents;
+typedef struct gbinder_buffer_contents_list GBinderBufferContentsList;
 typedef struct gbinder_cleanup GBinderCleanup;
 typedef struct gbinder_driver GBinderDriver;
 typedef struct gbinder_handler GBinderHandler;
 typedef struct gbinder_io GBinderIo;
+typedef struct gbinder_object_converter GBinderObjectConverter;
 typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;
 typedef struct gbinder_proxy_object GBinderProxyObject;
@@ -71,6 +73,9 @@ typedef struct gbinder_ipc_sync_api GBinderIpcSyncApi;
 #define HIDL_GET_REF_INFO_TRANSACTION             HIDL_FOURCC('R','E','F')
 #define HIDL_DEBUG_TRANSACTION                    HIDL_FOURCC('D','B','G')
 #define HIDL_HASH_CHAIN_TRANSACTION               HIDL_FOURCC('H','S','H')
+
+/* As a special case, ServiceManager's handle is zero */
+#define GBINDER_SERVICEMANAGER_HANDLE (0)
 
 #endif /* GBINDER_TYPES_PRIVATE_H */
 

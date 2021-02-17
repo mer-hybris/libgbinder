@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,36 +30,33 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_LOCAL_REPLY_PRIVATE_H
-#define GBINDER_LOCAL_REPLY_PRIVATE_H
-
-#include <gbinder_local_reply.h>
+#ifndef GBINDER_OBJECT_CONVERTER_H
+#define GBINDER_OBJECT_CONVERTER_H
 
 #include "gbinder_types_p.h"
 
-GBinderLocalReply*
-gbinder_local_reply_new(
-    const GBinderIo* io)
-    GBINDER_INTERNAL;
+typedef struct gbinder_object_converter_functions {
+    GBinderLocalObject* (*handle_to_local)(GBinderObjectConverter*, guint32);
+} GBinderObjectConverterFunctions;
 
-GBinderOutputData*
-gbinder_local_reply_data(
-    GBinderLocalReply* reply)
-    GBINDER_INTERNAL;
+struct gbinder_object_converter {
+    const GBinderObjectConverterFunctions* f;
+    const GBinderIo* io;
+    const GBinderRpcProtocol* protocol;
+};
 
-GBinderBufferContents*
-gbinder_local_reply_contents(
-    GBinderLocalReply* reply)
-    GBINDER_INTERNAL;
+/* Inline wrappers */
 
-GBinderLocalReply*
-gbinder_local_reply_set_contents(
-    GBinderLocalReply* reply,
-    GBinderBuffer* buffer,
-    GBinderObjectConverter* convert)
-    GBINDER_INTERNAL;
+GBINDER_INLINE_FUNC
+GBinderLocalObject*
+gbinder_object_converter_handle_to_local(
+    GBinderObjectConverter* convert,
+    guint32 handle)
+{
+    return convert ? convert->f->handle_to_local(convert, handle) : NULL;
+}
 
-#endif /* GBINDER_LOCAL_REPLY_PRIVATE_H */
+#endif /* GBINDER_OBJECT_CONVERTER_H */
 
 /*
  * Local Variables:

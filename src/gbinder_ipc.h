@@ -60,6 +60,12 @@ struct gbinder_ipc_tx {
 };
 
 typedef
+gboolean
+(*GBinderIpcLocalObjectCheckFunc)(
+    GBinderLocalObject* obj,
+    void* user_data);
+
+typedef
 void
 (*GBinderIpcReplyFunc)(
     GBinderIpc* ipc,
@@ -109,13 +115,31 @@ gbinder_ipc_unref(
 
 void
 gbinder_ipc_looper_check(
-   GBinderIpc* ipc)
+    GBinderIpc* ipc)
     GBINDER_INTERNAL;
 
 GBinderObjectRegistry*
 gbinder_ipc_object_registry(
     GBinderIpc* ipc)
     GBINDER_INTERNAL;
+
+const GBinderIo*
+gbinder_ipc_io(
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
+
+const GBinderRpcProtocol*
+gbinder_ipc_protocol(
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
+
+GBinderLocalObject*
+gbinder_ipc_find_local_object(
+    GBinderIpc* ipc,
+    GBinderIpcLocalObjectCheckFunc func,
+    void* user_data)
+    GBINDER_INTERNAL
+    G_GNUC_WARN_UNUSED_RESULT;
 
 void
 gbinder_ipc_register_local_object(
@@ -124,16 +148,22 @@ gbinder_ipc_register_local_object(
     GBINDER_INTERNAL;
 
 GBinderRemoteObject*
-gbinder_ipc_get_remote_object(
-    GBinderIpc* ipc,
-    guint32 handle,
-    gboolean maybe_dead)
-    GBINDER_INTERNAL;
+gbinder_ipc_get_service_manager(
+    GBinderIpc* self)
+    GBINDER_INTERNAL
+    G_GNUC_WARN_UNUSED_RESULT;
 
 void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* ipc,
     guint32 handle)
+    GBINDER_INTERNAL;
+
+int
+gbinder_ipc_ping_sync(
+    GBinderIpc* ipc,
+    guint32 handle,
+    const GBinderIpcSyncApi* api)
     GBINDER_INTERNAL;
 
 gulong

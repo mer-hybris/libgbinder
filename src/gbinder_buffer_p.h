@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -86,6 +86,22 @@ gbinder_buffer_contents_ref(
 void
 gbinder_buffer_contents_unref(
     GBinderBufferContents* contents)
+    GBINDER_INTERNAL;
+
+GBinderBufferContentsList*
+gbinder_buffer_contents_list_add(
+    GBinderBufferContentsList* list,
+    GBinderBufferContents* contents)
+    GBINDER_INTERNAL;
+
+GBinderBufferContentsList*
+gbinder_buffer_contents_list_dup(
+    GBinderBufferContentsList* list)
+    GBINDER_INTERNAL;
+
+void
+gbinder_buffer_contents_list_free(
+    GBinderBufferContentsList* list)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_BUFFER_PRIVATE_H */

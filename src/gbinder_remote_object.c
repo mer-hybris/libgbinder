@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -40,15 +40,16 @@
 
 struct gbinder_remote_object_priv {
     GMainContext* context;
+    gboolean acquired;
 };
 
 typedef GObjectClass GBinderRemoteObjectClass;
+GType gbinder_remote_object_get_type(void) GBINDER_INTERNAL;
 G_DEFINE_TYPE(GBinderRemoteObject, gbinder_remote_object, G_TYPE_OBJECT)
 
-GType gbinder_remote_object_get_type(void);
-#define GBINDER_TYPE_REMOTE_OBJECT (gbinder_remote_object_get_type())
-#define GBINDER_REMOTE_OBJECT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        GBINDER_TYPE_REMOTE_OBJECT, GBinderRemoteObject))
+#define PARENT_CLASS gbinder_remote_object_parent_class
+#define THIS_TYPE (gbinder_remote_object_get_type())
+#define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj,THIS_TYPE,GBinderRemoteObject)
 
 enum gbinder_remote_object_signal {
     SIGNAL_DEATH,
@@ -65,31 +66,31 @@ static guint gbinder_remote_object_signals[SIGNAL_COUNT] = { 0 };
 
 static
 void
-gbinder_remote_object_died_on_main_thread(
+gbinder_remote_object_handle_death_on_main_thread(
     GBinderRemoteObject* self)
 {
-    GBinderIpc* ipc = self->ipc;
-    GBinderDriver* driver = ipc->driver;
-
-    GASSERT(!self->dead);
     if (!self->dead) {
+        GBinderIpc* ipc = self->ipc;
+        GBinderDriver* driver = ipc->driver;
+        GBinderRemoteObjectPriv* priv = self->priv;
+
         self->dead = TRUE;
+        priv->acquired = FALSE;
         /* ServiceManager always has the same handle, and can be reanimated. */
         if (self->handle != GBINDER_SERVICEMANAGER_HANDLE) {
-            gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
+            gbinder_ipc_invalidate_remote_handle(ipc, self->handle);
         }
-        gbinder_driver_clear_death_notification(driver, self);
-        gbinder_driver_release(driver, self->handle);
+        gbinder_driver_dead_binder_done(driver, self);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
     }
 }
 
 static
 gboolean
-gbinder_remote_object_died_handle(
+gbinder_remote_object_death_notification_proc(
     gpointer self)
 {
-    gbinder_remote_object_died_on_main_thread(GBINDER_REMOTE_OBJECT(self));
+    gbinder_remote_object_handle_death_on_main_thread(THIS(self));
     return G_SOURCE_REMOVE;
 }
 
@@ -108,16 +109,20 @@ gbinder_remote_object_reanimate(
      */
     if (self->dead) {
         GBinderIpc* ipc = self->ipc;
-        GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+        guint32 handle = self->handle;
 
         /* Kick the horse */
         GASSERT(self->handle == GBINDER_SERVICEMANAGER_HANDLE);
-        if (gbinder_driver_ping(ipc->driver, reg, self->handle) == 0) {
+        if (gbinder_ipc_ping_sync(ipc, handle, &gbinder_ipc_sync_main) == 0) {
+            GBinderRemoteObjectPriv* priv = self->priv;
+            GBinderDriver* driver = ipc->driver;
+
             /* Wow, it's alive! */
             self->dead = FALSE;
-            gbinder_ipc_looper_check(self->ipc); /* For death notifications */
-            gbinder_driver_acquire(ipc->driver, self->handle);
-            gbinder_driver_request_death_notification(ipc->driver, self);
+            priv->acquired = TRUE;
+            gbinder_ipc_looper_check(ipc); /* For death notifications */
+            gbinder_driver_acquire(driver, handle);
+            gbinder_driver_request_death_notification(driver, self);
         }
     }
     return !self->dead;
@@ -131,8 +136,26 @@ gbinder_remote_object_handle_death_notification(
      * checked the object pointer */
     GVERBOSE_("%p %u", self, self->handle);
     g_main_context_invoke_full(self->priv->context, G_PRIORITY_DEFAULT,
-        gbinder_remote_object_died_handle, gbinder_remote_object_ref(self),
-        g_object_unref);
+        gbinder_remote_object_death_notification_proc,
+        gbinder_remote_object_ref(self), g_object_unref);
+}
+
+void
+gbinder_remote_object_commit_suicide(
+    GBinderRemoteObject* self)
+{
+    /* This function is only invoked by GBinderProxyObject in context of
+     * the main thread, the object pointer is checked by the caller */
+    if (!self->dead) {
+        GBinderRemoteObjectPriv* priv = self->priv;
+
+        self->dead = TRUE;
+        priv->acquired = FALSE;
+        GVERBOSE_("%p %u", self, self->handle);
+        gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
+        /* Don't submit BC_DEAD_BINDER_DONE because this is a suicide */
+        g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
+    }
 }
 
 /*==========================================================================*
@@ -143,17 +166,29 @@ GBinderRemoteObject*
 gbinder_remote_object_new(
     GBinderIpc* ipc,
     guint32 handle,
-    gboolean dead)
+    REMOTE_OBJECT_CREATE create)
 {
     if (G_LIKELY(ipc)) {
-        GBinderRemoteObject* self = g_object_new
-            (GBINDER_TYPE_REMOTE_OBJECT, NULL);
+        GBinderRemoteObject* self = g_object_new(THIS_TYPE, NULL);
+        GBinderRemoteObjectPriv* priv = self->priv;
 
         self->ipc = gbinder_ipc_ref(ipc);
         self->handle = handle;
-        if (!(self->dead = dead)) {
+        switch (create) {
+        case REMOTE_OBJECT_CREATE_DEAD:
+            self->dead = TRUE;
+            break;
+        case REMOTE_OBJECT_CREATE_ACQUIRED:
+            priv->acquired = TRUE;
+            /* fallthrough */
+        case REMOTE_OBJECT_CREATE_ALIVE:
+            break;
+        }
+        if (!self->dead) {
             gbinder_ipc_looper_check(self->ipc); /* For death notifications */
-            gbinder_driver_acquire(ipc->driver, handle);
+            if (priv->acquired) {
+                gbinder_driver_acquire(ipc->driver, handle);
+            }
             gbinder_driver_request_death_notification(ipc->driver, self);
         }
         return self;
@@ -166,7 +201,7 @@ gbinder_remote_object_ref(
     GBinderRemoteObject* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(GBINDER_REMOTE_OBJECT(self));
+        g_object_ref(THIS(self));
         return self;
     } else {
         return NULL;
@@ -178,7 +213,7 @@ gbinder_remote_object_unref(
     GBinderRemoteObject* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(GBINDER_REMOTE_OBJECT(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -230,7 +265,7 @@ gbinder_remote_object_init(
     GBinderRemoteObject* self)
 {
     GBinderRemoteObjectPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
-        GBINDER_TYPE_REMOTE_OBJECT, GBinderRemoteObjectPriv);
+        THIS_TYPE, GBinderRemoteObjectPriv);
 
     priv->context = g_main_context_default();
     self->priv = priv;
@@ -239,29 +274,32 @@ gbinder_remote_object_init(
 static
 void
 gbinder_remote_object_dispose(
-    GObject* remote)
+    GObject* object)
 {
-    GBinderRemoteObject* self = GBINDER_REMOTE_OBJECT(remote);
+    GBinderRemoteObject* self = THIS(object);
 
     gbinder_ipc_remote_object_disposed(self->ipc, self);
-    G_OBJECT_CLASS(gbinder_remote_object_parent_class)->dispose(remote);
+    G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static
 void
 gbinder_remote_object_finalize(
-    GObject* remote)
+    GObject* object)
 {
-    GBinderRemoteObject* self = GBINDER_REMOTE_OBJECT(remote);
+    GBinderRemoteObject* self = THIS(object);
+    GBinderRemoteObjectPriv* priv = self->priv;
     GBinderIpc* ipc = self->ipc;
     GBinderDriver* driver = ipc->driver;
 
     if (!self->dead) {
         gbinder_driver_clear_death_notification(driver, self);
-        gbinder_driver_release(driver, self->handle);
+        if (priv->acquired) {
+            gbinder_driver_release(driver, self->handle);
+        }
     }
     gbinder_ipc_unref(ipc);
-    G_OBJECT_CLASS(gbinder_remote_object_parent_class)->finalize(remote);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

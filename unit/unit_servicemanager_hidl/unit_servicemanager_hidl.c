@@ -169,7 +169,7 @@ test_get_cb(
 
 static
 void
-test_get()
+test_get_run()
 {
     TestConfig config;
     GBinderIpc* ipc;
@@ -178,7 +178,6 @@ test_get()
     int fd;
     GBinderServiceManager* sm;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GMainContext* context = g_main_loop_get_context(loop);
     const char* name = "android.hidl.base@1.0::IBase/test";
 
     test_config_init(&config, NULL);
@@ -216,24 +215,23 @@ test_get()
     g_assert(gbinder_servicemanager_get_service(sm, name, test_get_cb, loop));
     test_run(&test_opt, loop);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_get()
+{
+    test_run_in_context(&test_opt, test_get_run);
 }
 
 /*==========================================================================*
@@ -263,7 +261,7 @@ test_list_cb(
 
 static
 void
-test_list()
+test_list_run()
 {
     TestList test;
     TestConfig config;
@@ -272,7 +270,6 @@ test_list()
     GBinderLocalObject* obj;
     int fd;
     GBinderServiceManager* sm;
-    GMainContext* context;
     const char* name = "android.hidl.base@1.0::IBase/test";
 
     memset(&test, 0, sizeof(test));
@@ -311,20 +308,11 @@ test_list()
     g_assert_cmpuint(gutil_strv_length(test.list), == ,1);
     g_assert_cmpstr(test.list[0], == ,name);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    context = g_main_loop_get_context(test.loop);
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
@@ -332,6 +320,13 @@ test_list()
 
     g_strfreev(test.list);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_list()
+{
+    test_run_in_context(&test_opt, test_list_run);
 }
 
 /*==========================================================================*
@@ -394,7 +389,7 @@ test_notify_cb(
 
 static
 void
-test_notify()
+test_notify_run()
 {
     TestNotify test;
     TestConfig config;
@@ -402,7 +397,6 @@ test_notify()
     GBinderLocalObject* obj;
     int fd;
     GBinderServiceManager* sm;
-    GMainContext* context;
     const char* name = "android.hidl.base@1.0::IBase/test";
     gulong id;
 
@@ -443,25 +437,23 @@ test_notify()
     test_run(&test_opt, test.loop);
     gbinder_servicemanager_remove_handler(sm, id);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    context = g_main_loop_get_context(test.loop);
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(test.smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_notify()
+{
+    test_run_in_context(&test_opt, test_notify_run);
 }
 
 /*==========================================================================*

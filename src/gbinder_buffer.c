@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -110,6 +110,47 @@ gbinder_buffer_contents_unref(
             gbinder_buffer_contents_free(self);
         }
     }
+}
+
+/*==========================================================================*
+ * GBinderBufferContentsList
+ * It's actually a GSList containing GBinderBufferContents refs.
+ *==========================================================================*/
+
+GBinderBufferContentsList*
+gbinder_buffer_contents_list_add(
+    GBinderBufferContentsList* list,
+    GBinderBufferContents* contents)
+{
+    /* Prepend rather than append for better efficiency */
+    return contents ? (GBinderBufferContentsList*) g_slist_prepend((GSList*)
+            list, gbinder_buffer_contents_ref(contents)) : list;
+}
+
+GBinderBufferContentsList*
+gbinder_buffer_contents_list_dup(
+    GBinderBufferContentsList* list)
+{
+    GSList* out = NULL;
+
+    if (list) {
+        GSList* l = (GSList*) list;
+
+        /* The order gets reversed but it doesn't matter */
+        while (l) {
+            out = g_slist_prepend(out, gbinder_buffer_contents_ref(l->data));
+            l = l->next;
+        }
+    }
+    return (GBinderBufferContentsList*) out;
+}
+
+void
+gbinder_buffer_contents_list_free(
+    GBinderBufferContentsList* list)
+{
+    g_slist_free_full((GSList*) list, (GDestroyNotify)
+        gbinder_buffer_contents_unref);
 }
 
 /*==========================================================================*

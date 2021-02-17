@@ -43,6 +43,7 @@ struct gbinder_local_reply {
     gint refcount;
     GBinderWriterData data;
     GBinderOutputData out;
+    GBinderBufferContents* contents;
 };
 
 GBINDER_INLINE_FUNC
@@ -96,10 +97,14 @@ gbinder_local_reply_new(
 GBinderLocalReply*
 gbinder_local_reply_set_contents(
     GBinderLocalReply* self,
-    GBinderBuffer* buffer)
+    GBinderBuffer* buffer,
+    GBinderObjectConverter* convert)
 {
     if (self) {
-        gbinder_writer_data_set_contents(&self->data, buffer);
+        gbinder_writer_data_set_contents(&self->data, buffer, convert);
+        gbinder_buffer_contents_unref(self->contents);
+        self->contents = gbinder_buffer_contents_ref
+            (gbinder_buffer_contents(buffer));
     }
     return self;
 }
@@ -114,7 +119,8 @@ gbinder_local_reply_free(
     gutil_int_array_free(data->offsets, TRUE);
     g_byte_array_free(data->bytes, TRUE);
     gbinder_cleanup_free(data->cleanup);
-    g_slice_free(GBinderLocalReply, self);
+    gbinder_buffer_contents_unref(self->contents);
+    gutil_slice_free(self);
 }
 
 GBinderLocalReply*
@@ -145,6 +151,13 @@ gbinder_local_reply_data(
     GBinderLocalReply* self)
 {
     return G_LIKELY(self) ? &self->out :  NULL;
+}
+
+GBinderBufferContents*
+gbinder_local_reply_contents(
+    GBinderLocalReply* self)
+{
+    return G_LIKELY(self) ? self->contents :  NULL;
 }
 
 void

@@ -85,6 +85,18 @@ gbinder_driver_protocol(
     GBINDER_INTERNAL;
 
 gboolean
+gbinder_driver_acquire_done(
+    GBinderDriver* driver,
+    GBinderLocalObject* obj)
+    GBINDER_INTERNAL;
+
+gboolean
+gbinder_driver_dead_binder_done(
+    GBinderDriver* driver,
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
+
+gboolean
 gbinder_driver_request_death_notification(
     GBinderDriver* driver,
     GBinderRemoteObject* obj)
@@ -161,17 +173,15 @@ gbinder_driver_transact(
     GBinderRemoteReply* reply)
     GBINDER_INTERNAL;
 
-int
-gbinder_driver_ping(
-    GBinderDriver* driver,
-    GBinderObjectRegistry* reg,
-    guint32 handle)
-    GBINDER_INTERNAL;
-
 GBinderLocalRequest*
 gbinder_driver_local_request_new(
     GBinderDriver* driver,
     const char* iface)
+    GBINDER_INTERNAL;
+
+GBinderLocalRequest*
+gbinder_driver_local_request_new_ping(
+    GBinderDriver* self)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_DRIVER_H */

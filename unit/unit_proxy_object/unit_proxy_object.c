@@ -54,14 +54,25 @@ static TestOpt test_opt;
 #define DEV2 "/dev/ybinder"
 #define DEV2_PRIV  DEV2 "-private"
 
-#define TX_CODE (GBINDER_FIRST_CALL_TRANSACTION + 1)
-#define TX_PARAM_REPLY 0x11111111
-#define TX_PARAM_DONT_REPLY 0x22222222
-#define TX_RESULT 0x33333333
+enum test_tx_codes {
+    TX_CODE = GBINDER_FIRST_CALL_TRANSACTION,
+    TX_CODE2,
+    TX_CODE3
+};
+#define TX_PARAM1 0x11111111
+#define TX_PARAM2 0x22222222
+#define TX_PARAM3 0x33333333
+#define TX_RESULT1 0x01010101
+#define TX_RESULT2 0x02020202
+#define TX_PARAM_REPLY 0x11110000
+#define TX_PARAM_DONT_REPLY 0x22220000
+#define TX_RESULT 0x03030303
 
 static const char TMP_DIR_TEMPLATE[] = "gbinder-test-proxy-XXXXXX";
 const char TEST_IFACE[] = "test@1.0::ITest";
+const char TEST_IFACE2[] = "test@1.0::ITest2";
 static const char* TEST_IFACES[] =  { TEST_IFACE, NULL };
+static const char* TEST_IFACES2[] =  { TEST_IFACE2, NULL };
 static const char DEFAULT_CONFIG_DATA[] =
     "[Protocol]\n"
     "Default = hidl\n"
@@ -172,7 +183,7 @@ test_basic_reply(
 
 static
 void
-test_basic(
+test_basic_run(
     void)
 {
     TestConfig config;
@@ -193,14 +204,15 @@ test_basic(
     fd_obj = gbinder_driver_fd(ipc_obj->driver);
     obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, test_basic_cb, &n);
     remote_obj = gbinder_remote_object_new(ipc_proxy,
-        test_binder_register_object(fd_obj, obj, AUTO_HANDLE), FALSE);
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
 
     /* remote_proxy(DEV_PRIV) => proxy (DEV) => obj (DEV) => DEV_PRIV */
     g_assert(!gbinder_proxy_object_new(NULL, remote_obj));
     g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
     remote_proxy = gbinder_remote_object_new(ipc_obj,
         test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
-        FALSE);
+        REMOTE_OBJECT_CREATE_ALIVE);
     proxy_client = gbinder_client_new(remote_proxy, TEST_IFACE);
 
     test_binder_set_passthrough(fd_obj, TRUE);
@@ -228,6 +240,14 @@ test_basic(
     test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_basic(
+    void)
+{
+    test_run_in_context(&test_opt, test_basic_run);
 }
 
 /*==========================================================================*
@@ -324,7 +344,7 @@ test_param_reply(
 
 static
 void
-test_param(
+test_param_run(
     void)
 {
     TestConfig config;
@@ -350,14 +370,15 @@ test_param(
     fd_obj = gbinder_driver_fd(ipc_obj->driver);
     obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, test_param_cb, &n);
     remote_obj = gbinder_remote_object_new(ipc_remote_obj,
-        test_binder_register_object(fd_obj, obj, AUTO_HANDLE), FALSE);
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
 
     /* remote_proxy(DEV2_PRIV) => proxy (DEV2) => obj (DEV) => DEV_PRIV */
     g_assert(!gbinder_proxy_object_new(NULL, remote_obj));
     g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
     remote_proxy = gbinder_remote_object_new(ipc_remote_proxy,
         test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
-        FALSE);
+        REMOTE_OBJECT_CREATE_ALIVE);
     proxy_client = gbinder_client_new(remote_proxy, TEST_IFACE);
 
     test_binder_set_passthrough(fd_obj, TRUE);
@@ -367,7 +388,7 @@ test_param(
 
     /*
      * Perform two transactions via proxy. First one never gets completed
-     * and eventually is cancelled, and the seconf one is replied to.
+     * and eventually is cancelled, and the second one is replied to.
      */
     req = gbinder_client_new_request(proxy_client);
     gbinder_local_request_append_int32(req, TX_PARAM_DONT_REPLY);
@@ -382,7 +403,9 @@ test_param(
     gbinder_local_request_unref(req);
 
     test_run(&test_opt, loop);
-    g_assert_cmpint(n, == ,2);
+
+    /* Depending on how callbacks are scheduled, n could be 1 or 2 */
+    g_assert_cmpint(n, > ,0);
 
     test_binder_unregister_objects(fd_obj);
     test_binder_unregister_objects(fd_proxy);
@@ -401,6 +424,255 @@ test_param(
     g_main_loop_unref(loop);
 }
 
+static
+void
+test_param(
+    void)
+{
+    test_run_in_context(&test_opt, test_param_run);
+}
+
+/*==========================================================================*
+ * obj
+ *==========================================================================*/
+
+typedef struct test_obj_data {
+    GMainLoop* loop;
+    GBinderLocalObject* tmp_proxy;
+    gboolean obj_call_handled;
+    gboolean obj_call_finished;
+    gboolean obj2_call_handled;
+    gboolean obj2_call_finished;
+} TestObj;
+
+static
+GBinderLocalReply*
+test_obj2_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestObj* test = user_data;
+    GBinderReader reader;
+    gint32 param = 0;
+
+    GDEBUG("Request 2 handled");
+    g_assert(!test->obj2_call_handled);
+    test->obj2_call_handled = TRUE;
+    g_assert(!flags);
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_IFACE2));
+    g_assert(code == TX_CODE2);
+
+    /* TX_PARAM3 parameter is expected */
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert(gbinder_reader_read_int32(&reader, &param));
+    g_assert_cmpuint(param, == ,TX_PARAM3);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_reply_append_int32
+        (gbinder_local_object_new_reply(obj), TX_RESULT2);
+}
+
+static
+void
+test_obj2_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* data)
+{
+    GBinderReader reader;
+    gint32 result = 0;
+    TestObj* test = data;
+
+    GDEBUG("Reply 2 received");
+
+    /* Make sure that result got delivered intact */
+    gbinder_remote_reply_init_reader(reply, &reader);
+    g_assert(gbinder_reader_read_int32(&reader, &result));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert_cmpint(result, == ,TX_RESULT2);
+
+    g_assert(!test->obj2_call_finished);
+    test->obj2_call_finished = TRUE;
+    if (test->obj_call_finished) {
+        GDEBUG("Both calls are done");
+        g_main_loop_quit(test->loop);
+    }
+}
+
+static
+GBinderLocalReply*
+test_obj_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestObj* test = user_data;
+    GBinderReader reader;
+    GBinderRemoteObject* obj2;
+    GBinderClient* client2;
+    GBinderLocalRequest* req2;
+    gint32 param = 0;
+
+    GDEBUG("Request 1 handled");
+    g_assert(!test->obj_call_handled);
+    test->obj_call_handled = TRUE;
+    g_assert(!flags);
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_IFACE));
+    g_assert(code == TX_CODE);
+
+    /* Read parameters: TX_PARAM1, object, TX_PARAM2  */
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert(gbinder_reader_read_int32(&reader, &param));
+    g_assert_cmpuint(param, == ,TX_PARAM1);
+    g_assert((obj2 = gbinder_reader_read_object(&reader)));
+    g_assert(gbinder_reader_read_int32(&reader, &param));
+    g_assert_cmpuint(param, == ,TX_PARAM2);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    /* Make sure temporary proxy won't get destroyed too early */
+    test->tmp_proxy = test_binder_object(gbinder_driver_fd(obj->ipc->driver),
+        obj2->handle);
+    g_assert(test->tmp_proxy);
+
+    /* Call remote object */
+    client2 = gbinder_client_new(obj2, TEST_IFACE2);
+    req2 = gbinder_client_new_request(client2);
+    gbinder_local_request_append_int32(req2, TX_PARAM3);
+    gbinder_client_transact(client2, TX_CODE2, 0, req2, test_obj2_reply,
+        NULL, test);
+    gbinder_local_request_unref(req2);
+    gbinder_client_unref(client2);
+    gbinder_remote_object_unref(obj2);
+
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_reply_append_int32
+        (gbinder_local_object_new_reply(obj), TX_RESULT1);
+}
+
+static
+void
+test_obj_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* data)
+{
+    GBinderReader reader;
+    gint32 result = 0;
+    TestObj* test = data;
+
+    GDEBUG("Reply 1 received");
+
+    /* Make sure that result got delivered intact */
+    gbinder_remote_reply_init_reader(reply, &reader);
+    g_assert(gbinder_reader_read_int32(&reader, &result));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert_cmpint(result, == ,TX_RESULT1);
+
+    g_assert(!test->obj_call_finished);
+    test->obj_call_finished = TRUE;
+    if (test->obj2_call_finished) {
+        GDEBUG("Both calls are done");
+        g_main_loop_quit(test->loop);
+    }
+}
+
+static
+void
+test_obj_run(
+    void)
+{
+    TestConfig config;
+    TestObj test;
+    GBinderLocalObject* obj;
+    GBinderLocalObject* obj2;
+    GBinderProxyObject* proxy;
+    GBinderRemoteObject* remote_obj;
+    GBinderRemoteObject* remote_proxy;
+    GBinderClient* proxy_client;
+    GBinderIpc* ipc_obj;
+    GBinderIpc* ipc_proxy;
+    GBinderLocalRequest* req;
+    int fd_obj, fd_proxy;
+
+    test_config_init(&config, NULL);
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+
+    ipc_proxy = gbinder_ipc_new(DEV);
+    ipc_obj = gbinder_ipc_new(DEV_PRIV);
+    fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
+    fd_obj = gbinder_driver_fd(ipc_obj->driver);
+    obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, test_obj_cb, &test);
+    obj2 = gbinder_local_object_new(ipc_obj, TEST_IFACES2, test_obj2_cb, &test);
+    remote_obj = gbinder_remote_object_new(ipc_proxy,
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+
+    /* remote_proxy(DEV_PRIV) => proxy (DEV) => obj (DEV) => DEV_PRIV */
+    g_assert(!gbinder_proxy_object_new(NULL, remote_obj));
+    g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    remote_proxy = gbinder_remote_object_new(ipc_obj,
+        test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    proxy_client = gbinder_client_new(remote_proxy, TEST_IFACE);
+
+    test_binder_set_passthrough(fd_obj, TRUE);
+    test_binder_set_passthrough(fd_proxy, TRUE);
+    test_binder_set_looper_enabled(fd_obj, TEST_LOOPER_ENABLE);
+    test_binder_set_looper_enabled(fd_proxy, TEST_LOOPER_ENABLE);
+
+    /* Pass object reference via proxy */
+    req = gbinder_client_new_request(proxy_client);
+    gbinder_local_request_append_int32(req, TX_PARAM1);
+    gbinder_local_request_append_local_object(req, obj2);
+    gbinder_local_request_append_int32(req, TX_PARAM2);
+    gbinder_client_transact(proxy_client, TX_CODE, 0, req, test_obj_reply,
+        NULL, &test);
+    gbinder_local_request_unref(req);
+
+    test_run(&test_opt, test.loop);
+
+    g_assert(test.obj_call_handled);
+    g_assert(test.obj_call_finished);
+    g_assert(test.obj2_call_handled);
+    g_assert(test.obj2_call_finished);
+    g_assert(test.tmp_proxy);
+    gbinder_local_object_unref(test.tmp_proxy);
+
+    test_binder_unregister_objects(fd_obj);
+    test_binder_unregister_objects(fd_proxy);
+    gbinder_local_object_drop(obj);
+    gbinder_local_object_drop(obj2);
+    gbinder_local_object_drop(&proxy->parent);
+    gbinder_remote_object_unref(remote_obj);
+    gbinder_remote_object_unref(remote_proxy);
+    gbinder_client_unref(proxy_client);
+    gbinder_ipc_unref(ipc_obj);
+    gbinder_ipc_unref(ipc_proxy);
+    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, test.loop);
+    test_config_deinit(&config);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_obj(
+    void)
+{
+    test_run_in_context(&test_opt, test_obj_run);
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/
@@ -413,6 +685,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("param"), test_param);
+    g_test_add_func(TEST_("obj"), test_obj);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,13 +35,19 @@
 
 #include "gbinder_types_p.h"
 
+typedef enum gbinder_remote_registry_create {
+    REMOTE_REGISTRY_DONT_CREATE,
+    REMOTE_REGISTRY_CAN_CREATE,
+    REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE
+} REMOTE_REGISTRY_CREATE;
+
 typedef struct gbinder_object_registry_functions {
     void (*ref)(GBinderObjectRegistry* reg);
     void (*unref)(GBinderObjectRegistry* reg);
     GBinderLocalObject* (*get_local)(GBinderObjectRegistry* reg,
         void* pointer);
     GBinderRemoteObject* (*get_remote)(GBinderObjectRegistry* reg,
-        guint32 handle);
+        guint32 handle, REMOTE_REGISTRY_CREATE create);
 } GBinderObjectRegistryFunctions;
 
 struct gbinder_object_registry {
@@ -81,9 +87,10 @@ GBINDER_INLINE_FUNC
 GBinderRemoteObject*
 gbinder_object_registry_get_remote(
     GBinderObjectRegistry* reg,
-    guint32 handle)
+    guint32 handle,
+    REMOTE_REGISTRY_CREATE create)
 {
-    return reg ? reg->f->get_remote(reg, handle) : NULL;
+    return reg ? reg->f->get_remote(reg, handle, create) : NULL;
 }
 
 #endif /* GBINDER_OBJECT_REGISTRY_H */

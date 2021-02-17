@@ -77,6 +77,8 @@ typedef struct gbinder_local_object_class {
     GBinderLocalReply* (*handle_looper_transaction)
         (GBinderLocalObject* self, GBinderRemoteRequest* req, guint code,
             guint flags, int* status);
+    void (*acquire)(GBinderLocalObject* self);
+    void (*release)(GBinderLocalObject* self);
     void (*drop)(GBinderLocalObject* self);
     /* Need to add some placeholders if this class becomes public */
 } GBinderLocalObjectClass;
@@ -166,7 +168,8 @@ gbinder_local_object_handle_decrefs(
 
 void
 gbinder_local_object_handle_acquire(
-    GBinderLocalObject* obj)
+    GBinderLocalObject* obj,
+    GBinderBufferContentsList* bufs)
     GBINDER_INTERNAL;
 
 void

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -63,6 +63,17 @@ void
 test_quit_later_n(
     GMainLoop* loop,
     guint n);
+
+/*
+ * Makes sure that we own the context for the entire duration of the test.
+ * That prevents many race conditions - all callbacks that are supposed to
+ * be invoked on the main thread, are actually invoked on the main thread
+ * (rather than a random worker thread which happens to acquire the context).
+ */
+void
+test_run_in_context(
+    const TestOpt* opt,
+    GTestFunc func);
 
 #define TEST_TIMEOUT_SEC (20)
 

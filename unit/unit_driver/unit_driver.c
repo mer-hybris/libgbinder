@@ -76,6 +76,7 @@ test_basic(
     g_assert(gbinder_driver_exit_looper(driver));
     g_assert(!gbinder_driver_request_death_notification(driver, NULL));
     g_assert(!gbinder_driver_clear_death_notification(driver, NULL));
+    g_assert(!gbinder_driver_dead_binder_done(NULL, NULL));
     gbinder_driver_unref(driver);
 
     g_assert(!gbinder_handler_transact(NULL, NULL, NULL, 0, 0, NULL));

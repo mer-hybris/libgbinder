@@ -178,7 +178,7 @@ servicemanager_aidl_new(
     self->handle_on_looper_thread = handle_on_looper_thread;
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
         servicemanager_aidl_handler, self);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
     gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
@@ -308,7 +308,7 @@ test_get_cb(
 
 static
 void
-test_get()
+test_get_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
@@ -319,7 +319,6 @@ test_get()
     const char* name = "name";
     GBinderServiceManager* sm;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GMainContext* context = g_main_loop_get_context(loop);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
@@ -346,23 +345,22 @@ test_get()
     g_assert(gbinder_servicemanager_get_service(sm, name, test_get_cb, loop));
     test_run(&test_opt, loop);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_get()
+{
+    test_run_in_context(&test_opt, test_get_run);
 }
 
 /*==========================================================================*
@@ -392,7 +390,7 @@ test_list_cb(
 
 static
 void
-test_list()
+test_list_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
@@ -402,7 +400,6 @@ test_list()
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
     GBinderServiceManager* sm;
-    GMainContext* context;
     TestList test;
 
     memset(&test, 0, sizeof(test));
@@ -434,26 +431,24 @@ test_list()
     g_assert_cmpuint(gutil_strv_length(test.list), == ,1);
     g_assert_cmpstr(test.list[0], == ,name);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    context = g_main_loop_get_context(test.loop);
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
 
     g_strfreev(test.list);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_list()
+{
+    test_run_in_context(&test_opt, test_list_run);
 }
 
 /*==========================================================================*
@@ -474,7 +469,7 @@ test_notify_cb(
 
 static
 void
-test_notify()
+test_notify_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
@@ -485,7 +480,6 @@ test_notify()
     const char* name = "name";
     GBinderServiceManager* sm;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GMainContext* context = g_main_loop_get_context(loop);
     gulong id;
 
     /* Set up binder simulator */
@@ -508,23 +502,22 @@ test_notify()
     test_run(&test_opt, loop);
     gbinder_servicemanager_remove_handler(sm, id);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(svc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_notify()
+{
+    test_run_in_context(&test_opt, test_notify_run);
 }
 
 /*==========================================================================*
@@ -533,7 +526,7 @@ test_notify()
 
 static
 void
-test_notify2()
+test_notify2_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
@@ -545,7 +538,6 @@ test_notify2()
     const char* name1 = "name1";
     const char* name2 = "name2";
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GMainContext* context = g_main_loop_get_context(loop);
     gulong id1, id2;
 
     /* Set up binder simulator */
@@ -577,23 +569,22 @@ test_notify2()
     gbinder_servicemanager_remove_handler(sm, id1);
     gbinder_servicemanager_remove_handler(sm, id2);
 
-    /*
-     * Synchronize deletion of objects with the threads that may
-     * still be running.
-     */
-    while (!g_main_context_acquire(context)) {
-        GDEBUG("Acquiring the context");
-    }
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     servicemanager_aidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    g_main_context_release(context);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_notify2()
+{
+    test_run_in_context(&test_opt, test_notify2_run);
 }
 
 /*==========================================================================*

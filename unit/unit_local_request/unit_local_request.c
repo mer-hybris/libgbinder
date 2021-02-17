@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -94,7 +94,7 @@ test_null(
 
     g_assert(!gbinder_local_request_new(NULL, NULL));
     g_assert(!gbinder_local_request_ref(NULL));
-    g_assert(!gbinder_local_request_new_from_data(NULL));
+    g_assert(!gbinder_local_request_new_from_data(NULL, NULL));
     gbinder_local_request_unref(NULL);
     gbinder_local_request_init_writer(NULL, NULL);
     gbinder_local_request_init_writer(NULL, &writer);
@@ -490,7 +490,7 @@ test_remote_request(
 
     /* Copy flat structures (no binder objects) */
     buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_request_new_from_data(buffer);
+    req2 = gbinder_local_request_new_from_data(buffer, NULL);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_request_data(req2);
@@ -503,7 +503,7 @@ test_remote_request(
 
     /* Same thing but with non-NULL (albeit empty) array of objects */
     buffer = test_buffer_from_bytes_and_objects(driver, bytes, no_obj);
-    req2 = gbinder_local_request_new_from_data(buffer);
+    req2 = gbinder_local_request_new_from_data(buffer, NULL);
     gbinder_buffer_free(buffer);
 
     data2 = gbinder_local_request_data(req2);
@@ -572,7 +572,7 @@ test_remote_request_obj(
     }
 
     buffer = test_buffer_from_bytes_and_objects(driver, data->bytes, objects);
-    req2 = gbinder_local_request_new_from_data(buffer);
+    req2 = gbinder_local_request_new_from_data(buffer, NULL);
     gbinder_buffer_free(buffer);
 
     test_remote_request_obj_validate_data(gbinder_local_request_data(req2));

@@ -136,7 +136,6 @@ app_init(
     GError* error = NULL;
     GOptionContext* options = g_option_context_new("SRC DST NAME IFACES...");
 
-    gutil_log_timestamp = FALSE;
     gutil_log_default.level = GLOG_LEVEL_DEFAULT;
 
     g_option_context_add_main_entries(options, entries, NULL);
