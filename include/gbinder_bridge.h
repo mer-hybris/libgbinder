@@ -37,12 +37,6 @@
 
 /* Since 1.1.5 */
 
-/*
- * As of time of this writing, bridging only works for binder transactions
- * which only involve passing serialized data back and forth. It doesn't
- * work with transactions which pass references to remote objects.
- */
-
 G_BEGIN_DECLS
 
 /*
@@ -67,6 +61,15 @@ gbinder_bridge_new(
     const char* const* ifaces,
     GBinderServiceManager* src,
     GBinderServiceManager* dest) /* Since 1.1.5 */
+    G_GNUC_WARN_UNUSED_RESULT;
+
+GBinderBridge*
+gbinder_bridge_new2(
+    const char* src_name,
+    const char* dest_name,
+    const char* const* ifaces,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest) /* Since 1.1.6 */
     G_GNUC_WARN_UNUSED_RESULT;
 
 void

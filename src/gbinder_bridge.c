@@ -52,11 +52,12 @@ typedef struct gbinder_bridge_interface {
     GBinderBridge* bridge;
     char* iface;
     char* fqname;
-    char* name;
+    char* src_name;
+    char* dest_name;
     gulong dest_watch_id;
     gulong dest_death_id;
     GBinderRemoteObject* dest_obj;
-    GBinderServiceName* src_name;
+    GBinderServiceName* src_service;
     GBinderProxyObject* proxy;
 } GBinderBridgeInterface;
 
@@ -94,9 +95,9 @@ gbinder_bridge_interface_deactivate(
         gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(bi->proxy));
         bi->proxy = NULL;
     }
-    if (bi->src_name) {
-        gbinder_servicename_unref(bi->src_name);
-        bi->src_name = NULL;
+    if (bi->src_service) {
+        gbinder_servicename_unref(bi->src_service);
+        bi->src_service = NULL;
     }
 }
 
@@ -111,7 +112,8 @@ gbinder_bridge_interface_free(
     gbinder_servicemanager_remove_handler(bridge->dest, bi->dest_watch_id);
     g_free(bi->iface);
     g_free(bi->fqname);
-    g_free(bi->name);
+    g_free(bi->src_name);
+    g_free(bi->dest_name);
     gutil_slice_free(bi);
 }
 
@@ -136,7 +138,7 @@ gbinder_bridge_interface_activate(
     GBinderServiceManager* src = bridge->src;
     GBinderServiceManager* dest = bridge->dest;
 
-    if (bi->dest_obj && gbinder_remote_object_is_dead(bi->dest_obj)) {
+    if (bi->dest_obj && bi->dest_obj->dead) {
         gbinder_bridge_dest_drop_remote_object(bi);
     }
     if (!bi->dest_obj) {
@@ -153,9 +155,9 @@ gbinder_bridge_interface_activate(
         bi->proxy = gbinder_proxy_object_new(gbinder_servicemanager_ipc(src),
             bi->dest_obj);
     }
-    if (bi->proxy && !bi->src_name) {
-        bi->src_name = gbinder_servicename_new(src,
-            GBINDER_LOCAL_OBJECT(bi->proxy), bi->name);
+    if (bi->proxy && !bi->src_service) {
+        bi->src_service = gbinder_servicename_new(src,
+            GBINDER_LOCAL_OBJECT(bi->proxy), bi->src_name);
     }
 }
 
@@ -178,15 +180,17 @@ static
 GBinderBridgeInterface*
 gbinder_bridge_interface_new(
     GBinderBridge* self,
-    const char* name,
+    const char* src_name,
+    const char* dest_name,
     const char* iface)
 {
     GBinderBridgeInterface* bi = g_slice_new0(GBinderBridgeInterface);
 
     bi->bridge = self;
     bi->iface = g_strdup(iface);
-    bi->fqname = g_strconcat(iface, "/", name, NULL);
-    bi->name = g_strdup(name);
+    bi->fqname = g_strconcat(iface, "/", dest_name, NULL);
+    bi->src_name = g_strdup(src_name);
+    bi->dest_name = g_strdup(dest_name);
     bi->dest_watch_id = gbinder_servicemanager_add_registration_handler
         (self->dest, bi->fqname, gbinder_bridge_dest_registration_proc, bi);
 
@@ -204,11 +208,27 @@ gbinder_bridge_new(
     const char* name,
     const char* const* ifaces,
     GBinderServiceManager* src,
-    GBinderServiceManager* dest)
+    GBinderServiceManager* dest) /* Since 1.1.5 */
+{
+    return gbinder_bridge_new2(name, NULL, ifaces, src, dest);
+}
+
+GBinderBridge*
+gbinder_bridge_new2(
+    const char* src_name,
+    const char* dest_name,
+    const char* const* ifaces,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest) /* Since 1.1.6 */
 {
     const guint n = gutil_strv_length((const GStrV*)ifaces);
 
-    if (G_LIKELY(name) && G_LIKELY(n) && G_LIKELY(src) && G_LIKELY(dest)) {
+    if (!src_name) {
+        src_name = dest_name;
+    } else if (!dest_name) {
+        dest_name = src_name;
+    }
+    if (G_LIKELY(src_name) && G_LIKELY(n) && G_LIKELY(src) && G_LIKELY(dest)) {
         GBinderBridge* self = g_slice_new0(GBinderBridge);
         guint i;
 
@@ -217,7 +237,7 @@ gbinder_bridge_new(
         self->ifaces = g_new(GBinderBridgeInterface*, n + 1);
         for (i = 0; i < n; i++) {
             self->ifaces[i] = gbinder_bridge_interface_new(self,
-                name, ifaces[i]);
+                src_name, dest_name, ifaces[i]);
         }
         self->ifaces[i] = NULL;
         return self;

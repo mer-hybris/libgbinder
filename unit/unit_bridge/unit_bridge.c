@@ -205,6 +205,7 @@ test_null(
 {
     static const char* ifaces[] = { "foo", "bar", NULL};
 
+    g_assert(!gbinder_bridge_new2(NULL, NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new(NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", ifaces, NULL, NULL));
@@ -377,7 +378,7 @@ test_basic_run(
 
     /* Both src and dest are required */
     g_assert(!gbinder_bridge_new(name, TEST_IFACES, src, NULL));
-    bridge = gbinder_bridge_new(name, TEST_IFACES, src, dest);
+    bridge = gbinder_bridge_new2(NULL, name, TEST_IFACES, src, dest);
 
     /* Start watching the name */
     id = gbinder_servicemanager_add_registration_handler(src, fqname,

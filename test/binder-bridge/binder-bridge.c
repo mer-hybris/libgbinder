@@ -43,7 +43,8 @@
 typedef struct app_options {
     const char* src;
     const char* dest;
-    const char* name;
+    char* src_name;
+    const char* dest_name;
     const char** ifaces;
 } AppOptions;
 
@@ -72,8 +73,8 @@ app_run(
             GMainLoop* loop = g_main_loop_new(NULL, TRUE);
             guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, loop);
             guint sigint = g_unix_signal_add(SIGINT, app_signal, loop);
-            GBinderBridge* bridge = gbinder_bridge_new
-                (opt->name, opt->ifaces, src, dest);
+            GBinderBridge* bridge = gbinder_bridge_new2
+                (opt->src_name, opt->dest_name, opt->ifaces, src, dest);
 
             g_main_loop_run(loop);
 
@@ -126,6 +127,8 @@ app_init(
 {
     gboolean ok = FALSE;
     GOptionEntry entries[] = {
+        { "source", 's', 0, G_OPTION_ARG_STRING, &opt->src_name,
+          "Register a different name on source", "NAME" },
         { "verbose", 'v', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           app_log_verbose, "Enable verbose output", NULL },
         { "quiet", 'q', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
@@ -149,7 +152,7 @@ app_init(
 
             opt->src = argv[1];
             opt->dest = argv[2];
-            opt->name = argv[3];
+            opt->dest_name = argv[3];
             opt->ifaces = g_new(const char*, argc - first_iface + 1);
             for (i = first_iface; i < argc; i++) {
                 opt->ifaces[i - first_iface] = argv[i];
@@ -179,6 +182,7 @@ int main(int argc, char* argv[])
     if (app_init(&opt, argc, argv)) {
         ret = app_run(&opt);
     }
+    g_free(opt.src_name);
     g_free(opt.ifaces);
     return ret;
 }
