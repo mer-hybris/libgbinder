@@ -53,6 +53,11 @@ gbinder_driver_unref(
     GBinderDriver* driver)
     GBINDER_INTERNAL;
 
+void
+gbinder_driver_close(
+    GBinderDriver* driver)
+    GBINDER_INTERNAL;
+
 int
 gbinder_driver_fd(
     GBinderDriver* driver)

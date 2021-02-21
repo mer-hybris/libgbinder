@@ -52,7 +52,7 @@ BASE_CFLAGS = $(BASE_FLAGS) $(CFLAGS)
 FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell pkg-config --cflags $(PKGS))
 FULL_LDFLAGS = $(BASE_LDFLAGS)
-LIBS = $(shell pkg-config --libs $(PKGS))
+LIBS = $(shell pkg-config --libs $(PKGS)) -lpthread
 QUIET_MAKE = make --no-print-directory
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =

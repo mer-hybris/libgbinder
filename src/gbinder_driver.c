@@ -870,11 +870,23 @@ gbinder_driver_unref(
 {
     GASSERT(self->refcount > 0);
     if (g_atomic_int_dec_and_test(&self->refcount)) {
+        gbinder_driver_close(self);
+        g_free(self->dev);
+        g_slice_free(GBinderDriver, self);
+    }
+}
+
+void
+gbinder_driver_close(
+    GBinderDriver* self)
+{
+    if (self->vm) {
         GDEBUG("Closing %s", self->dev);
         gbinder_system_munmap(self->vm, self->vmsize);
         gbinder_system_close(self->fd);
-        g_free(self->dev);
-        g_slice_free(GBinderDriver, self);
+        self->fd = -1;
+        self->vm = NULL;
+        self->vmsize = 0;
     }
 }
 

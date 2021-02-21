@@ -31,6 +31,7 @@
  */
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
+#define _GNU_SOURCE  /* pthread_*_np */
 
 #include "gbinder_ipc.h"
 #include "gbinder_driver.h"
@@ -54,6 +55,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <errno.h>
+#include <time.h>
 
 typedef struct gbinder_ipc_looper GBinderIpcLooper;
 
@@ -91,6 +93,7 @@ static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define GBINDER_IPC_MAX_TX_THREADS (15)
 #define GBINDER_IPC_MAX_PRIMARY_LOOPERS (5)
 #define GBINDER_IPC_LOOPER_START_TIMEOUT_SEC (2)
+#define GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS (500)
 
 /*
  * When looper receives the transaction:
@@ -154,11 +157,12 @@ struct gbinder_ipc_looper {
     GBinderHandler handler;
     GBinderDriver* driver;
     GBinderIpc* ipc; /* Not a reference! */
-    GThread* thread;
+    pthread_t thread;
     GMutex mutex;
     GCond start_cond;
     gint exit;
     gint started;
+    gint joined;
     int pipefd[2];
     int txfd[2];
 };
@@ -424,8 +428,8 @@ void
 gbinder_ipc_looper_free(
     GBinderIpcLooper* looper)
 {
-    if (looper->thread) {
-        g_thread_unref(looper->thread);
+    if (!looper->joined) {
+        pthread_join(looper->thread, NULL);
     }
     close(looper->pipefd[0]);
     close(looper->pipefd[1]);
@@ -761,6 +765,7 @@ gbinder_ipc_looper_thread(
     GBinderIpcLooper* looper = data;
     GBinderDriver* driver = looper->driver;
 
+    pthread_setname_np(looper->thread, looper->name);
     if (gbinder_driver_enter_looper(driver)) {
         struct pollfd pipefd;
         int res;
@@ -854,7 +859,6 @@ gbinder_ipc_looper_new(
             .can_loop = gbinder_ipc_looper_can_loop,
             .transact = gbinder_ipc_looper_transact
         };
-        GError* error = NULL;
         GBinderIpcLooper* looper = g_slice_new0(GBinderIpcLooper);
         static gint gbinder_ipc_next_looper_id = 1;
         guint id = (guint)g_atomic_int_add(&gbinder_ipc_next_looper_id, 1);
@@ -868,16 +872,14 @@ gbinder_ipc_looper_new(
         looper->handler.f = &handler_functions;
         looper->ipc = ipc;
         looper->driver = gbinder_driver_ref(ipc->driver);
-        looper->thread = g_thread_try_new(looper->name,
-            gbinder_ipc_looper_thread, looper, &error);
-        if (looper->thread) {
+        if (!pthread_create(&looper->thread, NULL, gbinder_ipc_looper_thread,
+            looper)) {
             /* gbinder_ipc_looper_thread() will release this reference: */
             gbinder_ipc_looper_ref(looper);
             GDEBUG("Starting looper %s", looper->name);
             return looper;
         } else {
-            GERR("Failed to create looper thread: %s", GERRMSG(error));
-            g_error_free(error);
+            GERR("Failed to create looper thread %s", looper->name);
         }
         gbinder_ipc_looper_unref(looper);
     } else {
@@ -927,11 +929,11 @@ gbinder_ipc_looper_stop(
     if (looper->thread) {
         GDEBUG("Stopping looper %s", looper->name);
         g_atomic_int_set(&looper->exit, TRUE);
-        if (looper->thread != g_thread_self()) {
+        if (looper->thread != pthread_self()) {
             guint8 done = TX_DONE;
 
             if (write(looper->pipefd[1], &done, sizeof(done)) <= 0) {
-                looper->thread = NULL;
+                GWARN("Failed to stop looper %s", looper->name);
             }
         }
     }
@@ -961,9 +963,36 @@ gbinder_ipc_looper_join(
     GBinderIpcLooper* looper)
 {
     /* Caller checks looper for NULL */
-    if (looper->thread && looper->thread != g_thread_self()) {
-        g_thread_join(looper->thread);
-        looper->thread = NULL;
+    if (looper->thread && looper->thread != pthread_self()) {
+        struct timespec ts;
+        int err = clock_gettime(CLOCK_REALTIME, &ts);
+
+        if (!err) {
+            const long ms = 1000000;
+            const long sec = 1000 * ms;
+            const long ns = ts.tv_nsec + GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS*ms;
+
+            ts.tv_sec += ns / sec;
+            ts.tv_nsec = ns % sec;
+            err = pthread_timedjoin_np(looper->thread, NULL, &ts);
+        }
+
+        if (err) {
+            /* Assume that looper is stuck in read */
+            GBinderIpc* ipc = looper->ipc;
+            GBinderIpcPriv* priv = ipc->priv;
+
+            GDEBUG("Looper %s is stuck", looper->name);
+
+            /* Lock */
+            g_mutex_lock(&priv->looper_mutex);
+            gbinder_driver_close(ipc->driver);
+            g_mutex_unlock(&priv->looper_mutex);
+            /* Unlock */
+
+            pthread_join(looper->thread, NULL);
+        }
+        looper->joined = TRUE;
     }
     looper->ipc = NULL;
 }
