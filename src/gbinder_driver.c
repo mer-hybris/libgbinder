@@ -140,18 +140,38 @@ gbinder_driver_verbose_transaction_data(
             guint n = 0;
             while (tx->objects[n]) n++;
             if (tx->status) {
-                GVERBOSE("> %s %d (%u bytes, %u objects)", name, tx->status,
-                    (guint)tx->size, n);
+                if (tx->target) {
+                    GVERBOSE("> %s %p %d (%u bytes, %u objects)", name,
+                             tx->target, tx->status, (guint)tx->size, n);
+                } else {
+                    GVERBOSE("> %s %d (%u bytes, %u objects)", name,
+                        tx->status, (guint)tx->size, n);
+                }
             } else {
-                GVERBOSE("> %s (%u bytes, %u objects)", name,
-                    (guint)tx->size, n);
+                if (tx->target) {
+                    GVERBOSE("> %s %p (%u bytes, %u objects)", name,
+                        tx->target, (guint)tx->size, n);
+                } else {
+                    GVERBOSE("> %s (%u bytes, %u objects)", name, (guint)
+                        tx->size, n);
+                }
             }
         } else {
             if (tx->status) {
-                GVERBOSE("> %s %d (%u bytes)", name, tx->status,
-                    (guint)tx->size);
+                if (tx->target) {
+                    GVERBOSE("> %s %p %d (%u bytes)", name, tx->target,
+                        tx->status, (guint)tx->size);
+                } else {
+                    GVERBOSE("> %s %d (%u bytes)", name, tx->status, (guint)
+                        tx->size);
+                }
             } else {
-                GVERBOSE("> %s (%u bytes)", name, (guint)tx->size);
+                if (tx->target) {
+                    GVERBOSE("> %s %p (%u bytes)", name, tx->target, (guint)
+                        tx->size);
+                } else {
+                    GVERBOSE("> %s (%u bytes)", name, (guint)tx->size);
+                }
             }
         }
     }
