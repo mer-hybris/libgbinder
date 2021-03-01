@@ -31,6 +31,7 @@
  */
 
 #include "gbinder_types_p.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_servicename.h"
 #include "gbinder_servicemanager.h"
 #include "gbinder_local_object.h"
@@ -40,15 +41,23 @@
 
 /* Since 1.0.26 */
 
+#define GBINDER_SERVICENAME_RETRY_INTERVAL_MS (500)
+
 typedef struct gbinder_servicename_priv {
     GBinderServiceName pub;
     gint refcount;
     char* name;
     GBinderLocalObject* object;
     GBinderServiceManager* sm;
+    GBinderEventLoopTimeout* retry_timer;
     gulong presence_id;
     gulong add_call_id;
 } GBinderServiceNamePriv;
+
+static
+void
+gbinder_servicename_add_service(
+    GBinderServiceNamePriv* priv);
 
 GBINDER_INLINE_FUNC GBinderServiceNamePriv*
 gbinder_servicename_cast(GBinderServiceName* pub)
@@ -57,6 +66,18 @@ gbinder_servicename_cast(GBinderServiceName* pub)
 /*==========================================================================*
  * Implementation
  *==========================================================================*/
+
+static
+gboolean
+gbinder_servicename_add_service_retry(
+    gpointer user_data)
+{
+    GBinderServiceNamePriv* priv = user_data;
+
+    priv->retry_timer = NULL;
+    gbinder_servicename_add_service(priv);
+    return G_SOURCE_REMOVE;
+}
 
 static
 void
@@ -71,6 +92,10 @@ gbinder_servicename_add_service_done(
     priv->add_call_id = 0;
     if (status) {
         GWARN("Error %d adding name \"%s\"", status, priv->name);
+        gbinder_timeout_remove(priv->retry_timer);
+        priv->retry_timer =
+            gbinder_timeout_add(GBINDER_SERVICENAME_RETRY_INTERVAL_MS,
+                gbinder_servicename_add_service_retry, priv);
     } else {
         GDEBUG("Service \"%s\" has been registered", priv->name);
     }
@@ -97,9 +122,15 @@ gbinder_servicename_presence_handler(
 
     if (gbinder_servicemanager_is_present(sm)) {
         gbinder_servicename_add_service(priv);
-    } else if (priv->add_call_id) {
-        gbinder_servicemanager_cancel(priv->sm, priv->add_call_id);
-        priv->add_call_id = 0;
+    } else {
+        if (priv->add_call_id) {
+            gbinder_servicemanager_cancel(priv->sm, priv->add_call_id);
+            priv->add_call_id = 0;
+        }
+        if (priv->retry_timer) {
+            gbinder_timeout_remove(priv->retry_timer);
+            priv->retry_timer = NULL;
+        }
     }
 }
 
@@ -158,6 +189,7 @@ gbinder_servicename_unref(
             gbinder_servicemanager_remove_handler(priv->sm, priv->presence_id);
             gbinder_servicemanager_unref(priv->sm);
             gbinder_local_object_unref(priv->object);
+            gbinder_timeout_remove(priv->retry_timer);
             g_free(priv->name);
             gutil_slice_free(priv);
         }

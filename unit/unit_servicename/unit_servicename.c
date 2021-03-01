@@ -34,7 +34,7 @@
 
 #include "gbinder_servicename.h"
 #include "gbinder_servicemanager_p.h"
-#include "gbinder_local_object.h"
+#include "gbinder_local_object_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_driver.h"
 #include "gbinder_ipc.h"
@@ -53,15 +53,6 @@ test_quit(
     void* user_data)
 {
     test_quit_later((GMainLoop*)user_data);
-}
-
-static
-void
-test_quit_when_destroyed(
-    gpointer loop,
-    GObject* obj)
-{
-    test_quit_later((GMainLoop*)loop);
 }
 
 static
@@ -87,6 +78,7 @@ typedef struct test_servicemanager {
     GMutex mutex;
     char** services;
     gboolean block_add;
+    int add_fail;
     int add_result;
 } TestServiceManager;
 
@@ -135,16 +127,30 @@ test_servicemanager_add_service(
     const GBinderIpcSyncApi* api)
 {
     TestServiceManager* self = TEST_SERVICEMANAGER(manager);
+    int result;
 
     g_mutex_lock(&self->mutex);
-    if (!gutil_strv_contains(self->services, name)) {
-        self->services = gutil_strv_add(self->services, name);
-    }
-    while (self->block_add) {
-        g_cond_wait(&self->cond, &self->mutex);
+    if (self->add_fail > 0) {
+        self->add_fail--;
+        result = -EFAULT;
+    } else {
+        result = self->add_result;
+        if (result == GBINDER_STATUS_OK) {
+            if (!gutil_strv_contains(self->services, name)) {
+                self->services = gutil_strv_add(self->services, name);
+            }
+            if (self->block_add) {
+                while (self->block_add) {
+                    g_cond_wait(&self->cond, &self->mutex);
+                }
+            } else {
+                test_binder_br_dead_binder(gbinder_driver_fd(obj->ipc->driver),
+                    GBINDER_SERVICEMANAGER_HANDLE);
+            }
+        }
     }
     g_mutex_unlock(&self->mutex);
-    return self->add_result;
+    return result;
 }
 
 static
@@ -284,7 +290,7 @@ test_basic(
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
-    g_assert(!g_strcmp0(sn->name, obj_name));
+    g_assert_cmpstr(sn->name, == ,obj_name);
 
     g_assert(gbinder_servicename_ref(sn) == sn);
     gbinder_servicename_unref(sn);
@@ -292,13 +298,8 @@ test_basic(
     gbinder_servicename_unref(sn);
     gbinder_local_object_unref(obj);
     gbinder_servicemanager_unref(sm);
-
-    /* We need to wait until GBinderIpc is destroyed */
-    GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_ipc_unref(ipc);
-    test_run(&test_opt, loop);
-
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -329,10 +330,10 @@ test_present(
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
-    g_assert(!g_strcmp0(sn->name, obj_name));
+    g_assert_cmpstr(sn->name, == ,obj_name);
 
     /* Immediately generate death notification (need looper for that) */
-    test_binder_br_dead_binder(fd, 0);
+    test_binder_br_dead_binder(fd, GBINDER_SERVICEMANAGER_HANDLE);
     test_binder_set_looper_enabled(fd, TRUE);
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
@@ -341,13 +342,7 @@ test_present(
     gbinder_local_object_unref(obj);
     gbinder_servicemanager_remove_handler(sm, id);
     gbinder_servicemanager_unref(sm);
-
-    /* We need to wait until GBinderIpc is destroyed */
-    GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_ipc_unref(ipc);
-    test_run(&test_opt, loop);
-
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
@@ -398,7 +393,7 @@ test_not_present(
 
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
-    g_assert(!g_strcmp0(sn->name, obj_name));
+    g_assert_cmpstr(sn->name, == ,obj_name);
 
     /* Make the next presence detection PING succeed */
     test_binder_br_transaction_complete_later(fd);
@@ -409,13 +404,51 @@ test_not_present(
     gbinder_local_object_unref(obj);
     gbinder_servicemanager_remove_handler(sm, id);
     gbinder_servicemanager_unref(sm);
-
-    /* We need to wait until GBinderIpc is destroyed */
-    GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * retry
+ *==========================================================================*/
+
+static
+void
+test_retry(
+    void)
+{
+    const char* obj_name = "test";
+    const char* const ifaces[] = { "interface", NULL };
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderLocalObject* obj;
+    GBinderServiceManager* sm;
+    GBinderServiceName* sn;
+    gulong id;
+
+    test_setup_ping(ipc);
+    sm = gbinder_servicemanager_new(dev);
+    TEST_SERVICEMANAGER(sm)->add_fail = 1;
+    obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
+
+    sn = gbinder_servicename_new(sm, obj, obj_name);
+    g_assert(sn);
+    g_assert_cmpstr(sn->name, == ,obj_name);
+
+    /* Need looper for death notifications */
+    test_binder_set_looper_enabled(fd, TRUE);
+    id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
 
+    gbinder_servicename_unref(sn);
+    gbinder_local_object_unref(obj);
+    gbinder_servicemanager_remove_handler(sm, id);
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    gbinder_ipc_exit();
     g_main_loop_unref(loop);
 }
 
@@ -453,10 +486,10 @@ test_cancel(
     /* This adds the name but the call blocks */
     sn = gbinder_servicename_new(sm, obj, obj_name);
     g_assert(sn);
-    g_assert(!g_strcmp0(sn->name, obj_name));
+    g_assert_cmpstr(sn->name, == ,obj_name);
 
     /* Immediately generate death notification (need looper for that) */
-    test_binder_br_dead_binder(fd, 0);
+    test_binder_br_dead_binder(fd, GBINDER_SERVICEMANAGER_HANDLE);
     test_binder_set_looper_enabled(fd, TRUE);
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
@@ -473,12 +506,7 @@ test_cancel(
     g_cond_signal(&test->cond);
     g_mutex_unlock(&test->mutex);
 
-    /* We need to wait until GBinderIpc is destroyed */
-    GDEBUG("waiting for GBinderIpc to get destroyed");
-    g_object_weak_ref(G_OBJECT(ipc), test_quit_when_destroyed, loop);
     gbinder_ipc_unref(ipc);
-    test_run(&test_opt, loop);
-
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
@@ -498,6 +526,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("present_ok"), test_present_ok);
     g_test_add_func(TEST_("present_err"), test_present_err);
     g_test_add_func(TEST_("not_present"), test_not_present);
+    g_test_add_func(TEST_("retry"), test_retry);
     g_test_add_func(TEST_("cancel"), test_cancel);
     test_init(&test_opt, argc, argv);
     return g_test_run();
