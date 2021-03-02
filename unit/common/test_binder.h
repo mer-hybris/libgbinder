@@ -129,6 +129,17 @@ test_binder_set_passthrough(
     int fd,
     gboolean passthrough);
 
+int
+test_binder_handle(
+    int fd,
+    GBinderLocalObject* obj);
+
+GBinderLocalObject*
+test_binder_object(
+    int fd,
+    guint handle)
+    G_GNUC_WARN_UNUSED_RESULT; /* Need to unref */
+
 guint
 test_binder_register_object(
     int fd,

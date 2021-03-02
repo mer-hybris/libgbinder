@@ -38,6 +38,7 @@
 #include "gbinder_remote_request_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_local_request_p.h"
+#include "gbinder_object_converter.h"
 #include "gbinder_output_data.h"
 #include "gbinder_io.h"
 
@@ -80,6 +81,7 @@ test_null(
     g_assert(gbinder_reader_at_end(&reader));
     g_assert(!gbinder_remote_request_interface(NULL));
     g_assert(!gbinder_remote_request_copy_to_local(NULL));
+    g_assert(!gbinder_remote_request_convert_to_local(NULL, NULL));
     g_assert(gbinder_remote_request_sender_pid(NULL) == (pid_t)(-1));
     g_assert(gbinder_remote_request_sender_euid(NULL) == (uid_t)(-1));
     g_assert(!gbinder_remote_request_read_int32(NULL, NULL));
@@ -89,6 +91,7 @@ test_null(
     g_assert(!gbinder_remote_request_read_string8(NULL));
     g_assert(!gbinder_remote_request_read_string16(NULL));
     g_assert(!gbinder_remote_request_read_object(NULL));
+    g_assert(!gbinder_object_converter_handle_to_local(NULL, 0));
 }
 
 /*==========================================================================*
@@ -253,6 +256,15 @@ test_string16(
  *==========================================================================*/
 
 static
+GBinderLocalObject*
+test_to_local_convert_none(
+    GBinderObjectConverter* convert,
+    guint32 handle)
+{
+    return NULL;
+}
+
+static
 void
 test_to_local(
     void)
@@ -277,12 +289,16 @@ test_to_local(
         TEST_INT64_BYTES(0),                    /* handle */
         TEST_INT64_BYTES(0)                     /* cookie */
     };
+    static const GBinderObjectConverterFunctions convert_f = {
+        .handle_to_local = test_to_local_convert_none
+    };
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* dev2 = GBINDER_DEFAULT_HWBINDER;
     GBinderDriver* driver = gbinder_driver_new(dev, NULL);
     GBinderDriver* driver2 = gbinder_driver_new(dev2, NULL);
     GBinderRemoteRequest* req = gbinder_remote_request_new(NULL,
         gbinder_rpc_protocol_for_device(dev), 0, 0);
+    GBinderObjectConverter convert;
     GBinderLocalRequest* req2;
     GBinderOutputData* data;
     const GByteArray* bytes;
@@ -311,7 +327,7 @@ test_to_local(
     gbinder_local_request_unref(req2);
 
     /* The same with gbinder_remote_request_translate_to_local() */
-    req2 = gbinder_remote_request_translate_to_local(req, NULL);
+    req2 = gbinder_remote_request_convert_to_local(req, NULL);
     data = gbinder_local_request_data(req2);
     offsets = gbinder_output_data_offsets(data);
     bytes = data->bytes;
@@ -324,7 +340,11 @@ test_to_local(
     gbinder_local_request_unref(req2);
 
     /* Different driver actually requires translation */
-    req2 = gbinder_remote_request_translate_to_local(req, driver2);
+    memset(&convert, 0, sizeof(convert));
+    convert.f = &convert_f;
+    convert.io = gbinder_driver_io(driver2);
+    convert.protocol = gbinder_driver_protocol(driver2);
+    req2 = gbinder_remote_request_convert_to_local(req, &convert);
     data = gbinder_local_request_data(req2);
     offsets = gbinder_output_data_offsets(data);
     bytes = data->bytes;

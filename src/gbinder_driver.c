@@ -32,6 +32,7 @@
 
 #include "gbinder_driver.h"
 #include "gbinder_buffer_p.h"
+#include "gbinder_cleanup.h"
 #include "gbinder_handler.h"
 #include "gbinder_io.h"
 #include "gbinder_local_object_p.h"
@@ -84,10 +85,30 @@ struct gbinder_driver {
     const GBinderRpcProtocol* protocol;
 };
 
-typedef struct gbinder_io_read_buf {
-    GBinderIoBuf buf;
+typedef struct gbinder_driver_read_buf {
+    GBinderIoBuf io;
+    gsize offset;
+} GBinderDriverReadBuf;
+
+typedef struct gbinder_driver_read_data {
+    GBinderDriverReadBuf buf;
     guint8 data[GBINDER_IO_READ_BUFFER_SIZE];
-} GBinderIoReadBuf;
+} GBinderDriverReadData;
+
+typedef struct gbinder_driver_context {
+    GBinderDriverReadBuf* rbuf;
+    GBinderObjectRegistry* reg;
+    GBinderHandler* handler;
+    GBinderCleanup* unrefs;
+    GBinderBufferContentsList* bufs;
+} GBinderDriverContext;
+
+static
+int
+gbinder_driver_txstatus(
+    GBinderDriver* self,
+    GBinderDriverContext* context,
+    GBinderRemoteReply* reply);
 
 /*==========================================================================*
  * Implementation
@@ -209,11 +230,24 @@ int
 gbinder_driver_write_read(
     GBinderDriver* self,
     GBinderIoBuf* write,
-    GBinderIoBuf* read)
+    GBinderDriverReadBuf* rbuf)
 {
     int err = (-EAGAIN);
+    GBinderIoBuf rio;
+    GBinderIoBuf* read;
+
+    /* rbuf is never NULL */
+    if (rbuf->offset) {
+        rio.ptr = rbuf->io.ptr + rbuf->offset;
+        rio.size = rbuf->io.size - rbuf->offset;
+        rio.consumed = rbuf->io.consumed - rbuf->offset;
+        read = &rio;
+    } else {
+        read = &rbuf->io;
+    }
 
     while (err == (-EAGAIN)) {
+
 #if GUTIL_LOG_VERBOSE
         const gsize were_consumed = read ? read->consumed : 0;
         if (GLOG_ENABLED(GLOG_LEVEL_VERBOSE)) {
@@ -246,6 +280,10 @@ gbinder_driver_write_read(
             }
         }
 #endif /* GUTIL_LOG_VERBOSE */
+    }
+
+    if (rbuf->offset) {
+        rbuf->io.consumed = rio.consumed + rbuf->offset;
     }
     return err;
 }
@@ -304,55 +342,78 @@ gbinder_driver_cmd_data(
 
 static
 gboolean
-gbinder_driver_death_notification(
+gbinder_driver_handle_cookie(
     GBinderDriver* self,
     guint32 cmd,
     GBinderRemoteObject* obj)
 {
     GBinderIoBuf write;
-    guint8 buf[4 + GBINDER_MAX_DEATH_NOTIFICATION_SIZE];
+    guint8 buf[4 + GBINDER_MAX_HANDLE_COOKIE_SIZE];
     guint32* data = (guint32*)buf;
 
     data[0] = cmd;
     memset(&write, 0, sizeof(write));
     write.ptr = (uintptr_t)buf;
-    write.size = 4 + self->io->encode_death_notification(data + 1, obj);
+    write.size = 4 + self->io->encode_handle_cookie(data + 1, obj);
     return gbinder_driver_write(self, &write) >= 0;
 }
 
 static
 void
 gbinder_driver_read_init(
-    GBinderIoReadBuf* rb)
+    GBinderDriverReadData* read)
 {
-    rb->buf.ptr = (uintptr_t)(rb->data);
-    rb->buf.size = sizeof(rb->data);
-    rb->buf.consumed = 0;
-
     /*
-     * It shouldn't be necessary to zero-initialize the buffer but
-     * valgrind complains about access to uninitialised data if we
-     * don't do so. Oh well...
+     * It shouldn't be necessary to zero-initialize the whole buffer
+     * but valgrind complains about access to uninitialised data if
+     * we don't do so. Oh well...
      */
-    memset(rb->data, 0, sizeof(rb->data));
+    memset(read, 0, sizeof(*read));
+    read->buf.io.ptr = GPOINTER_TO_SIZE(read->data);
+    read->buf.io.size = sizeof(read->data);
+}
+
+static
+void
+gbinder_driver_context_init(
+    GBinderDriverContext* context,
+    GBinderDriverReadBuf* rbuf,
+    GBinderObjectRegistry* reg,
+    GBinderHandler* handler)
+{
+    context->rbuf = rbuf;
+    context->reg = reg;
+    context->handler = handler;
+    context->unrefs = NULL;
+    context->bufs = NULL;
+}
+
+static
+void
+gbinder_driver_context_cleanup(
+    GBinderDriverContext* context)
+{
+    gbinder_cleanup_free(context->unrefs);
+    gbinder_buffer_contents_list_free(context->bufs);
 }
 
 static
 guint32
 gbinder_driver_next_command(
     GBinderDriver* self,
-    const GBinderIoBuf* buf)
+    const GBinderDriverReadBuf* rbuf)
 {
-    const size_t remaining = buf->size - buf->consumed;
-    guint32 cmd = 0;
+    if (rbuf->io.consumed > rbuf->offset) {
+        const gsize remaining = rbuf->io.consumed - rbuf->offset;
 
-    if (remaining >= sizeof(cmd)) {
-        int datalen;
-        /* The size of the data to follow is encoded in the command code */
-        cmd = *(guint32*)(buf->ptr + buf->consumed);
-        datalen = _IOC_SIZE(cmd);
-        if (remaining >= sizeof(cmd) + datalen) {
-            return cmd;
+        if (remaining >= 4) {
+            /* The size of the data to follow is encoded in the command code */
+            const guint32 cmd = *(guint32*)(rbuf->io.ptr + rbuf->offset);
+            const guint datalen = _IOC_SIZE(cmd);
+
+            if (remaining >= 4 + datalen) {
+                return cmd;
+            }
         }
     }
     return 0;
@@ -401,18 +462,18 @@ gbinder_driver_reply_data(
     GUtilIntArray* offsets = gbinder_output_data_offsets(data);
     void* offsets_buf = NULL;
 
-    /* Build BC_TRANSACTION */
+    /* Build BC_REPLY */
     if (extra_buffers) {
         GVERBOSE("< BC_REPLY_SG %u bytes", (guint)extra_buffers);
         gbinder_driver_verbose_dump_bytes(' ', data->bytes);
         *cmd = io->bc.reply_sg;
-        len += io->encode_transaction_sg(buf + len, 0, 0, data->bytes, 0,
+        len += io->encode_reply_sg(buf + len, 0, 0, data->bytes,
             offsets, &offsets_buf, extra_buffers);
     } else {
         GVERBOSE("< BC_REPLY");
         gbinder_driver_verbose_dump_bytes(' ', data->bytes);
         *cmd = io->bc.reply;
-        len += io->encode_transaction(buf + len, 0, 0, data->bytes, 0,
+        len += io->encode_reply(buf + len, 0, 0, data->bytes,
             offsets, &offsets_buf);
     }
 
@@ -437,16 +498,16 @@ static
 void
 gbinder_driver_handle_transaction(
     GBinderDriver* self,
-    GBinderObjectRegistry* reg,
-    GBinderHandler* h,
+    GBinderDriverContext* context,
     const void* data)
 {
     GBinderLocalReply* reply = NULL;
+    GBinderObjectRegistry* reg = context->reg;
     GBinderRemoteRequest* req;
     GBinderIoTxData tx;
     GBinderLocalObject* obj;
     const char* iface;
-    int status = -EBADMSG;
+    int txstatus = -EBADMSG;
 
     self->io->decode_transaction_data(data, &tx);
     gbinder_driver_verbose_transaction_data("BR_TRANSACTION", &tx);
@@ -455,9 +516,13 @@ gbinder_driver_handle_transaction(
 
     /* Transfer data ownership to the request */
     if (tx.data && tx.size) {
+        GBinderBuffer* buf = gbinder_buffer_new(self,
+            tx.data, tx.size, tx.objects);
+
         gbinder_driver_verbose_dump(' ', (uintptr_t)tx.data, tx.size);
-        gbinder_remote_request_set_data(req, tx.code,
-            gbinder_buffer_new(self, tx.data, tx.size, tx.objects));
+        gbinder_remote_request_set_data(req, tx.code, buf);
+        context->bufs = gbinder_buffer_contents_list_add(context->bufs,
+            gbinder_buffer_contents(buf));
     } else {
         GASSERT(!tx.objects);
         gbinder_driver_free_buffer(self, tx.data);
@@ -468,7 +533,7 @@ gbinder_driver_handle_transaction(
     switch (gbinder_local_object_can_handle_transaction(obj, iface, tx.code)) {
     case GBINDER_LOCAL_TRANSACTION_LOOPER:
         reply = gbinder_local_object_handle_looper_transaction(obj, req,
-            tx.code, tx.flags, &status);
+            tx.code, tx.flags, &txstatus);
         break;
     case GBINDER_LOCAL_TRANSACTION_SUPPORTED:
         /*
@@ -476,9 +541,11 @@ gbinder_driver_handle_transaction(
          * executed on the main thread, meaning that we can call the
          * local object directly.
          */
-        reply = h ? gbinder_handler_transact(h, obj, req, tx.code, tx.flags,
-            &status) : gbinder_local_object_handle_transaction(obj, req,
-            tx.code, tx.flags, &status);
+        reply = context->handler ?
+            gbinder_handler_transact(context->handler, obj, req, tx.code,
+                tx.flags, &txstatus) :
+            gbinder_local_object_handle_transaction(obj, req, tx.code,
+                tx.flags, &txstatus);
         break;
     default:
         GWARN("Unhandled transaction %s 0x%08x", iface, tx.code);
@@ -488,10 +555,20 @@ gbinder_driver_handle_transaction(
     /* No reply for one-way transactions */
     if (!(tx.flags & GBINDER_TX_FLAG_ONEWAY)) {
         if (reply) {
+            context->bufs = gbinder_buffer_contents_list_add(context->bufs,
+                gbinder_local_reply_contents(reply));
             gbinder_driver_reply_data(self, gbinder_local_reply_data(reply));
         } else {
-            gbinder_driver_reply_status(self, status);
+            gbinder_driver_reply_status(self, txstatus);
         }
+
+        /* Wait until the reply is handled */
+        do {
+            txstatus = gbinder_driver_write_read(self, NULL, context->rbuf);
+            if (txstatus >= 0) {
+                txstatus = gbinder_driver_txstatus(self, context, NULL);
+            }
+        } while (txstatus == (-EAGAIN));
     }
 
     /* Free the data allocated for the transaction */
@@ -502,21 +579,43 @@ gbinder_driver_handle_transaction(
 
 static
 void
+gbinder_driver_cleanup_decrefs(
+    gpointer pointer)
+{
+    GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(pointer);
+
+    gbinder_local_object_handle_decrefs(obj);
+    gbinder_local_object_unref(obj);
+}
+
+static
+void
+gbinder_driver_cleanup_release(
+    gpointer pointer)
+{
+    GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(pointer);
+
+    gbinder_local_object_handle_release(obj);
+    gbinder_local_object_unref(obj);
+}
+
+static
+void
 gbinder_driver_handle_command(
     GBinderDriver* self,
-    GBinderObjectRegistry* reg,
-    GBinderHandler* handler,
+    GBinderDriverContext* context,
     guint32 cmd,
     const void* data)
 {
     const GBinderIo* io = self->io;
+    GBinderObjectRegistry* reg = context->reg;
 
     if (cmd == io->br.noop) {
         GVERBOSE("> BR_NOOP");
     } else if (cmd == io->br.ok) {
         GVERBOSE("> BR_OK");
     } else if (cmd == io->br.transaction_complete) {
-        GVERBOSE("> BR_TRANSACTION_COMPLETE");
+        GVERBOSE("> BR_TRANSACTION_COMPLETE (?)");
     } else if (cmd == io->br.spawn_looper) {
         GVERBOSE("> BR_SPAWN_LOOPER");
     } else if (cmd == io->br.finished) {
@@ -524,7 +623,7 @@ gbinder_driver_handle_command(
     } else if (cmd == io->br.increfs) {
         guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
         GBinderLocalObject* obj = gbinder_object_registry_get_local
-            (reg, io->decode_binder_ptr_cookie(data));
+            (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_INCREFS %p", obj);
         gbinder_local_object_handle_increfs(obj);
@@ -533,44 +632,66 @@ gbinder_driver_handle_command(
         gbinder_driver_cmd_data(self, io->bc.increfs_done, data, buf);
     } else if (cmd == io->br.decrefs) {
         GBinderLocalObject* obj = gbinder_object_registry_get_local
-            (reg, io->decode_binder_ptr_cookie(data));
+            (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_DECREFS %p", obj);
-        gbinder_local_object_handle_decrefs(obj);
-        gbinder_local_object_unref(obj);
+        if (obj) {
+            /*
+             * Unrefs must be processed only after clearing the incoming
+             * command queue.
+             */
+            context->unrefs = gbinder_cleanup_add(context->unrefs,
+                gbinder_driver_cleanup_decrefs, obj);
+        }
     } else if (cmd == io->br.acquire) {
         guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
         GBinderLocalObject* obj = gbinder_object_registry_get_local
-            (reg, io->decode_binder_ptr_cookie(data));
+            (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_ACQUIRE %p", obj);
-        gbinder_local_object_handle_acquire(obj);
-        gbinder_local_object_unref(obj);
-        GVERBOSE("< BC_ACQUIRE_DONE %p", obj);
-        gbinder_driver_cmd_data(self, io->bc.acquire_done, data, buf);
+        if (obj) {
+            /* BC_ACQUIRE_DONE will be sent after the request is handled */
+            gbinder_local_object_handle_acquire(obj, context->bufs);
+            gbinder_local_object_unref(obj);
+        } else {
+            /* This shouldn't normally happen. Just send the same data back. */
+            GVERBOSE("< BC_ACQUIRE_DONE");
+            gbinder_driver_cmd_data(self, io->bc.acquire_done, data, buf);
+        }
     } else if (cmd == io->br.release) {
         GBinderLocalObject* obj = gbinder_object_registry_get_local
-            (reg, io->decode_binder_ptr_cookie(data));
+            (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_RELEASE %p", obj);
-        gbinder_local_object_handle_release(obj);
-        gbinder_local_object_unref(obj);
+        if (obj) {
+            /*
+             * Unrefs must be processed only after clearing the incoming
+             * command queue.
+             */
+            context->unrefs = gbinder_cleanup_add(context->unrefs,
+                gbinder_driver_cleanup_release, obj);
+        }
     } else if (cmd == io->br.transaction) {
-        gbinder_driver_handle_transaction(self, reg, handler, data);
+        gbinder_driver_handle_transaction(self, context, data);
     } else if (cmd == io->br.dead_binder) {
-        guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
+        guint8 buf[4 + GBINDER_MAX_COOKIE_SIZE];
         guint64 handle = 0;
         GBinderRemoteObject* obj;
 
         io->decode_cookie(data, &handle);
         GVERBOSE("> BR_DEAD_BINDER %llu", (long long unsigned int)handle);
-        obj = gbinder_object_registry_get_remote(reg, (guint32)handle);
+        obj = gbinder_object_registry_get_remote(reg, (guint32)handle,
+            REMOTE_REGISTRY_DONT_CREATE);
         if (obj) {
+            /* BC_DEAD_BINDER_DONE will be sent after the request is handled */
             gbinder_remote_object_handle_death_notification(obj);
             gbinder_remote_object_unref(obj);
+        } else {
+            /* This shouldn't normally happen. Just send the same data back. */
+            GVERBOSE("< BC_DEAD_BINDER_DONE %llu", (long long unsigned int)
+                handle);
+            gbinder_driver_cmd_data(self, io->bc.dead_binder_done, data, buf);
         }
-        GVERBOSE("< BC_DEAD_BINDER_DONE %llu", (long long unsigned int)handle);
-        gbinder_driver_cmd_data(self, io->bc.dead_binder_done, data, buf);
     } else if (cmd == io->br.clear_death_notification_done) {
         GVERBOSE("> BR_CLEAR_DEATH_NOTIFICATION_DONE");
     } else {
@@ -581,66 +702,71 @@ gbinder_driver_handle_command(
 
 static
 void
+gbinder_driver_compact_read_buf(
+    GBinderDriverReadBuf* buf)
+{
+    /*
+     * Move the data to the beginning of the buffer to make room for the
+     * next portion of data (in case if we need one)
+     */
+    if (buf->io.consumed > buf->offset) {
+        const gsize unprocessed = buf->io.consumed - buf->offset;
+        guint8* data = GSIZE_TO_POINTER(buf->io.ptr);
+
+        memmove(data, data + buf->offset, unprocessed);
+        buf->io.consumed = unprocessed;
+    } else {
+        buf->io.consumed = 0;
+    }
+    buf->offset = 0;
+}
+
+static
+void
 gbinder_driver_handle_commands(
     GBinderDriver* self,
-    GBinderObjectRegistry* reg,
-    GBinderHandler* handler,
-    GBinderIoReadBuf* rb)
+    GBinderDriverContext* context)
 {
+    GBinderDriverReadBuf* rbuf = context->rbuf;
     guint32 cmd;
-    gsize unprocessed;
-    GBinderIoBuf buf;
 
-    buf.ptr = rb->buf.ptr;
-    buf.size = rb->buf.consumed;
-    buf.consumed = 0;
-
-    while ((cmd = gbinder_driver_next_command(self, &buf)) != 0) {
-        const size_t datalen = _IOC_SIZE(cmd);
-        const size_t total = datalen + sizeof(cmd);
+    while ((cmd = gbinder_driver_next_command(self, rbuf)) != 0) {
+        const gsize datalen = _IOC_SIZE(cmd);
+        const gsize total = datalen + sizeof(cmd);
+        const void* data = GSIZE_TO_POINTER(rbuf->io.ptr + rbuf->offset + 4);
 
         /* Handle this command */
-        gbinder_driver_handle_command(self, reg, handler, cmd,
-            (void*)(buf.ptr + buf.consumed + sizeof(cmd)));
-
-        /* Switch to the next packet in the buffer */
-        buf.consumed += total;
+        rbuf->offset += total;
+        gbinder_driver_handle_command(self, context, cmd, data);
     }
 
-    /* Move the data to the beginning of the buffer to make room for the
-     * next portion of data (in case if we need one) */
-    unprocessed = buf.size - buf.consumed;
-    memmove(rb->data, rb->data + buf.consumed, unprocessed);
-    rb->buf.consumed = unprocessed;
+    gbinder_driver_compact_read_buf(rbuf);
 }
 
 static
 int
 gbinder_driver_txstatus(
     GBinderDriver* self,
-    GBinderObjectRegistry* reg,
-    GBinderHandler* handler,
-    GBinderIoReadBuf* rb,
+    GBinderDriverContext* context,
     GBinderRemoteReply* reply)
 {
     guint32 cmd;
-    gsize unprocessed;
     int txstatus = (-EAGAIN);
-    GBinderIoBuf buf;
+    GBinderDriverReadBuf* rbuf = context->rbuf;
+    const guint8* buf = GSIZE_TO_POINTER(rbuf->io.ptr);
     const GBinderIo* io = self->io;
 
-    buf.ptr = rb->buf.ptr;
-    buf.size = rb->buf.consumed;
-    buf.consumed = 0;
-
     while (txstatus == (-EAGAIN) && (cmd =
-        gbinder_driver_next_command(self, &buf)) != 0) {
+        gbinder_driver_next_command(self, context->rbuf)) != 0) {
         /* The size of the data is encoded in the command code */
-        const size_t datalen = _IOC_SIZE(cmd);
-        const size_t total = datalen + sizeof(cmd);
-        const void* data = (void*)(buf.ptr + buf.consumed + sizeof(cmd));
+        const gsize datalen = _IOC_SIZE(cmd);
+        const gsize total = datalen + sizeof(cmd);
+        const void* data = buf + rbuf->offset + sizeof(cmd);
 
-        /* Handle the packet */
+        /* Swallow this packet */
+        rbuf->offset += total;
+
+        /* Handle the command */
         if (cmd == io->br.transaction_complete) {
             GVERBOSE("> BR_TRANSACTION_COMPLETE");
             if (!reply) {
@@ -658,32 +784,44 @@ gbinder_driver_txstatus(
             io->decode_transaction_data(data, &tx);
             gbinder_driver_verbose_transaction_data("BR_REPLY", &tx);
 
-            /* Transfer data ownership to the request */
+            /* Transfer data ownership to the reply */
             if (tx.data && tx.size) {
+                GBinderBuffer* buf = gbinder_buffer_new(self,
+                    tx.data, tx.size, tx.objects);
+
                 gbinder_driver_verbose_dump(' ', (uintptr_t)tx.data, tx.size);
-                gbinder_remote_reply_set_data(reply,
-                    gbinder_buffer_new(self, tx.data, tx.size, tx.objects));
+                gbinder_remote_reply_set_data(reply, buf);
+                context->bufs = gbinder_buffer_contents_list_add(context->bufs,
+                    gbinder_buffer_contents(buf));
             } else {
                 GASSERT(!tx.objects);
                 gbinder_driver_free_buffer(self, tx.data);
             }
 
-            txstatus = tx.status;
-            GASSERT(txstatus != (-EAGAIN));
-            if (txstatus == (-EAGAIN)) txstatus = (-EFAULT);
+            /*
+             * Filter out special cases. It's a bit unfortunate that
+             * libgbinder API historically mixed TF_STATUS_CODE payload
+             * with special delivery errors. It's not a bit deal though,
+             * because in real life TF_STATUS_CODE transactions are not
+             * being used that often, if at all.
+             */
+            switch (tx.status) {
+            case (-EAGAIN):
+            case GBINDER_STATUS_FAILED:
+            case GBINDER_STATUS_DEAD_OBJECT:
+                txstatus = (-EFAULT);
+                GWARN("Replacing tx status %d with %d", tx.status, txstatus);
+                break;
+            default:
+                txstatus = tx.status;
+                break;
+            }
         } else {
-            gbinder_driver_handle_command(self, reg, handler, cmd, data);
+            gbinder_driver_handle_command(self, context, cmd, data);
         }
-
-        /* Switch to the next packet in the buffer */
-        buf.consumed += total;
     }
 
-    /* Move the data to the beginning of the buffer to make room for the
-     * next portion of data (in case if we need one) */
-    unprocessed = buf.size - buf.consumed;
-    memmove(rb->data, rb->data + buf.consumed, unprocessed);
-    rb->buf.consumed = unprocessed;
+    gbinder_driver_compact_read_buf(rbuf);
     return txstatus;
 }
 
@@ -770,11 +908,23 @@ gbinder_driver_unref(
 {
     GASSERT(self->refcount > 0);
     if (g_atomic_int_dec_and_test(&self->refcount)) {
+        gbinder_driver_close(self);
+        g_free(self->dev);
+        g_slice_free(GBinderDriver, self);
+    }
+}
+
+void
+gbinder_driver_close(
+    GBinderDriver* self)
+{
+    if (self->vm) {
         GDEBUG("Closing %s", self->dev);
         gbinder_system_munmap(self->vm, self->vmsize);
         gbinder_system_close(self->fd);
-        g_free(self->dev);
-        g_slice_free(GBinderDriver, self);
+        self->fd = -1;
+        self->vm = NULL;
+        self->vmsize = 0;
     }
 }
 
@@ -841,13 +991,55 @@ gbinder_driver_protocol(
 }
 
 gboolean
+gbinder_driver_acquire_done(
+    GBinderDriver* self,
+    GBinderLocalObject* obj)
+{
+    GBinderIoBuf write;
+    guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
+    guint32* data = (guint32*)buf;
+    const GBinderIo* io = self->io;
+
+    data[0] = io->bc.acquire_done;
+    memset(&write, 0, sizeof(write));
+    write.ptr = (uintptr_t)buf;
+    write.size = 4 + io->encode_ptr_cookie(data + 1, obj);
+
+    GVERBOSE("< BC_ACQUIRE_DONE %p", obj);
+    return gbinder_driver_write(self, &write) >= 0;
+}
+
+gboolean
+gbinder_driver_dead_binder_done(
+    GBinderDriver* self,
+    GBinderRemoteObject* obj)
+{
+    if (G_LIKELY(obj)) {
+        GBinderIoBuf write;
+        guint8 buf[4 + GBINDER_MAX_COOKIE_SIZE];
+        guint32* data = (guint32*)buf;
+        const GBinderIo* io = self->io;
+
+        data[0] = io->bc.dead_binder_done;
+        memset(&write, 0, sizeof(write));
+        write.ptr = (uintptr_t)buf;
+        write.size = 4 + io->encode_cookie(data + 1, obj->handle);
+
+        GVERBOSE("< BC_DEAD_BINDER_DONE %u", obj->handle);
+        return gbinder_driver_write(self, &write) >= 0;
+    } else {
+        return FALSE;
+    }
+}
+
+gboolean
 gbinder_driver_request_death_notification(
     GBinderDriver* self,
     GBinderRemoteObject* obj)
 {
     if (G_LIKELY(obj)) {
         GVERBOSE("< BC_REQUEST_DEATH_NOTIFICATION 0x%08x", obj->handle);
-        return gbinder_driver_death_notification(self,
+        return gbinder_driver_handle_cookie(self,
             self->io->bc.request_death_notification, obj);
     } else {
         return FALSE;
@@ -861,7 +1053,7 @@ gbinder_driver_clear_death_notification(
 {
     if (G_LIKELY(obj)) {
         GVERBOSE("< BC_CLEAR_DEATH_NOTIFICATION 0x%08x", obj->handle);
-        return gbinder_driver_death_notification(self,
+        return gbinder_driver_handle_cookie(self,
             self->io->bc.clear_death_notification, obj);
     } else {
         return FALSE;
@@ -976,23 +1168,26 @@ gbinder_driver_read(
     GBinderObjectRegistry* reg,
     GBinderHandler* handler)
 {
-    GBinderIoReadBuf rb;
+    GBinderDriverReadData read;
+    GBinderDriverContext context;
     int ret;
 
-    gbinder_driver_read_init(&rb);
-    ret = gbinder_driver_write_read(self, NULL, &rb.buf);
+    gbinder_driver_read_init(&read);
+    gbinder_driver_context_init(&context, &read.buf, reg, handler);
+    ret = gbinder_driver_write_read(self, NULL, context.rbuf);
     if (ret >= 0) {
         /* Loop until we have handled all the incoming commands */
-        gbinder_driver_handle_commands(self, reg, handler, &rb);
-        while (rb.buf.consumed && gbinder_handler_can_loop(handler)) {
-            ret = gbinder_driver_write_read(self, NULL, &rb.buf);
+        gbinder_driver_handle_commands(self, &context);
+        while (read.buf.io.consumed && gbinder_handler_can_loop(handler)) {
+            ret = gbinder_driver_write_read(self, NULL, context.rbuf);
             if (ret >= 0) {
-                gbinder_driver_handle_commands(self, reg, handler, &rb);
+                gbinder_driver_handle_commands(self, &context);
             } else {
                 break;
             }
         }
     }
+    gbinder_driver_context_cleanup(&context);
     return ret;
 }
 
@@ -1006,8 +1201,10 @@ gbinder_driver_transact(
     GBinderLocalRequest* req,
     GBinderRemoteReply* reply)
 {
+    GBinderDriverReadData read;
+    GBinderDriverContext context;
     GBinderIoBuf write;
-    GBinderIoReadBuf rb;
+    GBinderDriverReadBuf* rbuf = &read.buf;
     const GBinderIo* io = self->io;
     const guint flags = reply ? 0 : GBINDER_TX_FLAG_ONEWAY;
     GBinderOutputData* data = gbinder_local_request_data(req);
@@ -1019,7 +1216,8 @@ gbinder_driver_transact(
     guint len = sizeof(*cmd);
     int txstatus = (-EAGAIN);
 
-    gbinder_driver_read_init(&rb);
+    gbinder_driver_read_init(&read);
+    gbinder_driver_context_init(&context, &read.buf, reg, handler);
 
     /* Build BC_TRANSACTION */
     if (extra_buffers) {
@@ -1053,11 +1251,11 @@ gbinder_driver_transact(
      * negative is a driver error (except for -EAGAIN meaning that there's
      * no status yet) */
     while (txstatus == (-EAGAIN)) {
-        int err = gbinder_driver_write_read(self, &write, &rb.buf);
+        int err = gbinder_driver_write_read(self, &write, rbuf);
         if (err < 0) {
             txstatus = err;
         } else {
-            txstatus = gbinder_driver_txstatus(self, reg, handler, &rb, reply);
+            txstatus = gbinder_driver_txstatus(self, &context, reply);
         }
     }
 
@@ -1066,42 +1264,21 @@ gbinder_driver_transact(
         GASSERT(write.consumed == write.size || txstatus > 0);
 
         /* Loop until we have handled all the incoming commands */
-        gbinder_driver_handle_commands(self, reg, handler, &rb);
-        while (rb.buf.consumed) {
-            int err = gbinder_driver_write_read(self, NULL, &rb.buf);
+        gbinder_driver_handle_commands(self, &context);
+        while (rbuf->io.consumed) {
+            int err = gbinder_driver_write_read(self, NULL, rbuf);
             if (err < 0) {
                 txstatus = err;
                 break;
             } else {
-                gbinder_driver_handle_commands(self, reg, handler, &rb);
+                gbinder_driver_handle_commands(self, &context);
             }
         }
     }
 
+    gbinder_driver_context_cleanup(&context);
     g_free(offsets_buf);
     return txstatus;
-}
-
-int
-gbinder_driver_ping(
-    GBinderDriver* self,
-    GBinderObjectRegistry* reg,
-    guint32 handle)
-{
-    const GBinderRpcProtocol* protocol = self->protocol;
-    GBinderLocalRequest* req = gbinder_local_request_new(self->io, NULL);
-    GBinderRemoteReply* reply = gbinder_remote_reply_new(reg);
-    GBinderWriter writer;
-    int ret;
-
-    gbinder_local_request_init_writer(req, &writer);
-    protocol->write_ping(&writer);
-    ret = gbinder_driver_transact(self, reg, NULL, handle, protocol->ping_tx,
-        req, reply);
-
-    gbinder_local_request_unref(req);
-    gbinder_remote_reply_unref(reply);
-    return ret;
 }
 
 GBinderLocalRequest*
@@ -1109,11 +1286,18 @@ gbinder_driver_local_request_new(
     GBinderDriver* self,
     const char* iface)
 {
+    return gbinder_local_request_new_iface(self->io, self->protocol, iface);
+}
+
+GBinderLocalRequest*
+gbinder_driver_local_request_new_ping(
+    GBinderDriver* self)
+{
     GBinderLocalRequest* req = gbinder_local_request_new(self->io, NULL);
     GBinderWriter writer;
 
     gbinder_local_request_init_writer(req, &writer);
-    self->protocol->write_rpc_header(&writer, iface);
+    self->protocol->write_ping(&writer);
     return req;
 }
 

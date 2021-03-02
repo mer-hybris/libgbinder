@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -51,11 +51,17 @@ struct gbinder_remote_object {
 #define gbinder_remote_object_dev(obj) (gbinder_driver_dev((obj)->ipc->driver))
 #define gbinder_remote_object_io(obj) (gbinder_driver_io((obj)->ipc->driver))
 
+typedef enum gbinder_remote_object_create {
+    REMOTE_OBJECT_CREATE_DEAD,
+    REMOTE_OBJECT_CREATE_ALIVE,
+    REMOTE_OBJECT_CREATE_ACQUIRED
+} REMOTE_OBJECT_CREATE;
+
 GBinderRemoteObject*
 gbinder_remote_object_new(
     GBinderIpc* ipc,
     guint32 handle,
-    gboolean maybe_dead)
+    REMOTE_OBJECT_CREATE create)
     GBINDER_INTERNAL;
 
 gboolean
@@ -66,6 +72,11 @@ gbinder_remote_object_reanimate(
 void
 gbinder_remote_object_handle_death_notification(
     GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
+
+void
+gbinder_remote_object_commit_suicide(
+    GBinderRemoteObject* self)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_REMOTE_OBJECT_PRIVATE_H */

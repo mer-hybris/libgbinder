@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,58 +30,33 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "gbinder_system.h"
+#ifndef GBINDER_OBJECT_CONVERTER_H
+#define GBINDER_OBJECT_CONVERTER_H
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
+#include "gbinder_types_p.h"
 
-int
-gbinder_system_open(
-    const char* path,
-    int flags)
+typedef struct gbinder_object_converter_functions {
+    GBinderLocalObject* (*handle_to_local)(GBinderObjectConverter*, guint32);
+} GBinderObjectConverterFunctions;
+
+struct gbinder_object_converter {
+    const GBinderObjectConverterFunctions* f;
+    const GBinderIo* io;
+    const GBinderRpcProtocol* protocol;
+};
+
+/* Inline wrappers */
+
+GBINDER_INLINE_FUNC
+GBinderLocalObject*
+gbinder_object_converter_handle_to_local(
+    GBinderObjectConverter* convert,
+    guint32 handle)
 {
-    return open(path, flags);
+    return convert ? convert->f->handle_to_local(convert, handle) : NULL;
 }
 
-int
-gbinder_system_close(
-    int fd)
-{
-    return close(fd);
-}
-
-int
-gbinder_system_ioctl(
-    int fd,
-    int request,
-    void* data)
-{
-    int ret;
-
-    while ((ret = ioctl(fd, request, data)) < 0 && errno == EINTR);
-    return ret >= 0 ? 0 : -errno;
-}
-
-void*
-gbinder_system_mmap(
-   size_t length,
-   int prot,
-   int flags,
-   int fd)
-{
-    return mmap(NULL, length, prot, flags, fd, 0);
-}
-
-int
-gbinder_system_munmap(
-    void* addr,
-    size_t length)
-{
-    return munmap(addr, length);
-}
+#endif /* GBINDER_OBJECT_CONVERTER_H */
 
 /*
  * Local Variables:

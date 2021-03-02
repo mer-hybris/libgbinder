@@ -31,6 +31,7 @@
  */
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
+#define _GNU_SOURCE  /* pthread_*_np */
 
 #include "gbinder_ipc.h"
 #include "gbinder_driver.h"
@@ -54,6 +55,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <errno.h>
+#include <time.h>
 
 typedef struct gbinder_ipc_looper GBinderIpcLooper;
 
@@ -62,6 +64,7 @@ struct gbinder_ipc_priv {
     GThreadPool* tx_pool;
     GHashTable* tx_table;
     char* key;
+    const char* name;
     GBinderObjectRegistry object_registry;
 
     GMutex remote_objects_mutex;
@@ -91,6 +94,7 @@ static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define GBINDER_IPC_MAX_TX_THREADS (15)
 #define GBINDER_IPC_MAX_PRIMARY_LOOPERS (5)
 #define GBINDER_IPC_LOOPER_START_TIMEOUT_SEC (2)
+#define GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS (500)
 
 /*
  * When looper receives the transaction:
@@ -154,11 +158,12 @@ struct gbinder_ipc_looper {
     GBinderHandler handler;
     GBinderDriver* driver;
     GBinderIpc* ipc; /* Not a reference! */
-    GThread* thread;
+    pthread_t thread;
     GMutex mutex;
     GCond start_cond;
     gint exit;
     gint started;
+    gint joined;
     int pipefd[2];
     int txfd[2];
 };
@@ -203,7 +208,7 @@ typedef struct gbinder_ipc_tx_custom {
 } GBinderIpcTxCustom;
 
 GBINDER_INLINE_FUNC const char* gbinder_ipc_name(GBinderIpc* self)
-    { return gbinder_driver_dev(self->driver); }
+    { return self->priv->name; }
 
 static
 GBinderIpcLooper*
@@ -424,8 +429,8 @@ void
 gbinder_ipc_looper_free(
     GBinderIpcLooper* looper)
 {
-    if (looper->thread) {
-        g_thread_unref(looper->thread);
+    if (!looper->joined) {
+        pthread_join(looper->thread, NULL);
     }
     close(looper->pipefd[0]);
     close(looper->pipefd[1]);
@@ -681,7 +686,7 @@ gbinder_ipc_looper_transact(
             /* Lock */
             g_mutex_lock(&priv->looper_mutex);
             if (gbinder_ipc_looper_remove_primary(looper)) {
-                GDEBUG("Primary looper %s is blocked", looper->name);
+                GVERBOSE("Primary looper %s is blocked", looper->name);
                 looper->next = priv->blocked_loopers;
                 priv->blocked_loopers = looper;
                 was_blocked = TRUE;
@@ -708,7 +713,7 @@ gbinder_ipc_looper_transact(
             /* Block until asynchronous transaction gets completed. */
             done = 0;
             if (gbinder_ipc_wait(looper->pipefd[0], tx->pipefd[0], &done)) {
-                GDEBUG("Looper %s is released", looper->name);
+                GVERBOSE("Looper %s is released", looper->name);
                 GASSERT(done == TX_DONE);
             }
         }
@@ -761,6 +766,7 @@ gbinder_ipc_looper_thread(
     GBinderIpcLooper* looper = data;
     GBinderDriver* driver = looper->driver;
 
+    pthread_setname_np(looper->thread, looper->name);
     if (gbinder_driver_enter_looper(driver)) {
         struct pollfd pipefd;
         int res;
@@ -854,7 +860,6 @@ gbinder_ipc_looper_new(
             .can_loop = gbinder_ipc_looper_can_loop,
             .transact = gbinder_ipc_looper_transact
         };
-        GError* error = NULL;
         GBinderIpcLooper* looper = g_slice_new0(GBinderIpcLooper);
         static gint gbinder_ipc_next_looper_id = 1;
         guint id = (guint)g_atomic_int_add(&gbinder_ipc_next_looper_id, 1);
@@ -868,16 +873,14 @@ gbinder_ipc_looper_new(
         looper->handler.f = &handler_functions;
         looper->ipc = ipc;
         looper->driver = gbinder_driver_ref(ipc->driver);
-        looper->thread = g_thread_try_new(looper->name,
-            gbinder_ipc_looper_thread, looper, &error);
-        if (looper->thread) {
+        if (!pthread_create(&looper->thread, NULL, gbinder_ipc_looper_thread,
+            looper)) {
             /* gbinder_ipc_looper_thread() will release this reference: */
             gbinder_ipc_looper_ref(looper);
             GDEBUG("Starting looper %s", looper->name);
             return looper;
         } else {
-            GERR("Failed to create looper thread: %s", GERRMSG(error));
-            g_error_free(error);
+            GERR("Failed to create looper thread %s", looper->name);
         }
         gbinder_ipc_looper_unref(looper);
     } else {
@@ -927,11 +930,11 @@ gbinder_ipc_looper_stop(
     if (looper->thread) {
         GDEBUG("Stopping looper %s", looper->name);
         g_atomic_int_set(&looper->exit, TRUE);
-        if (looper->thread != g_thread_self()) {
+        if (looper->thread != pthread_self()) {
             guint8 done = TX_DONE;
 
             if (write(looper->pipefd[1], &done, sizeof(done)) <= 0) {
-                looper->thread = NULL;
+                GWARN("Failed to stop looper %s", looper->name);
             }
         }
     }
@@ -961,9 +964,36 @@ gbinder_ipc_looper_join(
     GBinderIpcLooper* looper)
 {
     /* Caller checks looper for NULL */
-    if (looper->thread && looper->thread != g_thread_self()) {
-        g_thread_join(looper->thread);
-        looper->thread = NULL;
+    if (looper->thread && looper->thread != pthread_self()) {
+        struct timespec ts;
+        int err = clock_gettime(CLOCK_REALTIME, &ts);
+
+        if (!err) {
+            const long ms = 1000000;
+            const long sec = 1000 * ms;
+            const long ns = ts.tv_nsec + GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS*ms;
+
+            ts.tv_sec += ns / sec;
+            ts.tv_nsec = ns % sec;
+            err = pthread_timedjoin_np(looper->thread, NULL, &ts);
+        }
+
+        if (err) {
+            /* Assume that looper is stuck in read */
+            GBinderIpc* ipc = looper->ipc;
+            GBinderIpcPriv* priv = ipc->priv;
+
+            GDEBUG("Looper %s is stuck", looper->name);
+
+            /* Lock */
+            g_mutex_lock(&priv->looper_mutex);
+            gbinder_driver_close(ipc->driver);
+            g_mutex_unlock(&priv->looper_mutex);
+            /* Unlock */
+
+            pthread_join(looper->thread, NULL);
+        }
+        looper->joined = TRUE;
     }
     looper->ipc = NULL;
 }
@@ -1086,16 +1116,24 @@ gbinder_ipc_tx_handler_transact(
 static
 void
 gbinder_ipc_invalidate_remote_handle_locked(
-    GBinderIpcPriv* priv,
+    GBinderIpc* self,
     guint32 handle)
 {
+    GBinderIpcPriv* priv = self->priv;
+
     /* Caller holds priv->remote_objects_mutex */
     if (priv->remote_objects) {
-        GVERBOSE_("handle %u", handle);
-        g_hash_table_remove(priv->remote_objects, GINT_TO_POINTER(handle));
-        if (g_hash_table_size(priv->remote_objects) == 0) {
-            g_hash_table_unref(priv->remote_objects);
-            priv->remote_objects = NULL;
+        const gpointer key = GINT_TO_POINTER(handle);
+#if GUTIL_LOG_VERBOSE
+        const gpointer obj = g_hash_table_lookup(priv->remote_objects, key);
+#endif
+
+        if (g_hash_table_remove(priv->remote_objects, key)) {
+            GVERBOSE_("handle %u %p %s", handle, obj, gbinder_ipc_name(self));
+            if (g_hash_table_size(priv->remote_objects) == 0) {
+                g_hash_table_unref(priv->remote_objects);
+                priv->remote_objects = NULL;
+            }
         }
     }
 }
@@ -1109,7 +1147,7 @@ gbinder_ipc_invalidate_remote_handle(
 
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
-    gbinder_ipc_invalidate_remote_handle_locked(priv, handle);
+    gbinder_ipc_invalidate_remote_handle_locked(self, handle);
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
 }
@@ -1144,10 +1182,12 @@ gbinder_ipc_local_object_disposed(
     /* Lock */
     g_mutex_lock(&priv->local_objects_mutex);
     if (obj->object.ref_count == 1 && priv->local_objects) {
-        g_hash_table_remove(priv->local_objects, obj);
-        if (g_hash_table_size(priv->local_objects) == 0) {
-            g_hash_table_unref(priv->local_objects);
-            priv->local_objects = NULL;
+        if (g_hash_table_remove(priv->local_objects, obj)) {
+            GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
+            if (g_hash_table_size(priv->local_objects) == 0) {
+                g_hash_table_unref(priv->local_objects);
+                priv->local_objects = NULL;
+            }
         }
     }
     g_mutex_unlock(&priv->local_objects_mutex);
@@ -1164,7 +1204,7 @@ gbinder_ipc_remote_object_disposed(
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
     if (obj->object.ref_count == 1) {
-        gbinder_ipc_invalidate_remote_handle_locked(priv, obj->handle);
+        gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
@@ -1182,11 +1222,13 @@ gbinder_ipc_register_local_object(
     if (!priv->local_objects) {
         priv->local_objects = g_hash_table_new(g_direct_hash, g_direct_equal);
     }
-    g_hash_table_insert(priv->local_objects, obj, obj);
+    if (!g_hash_table_contains(priv->local_objects, obj)) {
+        g_hash_table_insert(priv->local_objects, obj, obj);
+        GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
+    }
     g_mutex_unlock(&priv->local_objects_mutex);
     /* Unlock */
 
-    GVERBOSE_("%p", obj);
     gbinder_ipc_looper_check(self);
 }
 
@@ -1223,6 +1265,7 @@ GBinderRemoteObject*
 gbinder_ipc_priv_get_remote_object(
     GBinderIpcPriv* priv,
     guint32 handle,
+    REMOTE_REGISTRY_CREATE create,
     gboolean maybe_dead)
 {
     GBinderRemoteObject* obj = NULL;
@@ -1235,16 +1278,22 @@ gbinder_ipc_priv_get_remote_object(
     }
     if (obj) {
         gbinder_remote_object_ref(obj);
-    } else {
+    } else if (create != REMOTE_REGISTRY_DONT_CREATE) {
+        GBinderIpc* self = priv->self;
+
         /*
          * If maybe_dead is TRUE, the caller is supposed to try reanimating
          * the object on the main thread not holding any global locks.
          */
-        obj = gbinder_remote_object_new(priv->self, handle, maybe_dead);
+        obj = gbinder_remote_object_new(self, handle, maybe_dead ?
+            REMOTE_OBJECT_CREATE_DEAD : (create == REMOTE_REGISTRY_CAN_CREATE) ?
+            REMOTE_OBJECT_CREATE_ALIVE :
+            REMOTE_OBJECT_CREATE_ACQUIRED);
         if (!priv->remote_objects) {
             priv->remote_objects = g_hash_table_new
                 (g_direct_hash, g_direct_equal);
         }
+        GVERBOSE_("%p handle %u %s", obj, handle, gbinder_ipc_name(self));
         g_hash_table_replace(priv->remote_objects, key, obj);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);
@@ -1253,14 +1302,47 @@ gbinder_ipc_priv_get_remote_object(
     return obj;
 }
 
-GBinderRemoteObject*
-gbinder_ipc_get_remote_object(
+GBinderLocalObject*
+gbinder_ipc_find_local_object(
     GBinderIpc* self,
-    guint32 handle,
-    gboolean maybe_dead)
+    GBinderIpcLocalObjectCheckFunc func,
+    void* user_data)
+{
+    GBinderLocalObject* found = NULL;
+
+    if (self)  {
+        GBinderIpcPriv* priv = self->priv;
+
+        /* Lock */
+        g_mutex_lock(&priv->local_objects_mutex);
+        if (priv->local_objects) {
+            GHashTableIter it;
+            gpointer value;
+
+            g_hash_table_iter_init(&it, priv->local_objects);
+            while (g_hash_table_iter_next(&it, NULL, &value)) {
+                GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(value);
+
+                if (func(obj, user_data)) {
+                    found = gbinder_local_object_ref(obj);
+                    break;
+                }
+            }
+        }
+        g_mutex_unlock(&priv->local_objects_mutex);
+        /* Unlock */
+    }
+
+    return found;
+}
+
+GBinderRemoteObject*
+gbinder_ipc_get_service_manager(
+    GBinderIpc* self)
 {
     /* GBinderServiceManager makes sure that GBinderIpc pointer is not NULL */
-    return gbinder_ipc_priv_get_remote_object(self->priv, handle, maybe_dead);
+    return gbinder_ipc_priv_get_remote_object(self->priv,
+        GBINDER_SERVICEMANAGER_HANDLE, REMOTE_REGISTRY_CAN_CREATE, TRUE);
 }
 
 GBINDER_INLINE_FUNC
@@ -1309,10 +1391,11 @@ static
 GBinderRemoteObject*
 gbinder_ipc_object_registry_get_remote(
     GBinderObjectRegistry* reg,
-    guint32 handle)
+    guint32 handle,
+    REMOTE_REGISTRY_CREATE create)
 {
     return gbinder_ipc_priv_get_remote_object
-        (gbinder_ipc_priv_from_object_registry(reg), handle, FALSE);
+        (gbinder_ipc_priv_from_object_registry(reg), handle, create, FALSE);
 }
 
 /*==========================================================================*
@@ -1740,6 +1823,9 @@ gbinder_ipc_new(
                 gbinder_ipc_table = g_hash_table_new(g_str_hash, g_str_equal);
             }
             g_hash_table_replace(gbinder_ipc_table, priv->key, self);
+            /* With "/dev/" prefix, it may be too long to be a thread name */
+            priv->name = priv->key +
+                (g_str_has_prefix(priv->key, "/dev/") ? 5 : 0);
         }
     }
     pthread_mutex_unlock(&gbinder_ipc_mutex);
@@ -1772,8 +1858,37 @@ GBinderObjectRegistry*
 gbinder_ipc_object_registry(
     GBinderIpc* self)
 {
-    /* Only used by unit tests */
     return G_LIKELY(self) ? &self->priv->object_registry : NULL;
+}
+
+const GBinderIo*
+gbinder_ipc_io(
+    GBinderIpc* self)
+{
+    return G_LIKELY(self) ? gbinder_driver_io(self->driver) : NULL;
+}
+
+const GBinderRpcProtocol*
+gbinder_ipc_protocol(
+    GBinderIpc* self)
+{
+    return G_LIKELY(self) ? gbinder_driver_protocol(self->driver) : NULL;
+}
+
+int
+gbinder_ipc_ping_sync(
+    GBinderIpc* ipc,
+    guint32 handle,
+    const GBinderIpcSyncApi* api)
+{
+    GBinderDriver* driver = ipc->driver;
+    GBinderLocalRequest* req = gbinder_driver_local_request_new_ping(driver);
+    guint32 code = gbinder_driver_protocol(driver)->ping_tx;
+    int ret;
+
+    gbinder_remote_reply_unref(api->sync_reply(ipc, handle, code, req, &ret));
+    gbinder_local_request_unref(req);
+    return ret;
 }
 
 gulong
@@ -1922,7 +2037,11 @@ gbinder_ipc_dispose(
     GVERBOSE_("%s", self->dev);
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
-    GASSERT(gbinder_ipc_table);
+    /*
+     * gbinder_ipc_dispose() can be invoked more than once (typically
+     * at shutdown) and gbinder_ipc_table here may actually happen to
+     * be NULL, hence the check.
+     */
     if (gbinder_ipc_table) {
         GBinderIpcPriv* priv = self->priv;
 

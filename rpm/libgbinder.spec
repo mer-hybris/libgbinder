@@ -30,9 +30,9 @@ This package contains the development library for %{name}.
 
 %build
 make LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
-make -C test/binder-bridge release
-make -C test/binder-list release
-make -C test/binder-ping release
+make -C test/binder-bridge KEEP_SYMBOLS=1 release
+make -C test/binder-list KEEP_SYMBOLS=1 release
+make -C test/binder-ping KEEP_SYMBOLS=1 release
 
 %install
 rm -rf %{buildroot}

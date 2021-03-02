@@ -118,13 +118,21 @@ GBinderLocalReply*
 gbinder_remote_reply_copy_to_local(
     GBinderRemoteReply* self)
 {
+    return gbinder_remote_reply_convert_to_local(self, NULL);
+}
+
+GBinderLocalReply*
+gbinder_remote_reply_convert_to_local(
+    GBinderRemoteReply* self,
+    GBinderObjectConverter* convert)
+{
     if (G_LIKELY(self)) {
         GBinderReaderData* d = &self->data;
         GBinderObjectRegistry* reg = d->reg;
 
         if (reg) {
             return gbinder_local_reply_set_contents
-                (gbinder_local_reply_new(reg->io), d->buffer);
+                (gbinder_local_reply_new(reg->io), d->buffer, convert);
         }
     }
     return NULL;

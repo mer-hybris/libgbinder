@@ -43,21 +43,30 @@ gbinder_local_request_new(
     GBytes* init)
     GBINDER_INTERNAL;
 
-GBinderOutputData*
-gbinder_local_request_data(
-    GBinderLocalRequest* req)
+GBinderLocalRequest*
+gbinder_local_request_new_iface(
+    const GBinderIo* io,
+    const GBinderRpcProtocol* protocol,
+    const char* iface)
     GBINDER_INTERNAL;
 
 GBinderLocalRequest*
 gbinder_local_request_new_from_data(
-    GBinderBuffer* buffer)
+    GBinderBuffer* buffer,
+    GBinderObjectConverter* convert)
+    GBINDER_INTERNAL;
+
+GBinderOutputData*
+gbinder_local_request_data(
+    GBinderLocalRequest* req)
     GBINDER_INTERNAL;
 
 void
 gbinder_local_request_append_contents(
     GBinderLocalRequest* req,
     GBinderBuffer* buffer,
-    gsize offset)
+    gsize offset,
+    GBinderObjectConverter* convert)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_LOCAL_REQUEST_PRIVATE_H */

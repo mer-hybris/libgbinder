@@ -34,6 +34,7 @@
 #include "gbinder_reader_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_local_request_p.h"
+#include "gbinder_object_converter.h"
 #include "gbinder_object_registry.h"
 #include "gbinder_buffer_p.h"
 #include "gbinder_driver.h"
@@ -86,31 +87,31 @@ gbinder_remote_request_copy_to_local(
     if (G_LIKELY(self)) {
         GBinderReaderData* d = &self->data;
 
-        return gbinder_local_request_new_from_data(d->buffer);
+        return gbinder_local_request_new_from_data(d->buffer, NULL);
     }
     return NULL;
 }
 
 GBinderLocalRequest*
-gbinder_remote_request_translate_to_local(
+gbinder_remote_request_convert_to_local(
     GBinderRemoteRequest* req,
-    GBinderDriver* driver)
+    GBinderObjectConverter* convert)
 {
     GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
 
     if (G_LIKELY(self)) {
         GBinderReaderData* data = &self->data;
 
-        if (!driver || (gbinder_driver_protocol(driver) == self->protocol)) {
+        if (!convert || convert->protocol == self->protocol) {
             /* The same protocol, the same format of RPC header */
-            return gbinder_local_request_new_from_data(data->buffer);
+            return gbinder_local_request_new_from_data(data->buffer, convert);
         } else {
             /* Need to translate to another format */
-            GBinderLocalRequest* local = gbinder_driver_local_request_new
-                (driver, self->iface);
+            GBinderLocalRequest* local = gbinder_local_request_new_iface
+                (convert->io, convert->protocol, self->iface);
 
             gbinder_local_request_append_contents(local, data->buffer,
-                self->header_size);
+                self->header_size, convert);
             return local;
         }
     }

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -68,12 +68,44 @@ test_null(
     gbinder_buffer_free(buf2);
 
     gbinder_buffer_free(NULL);
+    gbinder_buffer_contents_list_free(NULL);
     g_assert(!gbinder_buffer_driver(NULL));
     g_assert(!gbinder_buffer_objects(NULL));
     g_assert(!gbinder_buffer_io(NULL));
     g_assert(!gbinder_buffer_data(NULL, NULL));
     g_assert(!gbinder_buffer_data(NULL, &size));
+    g_assert(!gbinder_buffer_contents(NULL));
+    g_assert(!gbinder_buffer_contents_list_add(NULL, NULL));
+    g_assert(!gbinder_buffer_contents_list_dup(NULL));
     g_assert(!size);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
+ * list
+ *==========================================================================*/
+
+static
+void
+test_list(
+    void)
+{
+    static const guint8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
+    void* ptr = g_memdup(data, sizeof(data));
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(driver, ptr, sizeof(data), NULL);
+    GBinderBufferContents* contents = gbinder_buffer_contents(buf);
+    GBinderBufferContentsList* list = gbinder_buffer_contents_list_add
+        (NULL, contents);
+    GBinderBufferContentsList* list2 = gbinder_buffer_contents_list_dup(list);
+
+    g_assert(contents);
+    g_assert(list);
+    g_assert(list2);
+
+    gbinder_buffer_free(buf);
+    gbinder_buffer_contents_list_free(list);
+    gbinder_buffer_contents_list_free(list2);
     gbinder_driver_unref(driver);
 }
 
@@ -112,12 +144,14 @@ test_parent(
  *==========================================================================*/
 
 #define TEST_PREFIX "/buffer/"
+#define TEST_(t) TEST_PREFIX t
 
 int main(int argc, char* argv[])
 {
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_PREFIX "null", test_null);
-    g_test_add_func(TEST_PREFIX "parent", test_parent);
+    g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("list"), test_list);
+    g_test_add_func(TEST_("parent"), test_parent);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

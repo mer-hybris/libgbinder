@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -70,8 +70,8 @@ test_basic(
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
-    GBinderRemoteObject* obj1 = gbinder_object_registry_get_remote(reg, 1);
-    GBinderRemoteObject* obj2 = gbinder_object_registry_get_remote(reg, 2);
+    GBinderRemoteObject* obj1 = gbinder_object_registry_get_remote(reg,1,TRUE);
+    GBinderRemoteObject* obj2 = gbinder_object_registry_get_remote(reg,2,TRUE);
 
     g_assert(obj1);
     g_assert(obj2);
@@ -84,7 +84,7 @@ test_basic(
     g_assert(gbinder_remote_object_ref(obj1) == obj1);
     gbinder_remote_object_unref(obj1); /* Compensate the above reference */
     g_assert(!gbinder_remote_object_add_death_handler(obj1, NULL, NULL));
-    g_assert(gbinder_ipc_get_remote_object(ipc, 1, TRUE) == obj1);
+    g_assert(gbinder_object_registry_get_remote(reg, 1, FALSE) == obj1);
     gbinder_remote_object_unref(obj1); /* Compensate the above reference */
     gbinder_remote_object_unref(obj1);
     gbinder_remote_object_unref(obj2);
@@ -107,20 +107,20 @@ test_dead_done(
 
 static
 void
-test_dead(
+test_dead_run(
     void)
 {
-    const guint handle = 1;
+    const guint h = 1;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     const int fd = gbinder_driver_fd(ipc->driver);
-    GBinderRemoteObject* obj = gbinder_ipc_get_remote_object
-        (ipc, handle, FALSE);
+    GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, h, TRUE);
     gulong id = gbinder_remote_object_add_death_handler
         (obj, test_dead_done, loop);
 
-    test_binder_br_dead_binder(fd, handle);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_br_dead_binder(fd, h);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_run(&test_opt, loop);
     g_assert(gbinder_remote_object_is_dead(obj));
 
@@ -130,6 +130,14 @@ test_dead(
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_dead(
+    void)
+{
+    test_run_in_context(&test_opt, test_dead_run);
 }
 
 /*==========================================================================*

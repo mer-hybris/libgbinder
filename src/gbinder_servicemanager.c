@@ -529,9 +529,8 @@ gbinder_servicemanager_new_with_type(
         if (!dev) dev = klass->default_device;
         ipc = gbinder_ipc_new(dev);
         if (ipc) {
-            /* Create a possibly dead remote object */
-            GBinderRemoteObject* object = gbinder_ipc_get_remote_object
-                (ipc, GBINDER_SERVICEMANAGER_HANDLE, TRUE);
+            /* Create a (possibly) dead service manager object */
+            GBinderRemoteObject* object = gbinder_ipc_get_service_manager(ipc);
 
             if (object) {
                 gboolean first_ref;

@@ -32,6 +32,8 @@
 
 #include "gbinder_writer_p.h"
 #include "gbinder_buffer_p.h"
+#include "gbinder_local_object.h"
+#include "gbinder_object_converter.h"
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
@@ -55,61 +57,87 @@ GBINDER_INLINE_FUNC GBinderWriterPriv* gbinder_writer_cast(GBinderWriter* pub)
 GBINDER_INLINE_FUNC GBinderWriterData* gbinder_writer_data(GBinderWriter* pub)
     { return G_LIKELY(pub) ? gbinder_writer_cast(pub)->data : NULL; }
 
-static
-void
-gbinder_writer_data_buffer_cleanup(
-    gpointer data)
-{
-    gbinder_buffer_contents_unref((GBinderBufferContents*)data);
-}
-
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
-    GBinderBuffer* buffer)
+    GBinderBuffer* buffer,
+    GBinderObjectConverter* convert)
 {
     g_byte_array_set_size(data->bytes, 0);
     gutil_int_array_set_count(data->offsets, 0);
     data->buffers_size = 0;
     gbinder_cleanup_reset(data->cleanup);
-    gbinder_writer_data_append_contents(data, buffer, 0);
+    gbinder_writer_data_append_contents(data, buffer, 0, convert);
 }
 
 void
 gbinder_writer_data_append_contents(
     GBinderWriterData* data,
     GBinderBuffer* buffer,
-    gsize off)
+    gsize off,
+    GBinderObjectConverter* convert)
 {
     GBinderBufferContents* contents = gbinder_buffer_contents(buffer);
 
     if (contents) {
         gsize bufsize;
+        GByteArray* dest = data->bytes;
         const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
         void** objects = gbinder_buffer_objects(buffer);
 
-        if (off < bufsize) {
-            g_byte_array_append(data->bytes, bufdata + off, bufsize - off);
-        }
-        data->cleanup = gbinder_cleanup_add(data->cleanup,
-            gbinder_writer_data_buffer_cleanup,
+        data->cleanup = gbinder_cleanup_add(data->cleanup, (GDestroyNotify)
+            gbinder_buffer_contents_unref,
             gbinder_buffer_contents_ref(contents));
         if (objects && *objects) {
             const GBinderIo* io = gbinder_buffer_io(buffer);
 
+            /* GBinderIo must be the same because it's defined by the kernel */
+            GASSERT(io == data->io);
             if (!data->offsets) {
                 data->offsets = gutil_int_array_new();
             }
             while (*objects) {
                 const guint8* obj = *objects++;
-                gsize offset = obj - bufdata;
-                gsize objsize = io->object_data_size(obj);
+                gsize objsize, offset = obj - bufdata;
+                GBinderLocalObject* local;
+                guint32 handle;
 
-                GASSERT(offset > 0 && offset < bufsize);
-                gutil_int_array_append(data->offsets, (int)offset);
+                GASSERT(offset >= off && offset < bufsize);
+                if (offset > off) {
+                    /* Copy serialized data preceeding this object */
+                    g_byte_array_append(dest, bufdata + off, offset - off);
+                    off = offset;
+                }
+                /* Offset in the destination buffer */
+                gutil_int_array_append(data->offsets, dest->len);
+
+                /* Convert remote object into local if necessary */
+                if (convert && io->decode_binder_handle(obj, &handle) &&
+                    (local = gbinder_object_converter_handle_to_local
+                    (convert, handle))) {
+                    const guint pos = dest->len;
+
+                    g_byte_array_set_size(dest, pos +
+                        GBINDER_MAX_BINDER_OBJECT_SIZE);
+                    objsize = io->encode_local_object(dest->data + pos, local);
+                    g_byte_array_set_size(dest, pos + objsize);
+
+                    /* Keep the reference */
+                    data->cleanup = gbinder_cleanup_add(data->cleanup,
+                        (GDestroyNotify) gbinder_local_object_unref, local);
+                } else {
+                    objsize = io->object_size(obj);
+                    g_byte_array_append(dest, obj, objsize);
+                }
+
                 /* Size of each buffer has to be 8-byte aligned */
-                data->buffers_size += G_ALIGN8(objsize);
+                data->buffers_size += G_ALIGN8(io->object_data_size(obj));
+                off += objsize;
             }
+        }
+        if (off < bufsize) {
+            /* Copy remaining data */
+            g_byte_array_append(dest, bufdata + off, bufsize - off);
         }
     }
 }

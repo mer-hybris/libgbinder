@@ -48,11 +48,12 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 #include <sys/types.h>
 #include <sys/syscall.h>
 
-#define gettid() syscall(SYS_gettid)
+#define gettid() ((int)syscall(SYS_gettid))
 
 static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
-static GPrivate test_looper;
+static GPrivate test_looper = G_PRIVATE_INIT(NULL);
+static GPrivate test_tx_state = G_PRIVATE_INIT(NULL);
 
 G_LOCK_DEFINE_STATIC(test_binder);
 static GMainLoop* test_binder_exit_loop = NULL;
@@ -76,6 +77,18 @@ static GMainLoop* test_binder_exit_loop = NULL;
 #define TF_STATUS_CODE 0x08
 #define TF_ACCEPT_FDS  0x10
 
+#define READ_FLAG_TX_COMPLETION (0x01)
+#define READ_FLAG_TX_INCOMING (0x02)
+#define READ_FLAG_TX_REPLY (0x04)
+#define READ_FLAG_TX_ERROR (0x08)
+#define READ_FLAG_TX_OTHER (0x10)
+#define READ_FLAGS_ALL (\
+  READ_FLAG_TX_COMPLETION | \
+  READ_FLAG_TX_INCOMING | \
+  READ_FLAG_TX_REPLY | \
+  READ_FLAG_TX_ERROR | \
+  READ_FLAG_TX_OTHER)
+
 typedef struct test_binder_io TestBinderIo;
 
 typedef
@@ -93,6 +106,20 @@ typedef struct test_binder_submit_thread {
     TestBinder* binder;
 } TestBinderSubmitThread;
 
+typedef enum test_tx_state {
+    TEST_TX_STATE_NONE,
+    TEST_TX_STATE_ONEWAY,
+    TEST_TX_STATE_ACTIVE,
+    TEST_TX_STATE_REPLY
+} TEST_TX_STATE;
+
+/* TestBinderTxState has to be stacked to support nested transactions */
+typedef struct test_binder_tx_state {
+    int tid;
+    int depth;
+    TEST_TX_STATE* stack;
+} TestBinderTxState;
+
 typedef struct test_binder_node TestBinderNode;
 struct test_binder_node {
     int fd;
@@ -100,7 +127,7 @@ struct test_binder_node {
     TestBinder* binder;
     TestBinderNode* other;
     TEST_LOOPER looper_enabled;
-    gpointer tx_thread;
+    TestBinderTxState* tx_state;
     gint looper_count;
     GMutex mutex; /* Protects reads and next_cmd */
     guint32* next_cmd;
@@ -208,6 +235,7 @@ typedef  struct binder_buffer_64 {
 #define BR_DECREFS_64           _IOR('r', 10, BinderPtrCookie64)
 #define BR_NOOP                  _IO('r', 12)
 #define BR_DEAD_BINDER_64       _IOR('r', 15, guint64)
+#define BR_CLEAR_DEATH_NOTIFICATION_DONE_64 _IOR('r', 16, guint64)
 #define BR_FAILED_REPLY          _IO('r', 17)
 
 static
@@ -363,26 +391,37 @@ test_binder_exit_wait(
 
 static
 void
-test_binder_local_object_gone(
-    gpointer data,
-    GObject* obj)
+test_binder_object_dead_locked(
+    TestBinder* binder,
+    guint64 handle)
 {
-    TestBinder* binder = data;
-    gpointer handle;
+    /* Caller has to remove the object from handle_map and object_map */
     guint32 cmd[3];
-
-    G_LOCK(test_binder);
-    GDEBUG("Object %p is gone", obj);
-    g_assert(g_hash_table_contains(binder->object_map, obj));
-    handle = g_hash_table_lookup(binder->object_map, obj);
-    g_hash_table_remove(binder->handle_map, handle);
-    g_hash_table_remove(binder->object_map, obj);
 
     /* Send DEAD_BINDER to both ends of the socket */
     cmd[0] = BR_DEAD_BINDER_64;
     *(guint64*)(cmd + 1) = GPOINTER_TO_SIZE(handle);
     write(binder->node[0].fd, cmd, sizeof(cmd));
     write(binder->node[1].fd, cmd, sizeof(cmd));
+}
+
+static
+void
+test_binder_local_object_gone(
+    gpointer data,
+    GObject* obj)
+{
+    TestBinder* binder = data;
+
+    G_LOCK(test_binder);
+    GDEBUG("Object %p is gone", obj);
+    if (g_hash_table_contains(binder->object_map, obj)) {
+        gpointer handle = g_hash_table_lookup(binder->object_map, obj);
+
+        test_binder_object_dead_locked(binder, GPOINTER_TO_SIZE(handle));
+        g_hash_table_remove(binder->handle_map, handle);
+        g_hash_table_remove(binder->object_map, obj);
+    }
     G_UNLOCK(test_binder);
 }
 
@@ -489,10 +528,6 @@ test_binder_node_read_all(
     return out;
 }
 
-#define READ_FLAG_TX_COMPLETION (0x01)
-#define READ_FLAG_TX_OTHER (0x02)
-#define READ_FLAG_ALL (READ_FLAG_TX_COMPLETION|READ_FLAG_TX_OTHER)
-
 static
 int
 test_binder_cmd_read_flags(
@@ -500,9 +535,14 @@ test_binder_cmd_read_flags(
 {
     switch (cmd) {
     case BR_TRANSACTION_COMPLETE:
-    case BR_DEAD_REPLY:
-    case BR_REPLY_64:
         return READ_FLAG_TX_COMPLETION;
+    case BR_TRANSACTION_64:
+        return READ_FLAG_TX_INCOMING;
+    case BR_REPLY_64:
+        return READ_FLAG_TX_REPLY;
+    case BR_FAILED_REPLY:
+    case BR_DEAD_REPLY:
+        return READ_FLAG_TX_ERROR;
     default:
         return READ_FLAG_TX_OTHER;
     }
@@ -526,7 +566,7 @@ test_binder_node_read(
 
         /* Alread have one ready */
         if (!(test_binder_cmd_read_flags(cmd) & flags)) {
-            GDEBUG("Cmd 0x%08x not for %ld", cmd, gettid());
+            GDEBUG("Cmd 0x%08x not for %d", cmd, gettid());
             *bytes_read = 0;
         } else if (max_bytes < total) {
             GDEBUG("Buffer full (%u > %d)", total, (int)max_bytes);
@@ -561,7 +601,7 @@ test_binder_node_read(
                     *bytes_read = err;
                     g_free(buf);
                 } else if (!(test_binder_cmd_read_flags(cmd) & flags)) {
-                    GDEBUG("Stashed cmd 0x%08x not for %ld", cmd, gettid());
+                    GDEBUG("Stashed cmd 0x%08x not for %d", cmd, gettid());
                     node->next_cmd = buf;
                     *bytes_read = 0;
 
@@ -606,20 +646,102 @@ test_io_short_wait()
 }
 
 static
+TestBinderTxState*
+test_tx_state_acquire(
+    TestBinderNode* node,
+    TEST_TX_STATE state)
+{
+    TestBinderTxState* my_tx_state = g_private_get(&test_tx_state);
+
+    if (my_tx_state) {
+        g_assert_cmpint(my_tx_state->tid, == ,gettid());
+    } else {
+        my_tx_state = g_new0(TestBinderTxState, 1);
+        my_tx_state->tid = gettid(); /* For debugging */
+        g_private_set(&test_tx_state, my_tx_state);
+    }
+    my_tx_state->stack = g_renew(TEST_TX_STATE, my_tx_state->stack,
+        my_tx_state->depth + 1);
+    my_tx_state->stack[my_tx_state->depth++] = state;
+    while (g_atomic_pointer_get(&node->tx_state) != my_tx_state &&
+        !g_atomic_pointer_compare_and_exchange(&node->tx_state, NULL,
+         my_tx_state)) {
+        GDEBUG("Thread %d is waiting to become a transacton thread",
+            my_tx_state->tid);
+        test_io_short_wait();
+    }
+    return my_tx_state;
+}
+
+static
+void
+test_tx_state_release(
+    TestBinderNode* node)
+{
+    TestBinderTxState* my_tx_state = g_private_get(&test_tx_state);
+
+    g_assert(my_tx_state);
+    g_assert(my_tx_state->depth > 0);
+    g_assert_cmpint(my_tx_state->tid, == ,gettid());
+
+    if (my_tx_state->depth == 1) {
+        GDEBUG("Thread %d done with the transaction", my_tx_state->tid);
+        g_assert(g_atomic_pointer_compare_and_exchange(&node->tx_state,
+            my_tx_state, NULL));
+        g_private_set(&test_tx_state, NULL);
+        g_free(my_tx_state->stack);
+        g_free(my_tx_state);
+    } else {
+        my_tx_state->depth--;
+        my_tx_state->stack = g_renew(TEST_TX_STATE, my_tx_state->stack,
+            my_tx_state->depth);
+        GDEBUG("Thread %d is still a transacton thread", my_tx_state->tid);
+    }
+}
+
+static
+TEST_TX_STATE
+test_tx_state_get(
+    TestBinderTxState* tx_state)
+{
+    if (tx_state) {
+        g_assert_cmpint(tx_state->depth, > ,0);
+        return tx_state->stack[tx_state->depth - 1];
+    } else {
+        return TEST_TX_STATE_NONE;
+    }
+}
+
+static
+void
+test_tx_state_set(
+    TestBinderTxState* tx_state,
+    TEST_TX_STATE state)
+{
+    g_assert(tx_state);
+    g_assert_cmpint(tx_state->depth, > ,0);
+    tx_state->stack[tx_state->depth - 1] = state;
+}
+
+static
 gssize
 test_io_passthough_write_64(
     TestBinderFd* fd,
     const void* bytes,
     gsize bytes_to_write)
 {
-    const guint code = *(guint32*)bytes;
+    const guint32 code = *(guint32*)bytes;
     TestBinderNode* node = fd->node;
+    TestBinderNode* other = node->other;
     TestBinder* binder = node->binder;
     BinderTransactionData64* tx = NULL;
+    TestBinderTxState* my_tx_state = g_private_get(&test_tx_state);
+    const BinderHandleCookie64* hc;
     gssize bytes_written;
     guint32* buf;
     guint32* cmd;
-    guint32 bytes_to_really_write;
+    guint64* cookie;
+    guint32 buflen;
     void* data;
 
     /* Just ignore some codes for now */
@@ -627,8 +749,17 @@ test_io_passthough_write_64(
     case BC_ACQUIRE:
     case BC_RELEASE:
     case BC_REQUEST_DEATH_NOTIFICATION_64:
-    case BC_CLEAR_DEATH_NOTIFICATION_64:
     case BC_DEAD_BINDER_DONE:
+        return bytes_to_write;
+    case BC_CLEAR_DEATH_NOTIFICATION_64:
+        hc = (const BinderHandleCookie64*)((guint32*)bytes + 1);
+        g_assert(bytes_to_write == (sizeof(guint32) + sizeof(*hc)));
+        buflen = sizeof(guint32) + sizeof(*cookie);
+        cmd = g_memdup(bytes, buflen);
+        *cmd = BR_CLEAR_DEATH_NOTIFICATION_DONE_64;
+        *(guint64*)(cmd + 1) = hc->cookie;
+        g_assert(write(other->fd, cmd, buflen) == buflen);
+        g_free(cmd);
         return bytes_to_write;
     default:
         break;
@@ -637,41 +768,21 @@ test_io_passthough_write_64(
     buf = cmd = g_memdup(bytes, bytes_to_write);
     data = cmd + 1;
     switch (*cmd) {
-    case BR_TRANSACTION_64:
-        *cmd = BC_TRANSACTION_64;
-        tx = data;
-        break;
     case BC_TRANSACTION_64:
     case BC_TRANSACTION_SG_64:
         *cmd = BR_TRANSACTION_64;
         tx = data;
-        while (!g_atomic_pointer_compare_and_exchange(&node->tx_thread, NULL,
-            g_thread_self())) {
-            GDEBUG("Thread %ld %p is waiting to become a transacton thread",
-                gettid(), g_thread_self());
-            test_io_short_wait();
-        }
-        GDEBUG("Transaction thread %ld %p", gettid(), g_thread_self());
-        if (tx->flags & TF_ONE_WAY) {
-            const guint32 c = BR_TRANSACTION_COMPLETE;
-
-            GDEBUG("Thread %ld inserting BR_TRANSACTION_COMPLETE for "
-                "one-way transaction", gettid());
-            g_assert(write(node->other->fd, &c, sizeof(c)) == sizeof(c));
-        }
-        break;
-    case BR_REPLY_64:
-        *cmd = BC_REPLY_64;
-        tx = data;
+        tx->sender_pid = getpid();
+        tx->sender_euid = geteuid();
+        my_tx_state = test_tx_state_acquire(node, (tx->flags & TF_ONE_WAY) ?
+            TEST_TX_STATE_ONEWAY : TEST_TX_STATE_ACTIVE);
+        GDEBUG("Transaction thread %d", my_tx_state->tid);
         break;
     case BC_REPLY_64:
     case BC_REPLY_SG_64:
-        /*
-         * Prepend BR_TRANSACTION_COMPLETE. The whole thing has to be written
-         * with a single write so that it gets read with a single read.
-         */
-        GDEBUG("Thread %ld %p inserting BR_TRANSACTION_COMPLETE", gettid(),
-            g_thread_self());
+        /* Prepend BR_TRANSACTION_COMPLETE */
+        GDEBUG("Thread %d inserting BR_TRANSACTION_COMPLETE before reply => "
+            "fd %d", gettid(), fd->fd);
         buf = g_realloc(buf, bytes_to_write + 4);
         cmd = buf + 1;
         data = cmd + 1;
@@ -679,63 +790,89 @@ test_io_passthough_write_64(
         *buf = BR_TRANSACTION_COMPLETE;
         *cmd = BR_REPLY_64;
         tx = data;
+        my_tx_state = test_tx_state_acquire(node, TEST_TX_STATE_ONEWAY);
+        GDEBUG("Reply thread %d", my_tx_state->tid);
         break;
     }
+
     if (tx) {
-        guint i;
-        guint8* data_buffer = g_memdup(GSIZE_TO_POINTER(tx->data_buffer),
-            tx->data_size);
-        guint64* data_offsets = g_memdup(GSIZE_TO_POINTER(tx->data_offsets),
-            tx->offsets_size);
+        const guint32 handle = tx->handle;
+        const gboolean is_reply = (*cmd == BR_REPLY_64);
 
         G_LOCK(test_binder);
-        tx->handle = test_io_passthough_handle_to_object(binder, tx->handle);
-        for (i = 0; i < tx->offsets_size/sizeof(guint64); i++) {
-            guint32* obj_ptr = (guint32*)(data_buffer + data_offsets[i]);
+        if (!is_reply) {
+            tx->handle = test_io_passthough_handle_to_object(binder, handle);
+        }
+        if (is_reply || tx->handle) {
+            guint i;
+            guint8* data_buffer = g_memdup
+                (GSIZE_TO_POINTER(tx->data_buffer), tx->data_size);
+            guint64* data_offsets = g_memdup
+                (GSIZE_TO_POINTER(tx->data_offsets), tx->offsets_size);
 
-            if (*obj_ptr == BINDER_TYPE_BINDER) {
-                BinderObject64* object = (BinderObject64*) obj_ptr;
+            for (i = 0; i < tx->offsets_size/sizeof(guint64); i++) {
+                guint32* obj_ptr = (guint32*)(data_buffer + data_offsets[i]);
 
-                if (object->object) {
-                    object->type = BINDER_TYPE_HANDLE;
-                    object->object = test_io_passthough_object_to_handle
-                        (binder, object->object);
-                }
-            } else if (*obj_ptr == BINDER_TYPE_PTR) {
-                BinderBuffer64* buffer = (BinderBuffer64*) obj_ptr;
+                if (*obj_ptr == BINDER_TYPE_BINDER) {
+                    BinderObject64* object = (BinderObject64*) obj_ptr;
 
-                if (buffer->buffer) {
-                    void* copy = g_memdup(GSIZE_TO_POINTER(buffer->buffer),
-                        buffer->length);
-
-                    if (buffer->flags & BINDER_BUFFER_FLAG_HAS_PARENT) {
-                        /* Fix pointer from the parent buffer */
-                        BinderBuffer64* parent_buffer = (void*)(data_buffer +
-                            data_offsets[buffer->parent]);
-                        guint64* parent_ptr =
-                            GSIZE_TO_POINTER(parent_buffer->buffer +
-                                buffer->parent_offset);
-
-                        g_assert(parent_buffer->type == BINDER_TYPE_PTR);
-                        g_assert(*parent_ptr == buffer->buffer);
-                        *parent_ptr = GPOINTER_TO_SIZE(copy);
+                    if (object->object) {
+                        object->type = BINDER_TYPE_HANDLE;
+                        object->object = test_io_passthough_object_to_handle
+                            (binder, object->object);
                     }
-                    buffer->buffer = GPOINTER_TO_SIZE(copy);
-                    g_hash_table_replace(fd->destroy_map, copy, NULL);
+                } else if (*obj_ptr == BINDER_TYPE_PTR) {
+                    BinderBuffer64* buffer = (BinderBuffer64*) obj_ptr;
+
+                    if (buffer->buffer) {
+                        void* copy = g_memdup
+                            (GSIZE_TO_POINTER(buffer->buffer), buffer->length);
+
+                        if (buffer->flags & BINDER_BUFFER_FLAG_HAS_PARENT) {
+                            /* Fix pointer from the parent buffer */
+                            BinderBuffer64* parent_buffer = (void*)
+                                (data_buffer + data_offsets[buffer->parent]);
+                            guint64* parent_ptr = GSIZE_TO_POINTER
+                                (parent_buffer->buffer + buffer->parent_offset);
+
+                            g_assert(parent_buffer->type == BINDER_TYPE_PTR);
+                            g_assert(*parent_ptr == buffer->buffer);
+                            *parent_ptr = GPOINTER_TO_SIZE(copy);
+                        }
+                        buffer->buffer = GPOINTER_TO_SIZE(copy);
+                        g_hash_table_replace(fd->destroy_map, copy, NULL);
+                    }
                 }
             }
+            g_hash_table_replace(fd->destroy_map, data_offsets, NULL);
+            tx->data_buffer = GPOINTER_TO_SIZE(data_buffer);
+            tx->data_offsets = GPOINTER_TO_SIZE(data_offsets);
+            if ((tx->flags & TF_ONE_WAY) || is_reply) {
+                const guint32 c = BR_TRANSACTION_COMPLETE;
+
+                GDEBUG("Thread %d inserting BR_TRANSACTION_COMPLETE for %s "
+                    "=> fd %d", gettid(), is_reply ? "reply" :
+                    "one-way transaction", other->fd);
+                g_assert(write(other->fd, &c, sizeof(c)) == sizeof(c));
+            }
+        } else {
+            const guint32 c = BR_DEAD_REPLY;
+
+            /* Fail the transaction */
+            GDEBUG("Thread %d inserting BR_DEAD_REPLY => fd %d", gettid(),
+                other->fd);
+            g_assert(write(other->fd, &c, sizeof(c)) == sizeof(c));
+            data = buf;
+            *cmd = 0;
         }
-        g_hash_table_replace(fd->destroy_map, data_offsets, NULL);
         G_UNLOCK(test_binder);
-        tx->data_buffer = GPOINTER_TO_SIZE(data_buffer);
-        tx->data_offsets = GPOINTER_TO_SIZE(data_offsets);
     }
 
     /* Real number of bytes to write may have changed */
-    bytes_to_really_write = ((guint8*)data - (guint8*)buf) + _IOC_SIZE(*cmd);
-    bytes_written = write(fd->fd, buf, bytes_to_really_write);
+    buflen = ((guint8*)data - (guint8*)buf) + _IOC_SIZE(*cmd);
+    bytes_written = buflen ? write(fd->fd, buf, buflen) : 0;
     g_free(buf);
-    g_assert(bytes_written == bytes_to_really_write || bytes_written <= 0);
+    g_assert(bytes_written == buflen || bytes_written <= 0);
     return (bytes_written >= 0) ? bytes_to_write : bytes_written;
 }
 
@@ -751,7 +888,8 @@ test_io_handle_write_read_64(
     gssize bytes_left = wr->write_size - wr->write_consumed;
     const guint8* write_ptr = (void*)(gsize)(wr->write_buffer +
         wr->write_consumed);
-    gpointer tx_thread = g_atomic_pointer_get(&node->tx_thread);
+    TestBinderTxState* my_tx_state = g_private_get(&test_tx_state);
+    TestBinderTxState* node_tx_state = NULL;
     int can_read = 0;
 
     while (bytes_left >= sizeof(guint32)) {
@@ -773,11 +911,10 @@ test_io_handle_write_read_64(
                 g_assert(g_private_get(&test_looper) >= 0);
                 looper = g_atomic_int_add(&node->looper_count, 1) + 1;
                 g_private_set(&test_looper, GINT_TO_POINTER(looper));
-                GDEBUG("Thread %ld %p is looper #%d", gettid(),
-                    g_thread_self(), looper);
+                GDEBUG("Thread %d is looper #%d", gettid(), looper);
                 break;
             case BC_EXIT_LOOPER:
-                GDEBUG("Thread %ld is no longer a looper", gettid());
+                GDEBUG("Thread %d is no longer a looper", gettid());
                 g_atomic_int_add(&node->looper_count, -1);
                 g_private_set(&test_looper, NULL);
                 break;
@@ -803,26 +940,35 @@ test_io_handle_write_read_64(
         }
     }
 
-    if (tx_thread && tx_thread != g_thread_self()) {
+    node_tx_state = g_atomic_pointer_get(&node->tx_state);
+    if (node_tx_state && node_tx_state != my_tx_state) {
         can_read |= READ_FLAG_TX_OTHER;
     } else {
+        /*
+         * If this thread is not performing a transaction (and passthrough
+         * mode is enabled), don't steal completion commands from other
+         * threads (but allow incoming transactions).
+         */
+        const gint max_read_flags = (!binder->passthrough ||
+            (node_tx_state && node_tx_state == my_tx_state)) ?
+            READ_FLAGS_ALL : (READ_FLAG_TX_OTHER | READ_FLAG_TX_INCOMING);
         const gint looper = GPOINTER_TO_INT(g_private_get(&test_looper));
 
         if (looper <= 0) {
             /* Main or pooled client thread */
-            can_read |= READ_FLAG_ALL;
+            can_read |= max_read_flags;
         } else {
             switch (node->looper_enabled) {
             case TEST_LOOPER_DISABLE:
                 break;
             case TEST_LOOPER_ENABLE:
                 if (looper > 0) {
-                    can_read |= READ_FLAG_ALL;
+                    can_read |= max_read_flags;
                 }
                 break;
             case TEST_LOOPER_ENABLE_ONE:
                 if (looper == 1) {
-                    can_read |= READ_FLAG_ALL;
+                    can_read |= max_read_flags;
                 }
                 break;
             }
@@ -833,14 +979,64 @@ test_io_handle_write_read_64(
         int nbytes = 0;
         int avail = wr->read_size - wr->read_consumed;
         int total = 0;
-        gboolean transaction_complete = FALSE;
         guint8* buf = GSIZE_TO_POINTER(wr->read_buffer + wr->read_consumed);
         guint32* cmd;
 
         while ((cmd = test_binder_node_read(node, avail, &nbytes, can_read))) {
             g_assert_cmpint(nbytes, <= ,avail);
-            if (cmd[0] == BR_TRANSACTION_COMPLETE) {
-                transaction_complete = TRUE;
+            switch (cmd[0]) {
+            case BR_TRANSACTION_COMPLETE:
+                if (node_tx_state) {
+                    g_assert(node_tx_state == my_tx_state);
+                    switch (test_tx_state_get(my_tx_state)) {
+                    case TEST_TX_STATE_REPLY:
+                    case TEST_TX_STATE_ONEWAY:
+                        /* Done with the transaction */
+                        can_read &= ~(READ_FLAG_TX_COMPLETION |
+                            READ_FLAG_TX_INCOMING | READ_FLAG_TX_REPLY |
+                            READ_FLAG_TX_ERROR);
+                        test_tx_state_set(my_tx_state, TEST_TX_STATE_NONE);
+                        break;
+                    case TEST_TX_STATE_ACTIVE:
+                        can_read &= ~(READ_FLAG_TX_COMPLETION |
+                            READ_FLAG_TX_INCOMING);
+                        test_tx_state_set(my_tx_state, TEST_TX_STATE_REPLY);
+                        break;
+                    case TEST_TX_STATE_NONE:
+                        g_assert_not_reached();
+                        break;
+                    }
+                } else {
+                    can_read &= ~(READ_FLAG_TX_COMPLETION |
+                        READ_FLAG_TX_INCOMING | READ_FLAG_TX_REPLY |
+                        READ_FLAG_TX_ERROR);
+                }
+                break;
+            case BR_REPLY_64:
+                if (node_tx_state) {
+                    g_assert(node_tx_state == my_tx_state);
+                    test_tx_state_set(my_tx_state, TEST_TX_STATE_NONE);
+                }
+                can_read &= ~(READ_FLAG_TX_COMPLETION |
+                    READ_FLAG_TX_INCOMING | READ_FLAG_TX_REPLY |
+                    READ_FLAG_TX_ERROR);
+                break;
+            case BR_FAILED_REPLY:
+            case BR_DEAD_REPLY:
+                if (node_tx_state) {
+                    g_assert(node_tx_state == my_tx_state);
+                    test_tx_state_set(my_tx_state, TEST_TX_STATE_NONE);
+                }
+                can_read &= ~(READ_FLAG_TX_COMPLETION |
+                    READ_FLAG_TX_INCOMING | READ_FLAG_TX_REPLY |
+                    READ_FLAG_TX_ERROR);
+                break;
+            case BR_TRANSACTION_64:
+                /* Don't swallow transaction related commands too early */
+                can_read &= ~(READ_FLAG_TX_COMPLETION |
+                    READ_FLAG_TX_INCOMING | READ_FLAG_TX_REPLY |
+                    READ_FLAG_TX_ERROR);
+                break;
             }
             memcpy(buf, cmd, nbytes);
             wr->read_consumed += nbytes;
@@ -850,9 +1046,9 @@ test_io_handle_write_read_64(
             g_free(cmd);
         }
 
-        if (transaction_complete && g_atomic_pointer_compare_and_exchange
-           (&node->tx_thread, g_thread_self(), NULL)) {
-            GDEBUG("Thread %ld done with the transaction", gettid());
+        if (my_tx_state && my_tx_state == node_tx_state &&
+            test_tx_state_get(my_tx_state) == TEST_TX_STATE_NONE) {
+            test_tx_state_release(node);
         }
 
         if (nbytes < 0) {
@@ -1236,7 +1432,8 @@ test_binder_node_clear(
         g_hash_table_unref(test_node_map);
         test_node_map = NULL;
         if (test_binder_exit_loop) {
-            g_main_loop_quit(test_binder_exit_loop);
+            GVERBOSE_("All nodes are gone");
+            test_quit_later(test_binder_exit_loop);
         }
     }
     close(node->fd);
@@ -1258,24 +1455,6 @@ test_binder_ref(
 
 static
 void
-test_binder_unregister_objects_locked(
-    TestBinder* binder)
-{
-    GHashTableIter it;
-    gpointer value;
-
-    g_assert(binder);
-    g_hash_table_iter_init(&it, binder->handle_map);
-    while (g_hash_table_iter_next(&it, NULL, &value)) {
-        g_object_weak_unref(G_OBJECT(value), test_binder_local_object_gone,
-            binder);
-    }
-    g_hash_table_remove_all(binder->object_map);
-    g_hash_table_remove_all(binder->handle_map);
-}
-
-static
-void
 test_binder_unref_internal(
     TestBinder* binder,
     gboolean need_lock)
@@ -1286,7 +1465,8 @@ test_binder_unref_internal(
         }
         test_binder_node_clear(binder->node + 0);
         test_binder_node_clear(binder->node + 1);
-        test_binder_unregister_objects_locked(binder);
+        g_assert_cmpuint(g_hash_table_size(binder->object_map), == ,0);
+        g_assert_cmpuint(g_hash_table_size(binder->handle_map), == ,0);
         if (need_lock) {
             G_UNLOCK(test_binder);
         }
@@ -1296,6 +1476,47 @@ test_binder_unref_internal(
         g_mutex_clear(&binder->mutex);
         g_free(binder);
     }
+}
+
+int
+test_binder_handle(
+    int fd,
+    GBinderLocalObject* obj)
+{
+    TestBinder* binder = test_binder_from_fd(fd);
+    int h = -1;
+
+    g_assert(binder);
+    g_assert(obj);
+
+    G_LOCK(test_binder);
+    if (g_hash_table_contains(binder->object_map, obj)) {
+        h = GPOINTER_TO_INT(g_hash_table_lookup(binder->object_map, obj));
+    }
+    G_UNLOCK(test_binder);
+
+    return h;
+}
+
+GBinderLocalObject*
+test_binder_object(
+    int fd,
+    guint handle)
+{
+    TestBinder* binder = test_binder_from_fd(fd);
+    gpointer key = GSIZE_TO_POINTER(handle);
+    GBinderLocalObject* obj = NULL;
+
+    g_assert(binder);
+
+    G_LOCK(test_binder);
+    if (g_hash_table_contains(binder->handle_map, key)) {
+        obj = gbinder_local_object_ref
+            (g_hash_table_lookup(binder->handle_map, key));
+    }
+    G_UNLOCK(test_binder);
+
+    return obj;
 }
 
 guint
@@ -1320,8 +1541,18 @@ void
 test_binder_unregister_objects(
     int fd)
 {
+    TestBinder* binder;
+    GHashTableIter it;
+    gpointer handle, obj;
+
     G_LOCK(test_binder);
-    test_binder_unregister_objects_locked(test_binder_from_fd_locked(fd));
+    binder = test_binder_from_fd_locked(fd);
+    g_hash_table_iter_init(&it, binder->handle_map);
+    while (g_hash_table_iter_next(&it, &handle, &obj)) {
+        test_binder_object_dead_locked(binder, GPOINTER_TO_SIZE(handle));
+        g_hash_table_remove(binder->object_map, obj);
+        g_hash_table_iter_remove(&it);
+    }
     G_UNLOCK(test_binder);
 }
 

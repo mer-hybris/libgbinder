@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -137,7 +137,7 @@ test_null(
     g_assert(!gbinder_ipc_transact_custom(NULL, NULL, NULL, NULL, NULL));
     gbinder_local_object_handle_increfs(NULL);
     gbinder_local_object_handle_decrefs(NULL);
-    gbinder_local_object_handle_acquire(NULL);
+    gbinder_local_object_handle_acquire(NULL, NULL);
     gbinder_local_object_handle_release(NULL);
 }
 
@@ -179,7 +179,7 @@ test_basic(
         base_interface, -1) == GBINDER_LOCAL_TRANSACTION_NOT_SUPPORTED);
     gbinder_local_object_handle_increfs(foo);
     gbinder_local_object_handle_decrefs(foo);
-    gbinder_local_object_handle_acquire(foo);
+    gbinder_local_object_handle_acquire(foo, NULL);
     gbinder_local_object_handle_release(foo);
     gbinder_local_object_unref(foo);
 
@@ -621,7 +621,7 @@ test_increfs_cb(
 
 static
 void
-test_increfs(
+test_increfs_run(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
@@ -635,7 +635,7 @@ test_increfs(
     /* ipc is not an object, will be ignored */
     test_binder_br_increfs(fd, ipc);
     test_binder_br_increfs(fd, obj);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 1);
@@ -644,6 +644,14 @@ test_increfs(
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_increfs(
+    void)
+{
+    test_run_in_context(&test_opt, test_increfs_run);
 }
 
 /*==========================================================================*
@@ -664,7 +672,7 @@ test_decrefs_cb(
 
 static
 void
-test_decrefs(
+test_decrefs_run(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
@@ -679,7 +687,7 @@ test_decrefs(
     test_binder_br_decrefs(fd, ipc);
     test_binder_br_increfs(fd, obj);
     test_binder_br_decrefs(fd, obj);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 0);
@@ -688,6 +696,14 @@ test_decrefs(
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_decrefs(
+    void)
+{
+    test_run_in_context(&test_opt, test_decrefs_run);
 }
 
 /*==========================================================================*
@@ -707,7 +723,7 @@ test_acquire_cb(
 
 static
 void
-test_acquire(
+test_acquire_run(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
@@ -721,7 +737,7 @@ test_acquire(
     /* ipc is not an object, will be ignored */
     test_binder_br_acquire(fd, ipc);
     test_binder_br_acquire(fd, obj);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 1);
@@ -730,6 +746,14 @@ test_acquire(
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_acquire(
+    void)
+{
+    test_run_in_context(&test_opt, test_acquire_run);
 }
 
 /*==========================================================================*
@@ -750,7 +774,7 @@ test_release_cb(
 
 static
 void
-test_release(
+test_release_run(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
@@ -764,7 +788,7 @@ test_release(
     test_binder_br_release(fd, ipc);
     test_binder_br_acquire(fd, obj);
     test_binder_br_release(fd, obj);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 0);
@@ -773,6 +797,14 @@ test_release(
     gbinder_ipc_unref(ipc);
     gbinder_ipc_exit();
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_release(
+    void)
+{
+    test_run_in_context(&test_opt, test_release_run);
 }
 
 /*==========================================================================*

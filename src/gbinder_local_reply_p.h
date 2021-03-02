@@ -47,10 +47,16 @@ gbinder_local_reply_data(
     GBinderLocalReply* reply)
     GBINDER_INTERNAL;
 
+GBinderBufferContents*
+gbinder_local_reply_contents(
+    GBinderLocalReply* reply)
+    GBINDER_INTERNAL;
+
 GBinderLocalReply*
 gbinder_local_reply_set_contents(
     GBinderLocalReply* reply,
-    GBinderBuffer* buffer)
+    GBinderBuffer* buffer,
+    GBinderObjectConverter* convert)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_LOCAL_REPLY_PRIVATE_H */

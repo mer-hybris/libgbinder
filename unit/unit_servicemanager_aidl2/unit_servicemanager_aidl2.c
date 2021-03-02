@@ -180,7 +180,7 @@ servicemanager_aidl2_new(
     self->handle_on_looper_thread = handle_on_looper_thread;
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
         servicemanager_aidl2_handler, self);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
     gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
@@ -344,7 +344,7 @@ test_context_deinit(
 
 static
 void
-test_get()
+test_get_run()
 {
     TestContext test;
     const char* name = "name";
@@ -375,13 +375,20 @@ test_get()
     test_context_deinit(&test);
 }
 
+static
+void
+test_get()
+{
+    test_run_in_context(&test_opt, test_get_run);
+}
+
 /*==========================================================================*
  * list
  *==========================================================================*/
 
 static
 void
-test_list()
+test_list_run()
 {
     TestContext test;
     const char* name = "name";
@@ -411,6 +418,13 @@ test_list()
     g_strfreev(list);
 
     test_context_deinit(&test);
+}
+
+static
+void
+test_list()
+{
+    test_run_in_context(&test_opt, test_list_run);
 }
 
 /*==========================================================================*

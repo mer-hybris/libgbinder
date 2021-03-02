@@ -39,9 +39,6 @@
 
 #include <glib-object.h>
 
-/* As a special case, ServiceManager's handle is zero */
-#define GBINDER_SERVICEMANAGER_HANDLE (0)
-
 typedef struct gbinder_servicemanager_priv GBinderServiceManagerPriv;
 
 typedef struct gbinder_servicemanager {

@@ -205,6 +205,7 @@ test_null(
 {
     static const char* ifaces[] = { "foo", "bar", NULL};
 
+    g_assert(!gbinder_bridge_new2(NULL, NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new(NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", ifaces, NULL, NULL));
@@ -316,7 +317,19 @@ test_basic_reply(
 
 static
 void
-test_basic(
+test_basic_death(
+    GBinderRemoteObject* obj,
+    void* loop)
+{
+    GDEBUG("Source object died");
+
+    /* Exit the loop */
+    g_main_loop_quit((GMainLoop*)loop);
+}
+
+static
+void
+test_basic_run(
     void)
 {
     TestBasic test;
@@ -330,12 +343,13 @@ test_basic(
     GBinderIpc* dest_priv_ipc;
     GBinderBridge* bridge;
     TestLocalObject* obj;
+    GBinderRemoteObject* br_src_obj;
     GBinderRemoteObject* src_obj;
     GBinderLocalRequest* req;
     GBinderClient* src_client;
     const char* name = "test";
     const char* fqname = TEST_IFACE "/test";
-    int src_fd, dest_fd, n = 0;
+    int src_fd, dest_fd, h, n = 0;
     gulong id;
 
     test_config_init(&config, NULL);
@@ -364,7 +378,7 @@ test_basic(
 
     /* Both src and dest are required */
     g_assert(!gbinder_bridge_new(name, TEST_IFACES, src, NULL));
-    bridge = gbinder_bridge_new(name, TEST_IFACES, src, dest);
+    bridge = gbinder_bridge_new2(NULL, name, TEST_IFACES, src, dest);
 
     /* Start watching the name */
     id = gbinder_servicemanager_add_registration_handler(src, fqname,
@@ -384,9 +398,9 @@ test_basic(
     gbinder_servicemanager_remove_handler(src, id);
 
     /* Get a remote reference to the object created by the bridge */
-    src_obj = gbinder_servicemanager_get_service_sync(src, fqname, NULL);
-    g_assert(src_obj); /* autoreleased */
-    g_assert(!src_obj->dead);
+    br_src_obj = gbinder_servicemanager_get_service_sync(src, fqname, NULL);
+    g_assert(gbinder_remote_object_ref(br_src_obj)); /* autoreleased */
+    g_assert(!br_src_obj->dead);
 
     /*
      * This is a trick specific to test_binder simulation. We need to
@@ -398,7 +412,8 @@ test_basic(
      * Note that the original src_obj gets autoreleased and doesn't need
      * to be explicitly unreferenced.
      */
-    src_obj = gbinder_remote_object_new(src_priv_ipc, src_obj->handle, FALSE);
+    src_obj = gbinder_remote_object_new(src_priv_ipc,
+        br_src_obj->handle, REMOTE_OBJECT_CREATE_ALIVE);
 
     /* Make a call */
     GDEBUG("Submitting a call");
@@ -412,11 +427,27 @@ test_basic(
     /* Wait for completion */
     test_run(&test_opt, test.loop);
 
-    GDEBUG("Done");
-    gbinder_bridge_free(bridge);
+    /* Kill the destination object and wait for auto-created object to die */
+    g_assert(!br_src_obj->dead);
+    id = gbinder_remote_object_add_death_handler(br_src_obj, test_basic_death,
+        test.loop);
+    h = test_binder_handle(dest_fd, &obj->parent);
+    g_assert_cmpint(h, > ,0); /* Zero is servicemanager */
 
-    gbinder_local_object_unref(&obj->parent);
+    GDEBUG("Killing destination object, handle %d", h);
+    gbinder_local_object_drop(&obj->parent);
+    test_binder_br_dead_binder(dest_fd, h);
+
+    /* Wait for the auto-created object to die */
+    test_run(&test_opt, test.loop);
+    g_assert(br_src_obj->dead);
+    gbinder_remote_object_remove_handler(br_src_obj, id);
+
+    GDEBUG("Done");
+
+    gbinder_bridge_free(bridge);
     gbinder_remote_object_unref(src_obj);
+    gbinder_remote_object_unref(br_src_obj);
     test_servicemanager_hidl_free(test.src_impl);
     test_servicemanager_hidl_free(dest_impl);
     gbinder_servicemanager_unref(src);
@@ -428,10 +459,19 @@ test_basic(
     gbinder_ipc_unref(src_priv_ipc);
     gbinder_ipc_unref(dest_ipc);
     gbinder_ipc_unref(dest_priv_ipc);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_basic(
+    void)
+{
+    test_run_in_context(&test_opt, test_basic_run);
 }
 
 /*==========================================================================*

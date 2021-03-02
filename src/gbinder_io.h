@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -125,7 +125,8 @@ struct gbinder_io {
         guint failed_reply;
     } br;
 
-    /* Size of the object's extra data */
+    /* Size of the object and its extra data */
+    gsize (*object_size)(const void* obj);
     gsize (*object_data_size)(const void* obj);
 
     /* Writes pointer to the buffer. The destination buffer must have
@@ -133,6 +134,12 @@ struct gbinder_io {
      * actual size is returned. */
 #define GBINDER_MAX_POINTER_SIZE (8)
     guint (*encode_pointer)(void* out, const void* pointer);
+
+    /* Writes cookie to the buffer. The destination buffer must have
+     * at least GBINDER_IO_MAX_COOKIE_SIZE bytes available. The
+     * actual size is returned. */
+#define GBINDER_MAX_COOKIE_SIZE GBINDER_MAX_POINTER_SIZE
+    guint (*encode_cookie)(void* out, guint64 cookie);
 
     /* Encode flat_buffer_object */
 #define GBINDER_MAX_BINDER_OBJECT_SIZE (24)
@@ -145,21 +152,32 @@ struct gbinder_io {
     guint (*encode_buffer_object)(void* out, const void* data, gsize size,
         const GBinderParent* parent);
 
-    /* Encode death notification */
-#define GBINDER_MAX_DEATH_NOTIFICATION_SIZE (12)
-    guint (*encode_death_notification)(void* out, GBinderRemoteObject* obj);
+    /* Encode binder_handle_cookie */
+#define GBINDER_MAX_HANDLE_COOKIE_SIZE (12)
+    guint (*encode_handle_cookie)(void* out, GBinderRemoteObject* obj);
 
-    /* Encode BC_TRANSACTION/REPLY data */
+    /* Encode binder_ptr_cookie */
+#define GBINDER_MAX_PTR_COOKIE_SIZE (16)
+    guint (*encode_ptr_cookie)(void* out, GBinderLocalObject* obj);
+
+    /* Encode BC_TRANSACTION/BC_TRANSACTION_SG data */
 #define GBINDER_MAX_BC_TRANSACTION_SIZE (64)
     guint (*encode_transaction)(void* out, guint32 handle, guint32 code,
         const GByteArray* data, guint flags /* See below */,
         GUtilIntArray* offsets, void** offsets_buf);
-
-    /* Encode BC_TRANSACTION_SG/REPLY_SG data */
 #define GBINDER_MAX_BC_TRANSACTION_SG_SIZE (72)
     guint (*encode_transaction_sg)(void* out, guint32 handle, guint32 code,
         const GByteArray* data, guint flags /* GBINDER_TX_FLAG_xxx */,
         GUtilIntArray* offsets, void** offsets_buf,
+        gsize buffers_size);
+
+    /* Encode BC_REPLY/REPLY_SG data */
+#define GBINDER_MAX_BC_REPLY_SIZE GBINDER_MAX_BC_TRANSACTION_SIZE
+    guint (*encode_reply)(void* out, guint32 handle, guint32 code,
+        const GByteArray* data, GUtilIntArray* offsets, void** offsets_buf);
+#define GBINDER_MAX_BC_REPLY_SG_SIZE GBINDER_MAX_BC_TRANSACTION_SG_SIZE
+    guint (*encode_reply_sg)(void* out, guint32 handle, guint32 code,
+        const GByteArray* data, GUtilIntArray* offsets, void** offsets_buf,
         gsize buffers_size);
 
     /* Encode BC_REPLY */
@@ -167,10 +185,9 @@ struct gbinder_io {
 
     /* Decoders */
     void (*decode_transaction_data)(const void* data, GBinderIoTxData* tx);
-
-#define GBINDER_MAX_PTR_COOKIE_SIZE (16)
-    void* (*decode_binder_ptr_cookie)(const void* data);
+    void* (*decode_ptr_cookie)(const void* data);
     guint (*decode_cookie)(const void* data, guint64* cookie);
+    guint (*decode_binder_handle)(const void* obj, guint32* handle);
     guint (*decode_binder_object)(const void* data, gsize size,
         GBinderObjectRegistry* reg, GBinderRemoteObject** obj);
     guint (*decode_buffer_object)(GBinderBuffer* buf, gsize offset,

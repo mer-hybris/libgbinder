@@ -54,14 +54,16 @@ gbinder_writer_init(
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
-    GBinderBuffer* buffer)
+    GBinderBuffer* buffer,
+    GBinderObjectConverter* convert)
     GBINDER_INTERNAL;
 
 void
 gbinder_writer_data_append_contents(
     GBinderWriterData* data,
     GBinderBuffer* buffer,
-    gsize data_offset)
+    gsize data_offset,
+    GBinderObjectConverter* convert)
     GBINDER_INTERNAL;
 
 void

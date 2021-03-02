@@ -90,19 +90,49 @@ GBINDER_IO_FN(write_read)(
     return ret;
 }
 
+/* Returns size of the object */
+static
+gsize
+GBINDER_IO_FN(object_size)(
+    const void* obj)
+{
+    if (obj) {
+        const struct binder_object_header* hdr = obj;
+
+        switch (hdr->type) {
+        case BINDER_TYPE_BINDER:
+        case BINDER_TYPE_WEAK_BINDER:
+        case BINDER_TYPE_HANDLE:
+        case BINDER_TYPE_WEAK_HANDLE:
+            return sizeof(struct flat_binder_object);
+        case BINDER_TYPE_FD:
+            return sizeof(struct binder_fd_object);
+        case BINDER_TYPE_FDA:
+            return sizeof(struct binder_fd_array_object);
+        case BINDER_TYPE_PTR:
+            return sizeof(struct binder_buffer_object);
+        }
+    }
+    return 0;
+}
+
 /* Returns size of the object's extra data */
 static
 gsize
 GBINDER_IO_FN(object_data_size)(
     const void* obj)
 {
-    const struct binder_buffer_object* buf = obj;
+    if (obj) {
+        const struct binder_object_header* hdr = obj;
 
-    if (buf && buf->hdr.type == BINDER_TYPE_PTR) {
-        return buf->length;
-    } else {
-        return 0;
+        switch (hdr->type) {
+        case BINDER_TYPE_PTR:
+            return ((struct binder_buffer_object*)obj)->length;
+        case BINDER_TYPE_FDA:
+            return ((struct binder_fd_array_object*)obj)->num_fds * 4;
+       }
     }
+    return 0;
 }
 
 /* Writes pointer to the buffer */
@@ -115,6 +145,19 @@ GBINDER_IO_FN(encode_pointer)(
     binder_uintptr_t* dest = out;
 
     *dest = (uintptr_t)pointer;
+    return sizeof(*dest);
+}
+
+/* Writes cookie to the buffer */
+static
+guint
+GBINDER_IO_FN(encode_cookie)(
+    void* out,
+    guint64 cookie)
+{
+    binder_uintptr_t* dest = out;
+
+    *dest = (uintptr_t)cookie;
     return sizeof(*dest);
 }
 
@@ -197,7 +240,7 @@ GBINDER_IO_FN(encode_buffer_object)(
 
 static
 guint
-GBINDER_IO_FN(encode_death_notification)(
+GBINDER_IO_FN(encode_handle_cookie)(
     void* out,
     GBinderRemoteObject* obj)
 {
@@ -209,7 +252,21 @@ GBINDER_IO_FN(encode_death_notification)(
     return sizeof(*dest);
 }
 
-/* Encodes BC_TRANSACTION data */
+static
+guint
+GBINDER_IO_FN(encode_ptr_cookie)(
+    void* out,
+    GBinderLocalObject* obj)
+{
+    struct binder_ptr_cookie* dest = out;
+
+    /* We never send these cookies and don't expect them back */
+    dest->ptr = (uintptr_t)obj;
+    dest->cookie = 0;
+    return sizeof(dest);
+}
+
+/* Fills binder_transaction_data for BC_TRANSACTION/REPLY */
 static
 void
 GBINDER_IO_FN(fill_transaction_data)(
@@ -217,7 +274,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     guint32 handle,
     guint32 code,
     const GByteArray* payload,
-    guint flags,
+    guint tx_flags,
     GUtilIntArray* offsets,
     void** offsets_buf)
 {
@@ -226,7 +283,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     tr->code = code;
     tr->data_size = payload->len;
     tr->data.ptr.buffer = (uintptr_t)payload->data;
-    tr->flags |= (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS;
+    tr->flags = tx_flags;
     if (offsets && offsets->count) {
         guint i;
         binder_size_t* tx_offsets = g_new(binder_size_t, offsets->count);
@@ -242,6 +299,7 @@ GBINDER_IO_FN(fill_transaction_data)(
     }
 }
 
+/* Encodes BC_TRANSACTION data */
 static
 guint
 GBINDER_IO_FN(encode_transaction)(
@@ -255,7 +313,8 @@ GBINDER_IO_FN(encode_transaction)(
 {
     struct binder_transaction_data* tr = out;
 
-    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload, flags,
+    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload,
+        (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS,
         offsets, offsets_buf);
     return sizeof(*tr);
 }
@@ -276,13 +335,53 @@ GBINDER_IO_FN(encode_transaction_sg)(
     struct binder_transaction_data_sg* sg = out;
 
     GBINDER_IO_FN(fill_transaction_data)(&sg->transaction_data, handle, code,
-        payload, flags, offsets, offsets_buf);
+        payload, (flags & GBINDER_TX_FLAG_ONEWAY) ? TF_ONE_WAY : TF_ACCEPT_FDS,
+        offsets, offsets_buf);
     /* The driver seems to require buffers to be 8-byte aligned */
     sg->buffers_size = G_ALIGN8(buffers_size);
     return sizeof(*sg);
 }
 
-/* Encode BC_REPLY */
+/* Encodes BC_REPLY data */
+static
+guint
+GBINDER_IO_FN(encode_reply)(
+    void* out,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* payload,
+    GUtilIntArray* offsets,
+    void** offsets_buf)
+{
+    struct binder_transaction_data* tr = out;
+
+    GBINDER_IO_FN(fill_transaction_data)(tr, handle, code, payload, 0,
+        offsets, offsets_buf);
+    return sizeof(*tr);
+}
+
+/* Encodes BC_REPLY_SG data */
+static
+guint
+GBINDER_IO_FN(encode_reply_sg)(
+    void* out,
+    guint32 handle,
+    guint32 code,
+    const GByteArray* payload,
+    GUtilIntArray* offsets,
+    void** offsets_buf,
+    gsize buffers_size)
+{
+    struct binder_transaction_data_sg* sg = out;
+
+    GBINDER_IO_FN(fill_transaction_data)(&sg->transaction_data, handle, code,
+        payload, 0, offsets, offsets_buf);
+    /* The driver seems to require buffers to be 8-byte aligned */
+    sg->buffers_size = G_ALIGN8(buffers_size);
+    return sizeof(*sg);
+}
+
+/* Encode BC_REPLY with just status */
 static
 guint
 GBINDER_IO_FN(encode_status_reply)(
@@ -370,7 +469,7 @@ GBINDER_IO_FN(decode_cookie)(
 /* Decode struct binder_ptr_cookie */
 static
 void*
-GBINDER_IO_FN(decode_binder_ptr_cookie)(
+GBINDER_IO_FN(decode_ptr_cookie)(
     const void* data)
 {
     const struct binder_ptr_cookie* ptr = data;
@@ -378,6 +477,24 @@ GBINDER_IO_FN(decode_binder_ptr_cookie)(
     /* We never send cookie and don't expect it back */
     GASSERT(!ptr->cookie);
     return (void*)(uintptr_t)ptr->ptr;
+}
+
+static
+guint
+GBINDER_IO_FN(decode_binder_handle)(
+    const void* data,
+    guint32* handle)
+{
+    const struct flat_binder_object* obj = data;
+
+    /* Caller guarantees that data points to an object */
+    if (obj->hdr.type == BINDER_TYPE_HANDLE) {
+        if (handle) {
+            *handle = obj->handle;
+        }
+        return sizeof(*obj);
+    }
+    return 0;
 }
 
 static
@@ -394,7 +511,8 @@ GBINDER_IO_FN(decode_binder_object)(
         switch (obj->hdr.type) {
         case BINDER_TYPE_HANDLE:
             if (out) {
-                *out = gbinder_object_registry_get_remote(reg, obj->handle);
+                *out = gbinder_object_registry_get_remote(reg, obj->handle,
+                    REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE);
             }
             return sizeof(*obj);
         case BINDER_TYPE_BINDER:
@@ -510,23 +628,29 @@ const GBinderIo GBINDER_IO_PREFIX = {
         .failed_reply = BR_FAILED_REPLY
     },
 
+    .object_size = GBINDER_IO_FN(object_size),
     .object_data_size = GBINDER_IO_FN(object_data_size),
 
     /* Encoders */
     .encode_pointer = GBINDER_IO_FN(encode_pointer),
+    .encode_cookie = GBINDER_IO_FN(encode_cookie),
     .encode_local_object = GBINDER_IO_FN(encode_local_object),
     .encode_remote_object = GBINDER_IO_FN(encode_remote_object),
     .encode_fd_object = GBINDER_IO_FN(encode_fd_object),
     .encode_buffer_object = GBINDER_IO_FN(encode_buffer_object),
-    .encode_death_notification = GBINDER_IO_FN(encode_death_notification),
+    .encode_handle_cookie = GBINDER_IO_FN(encode_handle_cookie),
+    .encode_ptr_cookie = GBINDER_IO_FN(encode_ptr_cookie),
     .encode_transaction = GBINDER_IO_FN(encode_transaction),
     .encode_transaction_sg = GBINDER_IO_FN(encode_transaction_sg),
+    .encode_reply = GBINDER_IO_FN(encode_reply),
+    .encode_reply_sg = GBINDER_IO_FN(encode_reply_sg),
     .encode_status_reply = GBINDER_IO_FN(encode_status_reply),
 
     /* Decoders */
     .decode_transaction_data = GBINDER_IO_FN(decode_transaction_data),
     .decode_cookie = GBINDER_IO_FN(decode_cookie),
-    .decode_binder_ptr_cookie = GBINDER_IO_FN(decode_binder_ptr_cookie),
+    .decode_ptr_cookie = GBINDER_IO_FN(decode_ptr_cookie),
+    .decode_binder_handle = GBINDER_IO_FN(decode_binder_handle),
     .decode_binder_object = GBINDER_IO_FN(decode_binder_object),
     .decode_buffer_object = GBINDER_IO_FN(decode_buffer_object),
     .decode_fd_object = GBINDER_IO_FN(decode_fd_object),
@@ -542,7 +666,7 @@ G_STATIC_ASSERT(sizeof(struct flat_binder_object) <=
 G_STATIC_ASSERT(sizeof(struct binder_buffer_object) <=
     GBINDER_MAX_BUFFER_OBJECT_SIZE);
 G_STATIC_ASSERT(sizeof(struct binder_handle_cookie) <=
-    GBINDER_MAX_DEATH_NOTIFICATION_SIZE);
+    GBINDER_MAX_HANDLE_COOKIE_SIZE);
 G_STATIC_ASSERT(sizeof(struct binder_transaction_data) <=
     GBINDER_MAX_BC_TRANSACTION_SIZE);
 G_STATIC_ASSERT(sizeof(struct binder_transaction_data_sg) <=

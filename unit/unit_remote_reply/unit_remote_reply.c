@@ -71,7 +71,8 @@ static
 GBinderRemoteObject*
 reg_dummy_get_remote(
     GBinderObjectRegistry* reg,
-    guint32 handle)
+    guint32 handle,
+    REMOTE_REGISTRY_CREATE create)
 {
     return NULL;
 }

@@ -169,7 +169,7 @@ test_get_cb(
 
 static
 void
-test_get()
+test_get_run()
 {
     TestConfig config;
     GBinderIpc* ipc;
@@ -220,10 +220,18 @@ test_get()
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
+}
+
+static
+void
+test_get()
+{
+    test_run_in_context(&test_opt, test_get_run);
 }
 
 /*==========================================================================*
@@ -253,7 +261,7 @@ test_list_cb(
 
 static
 void
-test_list()
+test_list_run()
 {
     TestList test;
     TestConfig config;
@@ -305,12 +313,20 @@ test_list()
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
 
     g_strfreev(test.list);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_list()
+{
+    test_run_in_context(&test_opt, test_list_run);
 }
 
 /*==========================================================================*
@@ -373,7 +389,7 @@ test_notify_cb(
 
 static
 void
-test_notify()
+test_notify_run()
 {
     TestNotify test;
     TestConfig config;
@@ -426,10 +442,18 @@ test_notify()
     test_servicemanager_hidl_free(test.smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
+
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_notify()
+{
+    test_run_in_context(&test_opt, test_notify_run);
 }
 
 /*==========================================================================*

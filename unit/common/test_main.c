@@ -39,6 +39,11 @@ typedef struct test_quit_later_data{
     guint n;
 } TestQuitLaterData;
 
+typedef struct test_context_data{
+    GMainLoop* loop;
+    GTestFunc func;
+} TestContextData;
+
 static
 gboolean
 test_timeout_expired(
@@ -102,6 +107,40 @@ test_quit_later(
     GMainLoop* loop)
 {
     g_idle_add(test_quit_later_cb, loop);
+}
+
+static
+gboolean
+test_run_in_context_cb(
+    gpointer data)
+{
+    TestContextData* test = data;
+
+    test->func();
+    g_main_loop_quit(test->loop);
+    return G_SOURCE_REMOVE;
+}
+
+void
+test_run_in_context(
+    const TestOpt* opt,
+    GTestFunc func)
+{
+    TestContextData test;
+
+    test.loop = g_main_loop_new(NULL, FALSE);
+    test.func = func;
+
+    /*
+     * This makes sure that we own the context for the entire duration
+     * of the test. That prevents many race conditions - all callbacks
+     * that are supposed to be invoked on the main thread, are actually
+     * invoked on the main thread (rather than a random worker thread
+     * which happens to acquire the context).
+     */
+    g_idle_add(test_run_in_context_cb, &test);
+    test_run(opt, test.loop);
+    g_main_loop_unref(test.loop);
 }
 
 void

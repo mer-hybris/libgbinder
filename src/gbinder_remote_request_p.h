@@ -57,9 +57,9 @@ gbinder_remote_request_set_data(
     GBINDER_INTERNAL;
 
 GBinderLocalRequest*
-gbinder_remote_request_translate_to_local(
+gbinder_remote_request_convert_to_local(
     GBinderRemoteRequest* req,
-    GBinderDriver* driver)
+    GBinderObjectConverter* convert)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_REMOTE_REQUEST_PRIVATE_H */
