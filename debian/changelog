@@ -1,3 +1,17 @@
+libgbinder (1.1.6) unstable; urgency=low
+
+  * Implemented support for passing object over the bridge
+  * Retry service name registration
+  * Wait for completion of the reply
+  * Fixed death handling by GBinderBridge
+  * Added gbinder_bridge_new2()
+  * Added -s option to binder-bridge
+  * Fixed invalid slice deallocation
+  * Made unit tests more reliable
+  * Make sure that libgbinder doesn't block on exit
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 02 Mar 2021 18:18:03 +0200
+
 libgbinder (1.1.5) unstable; urgency=low
 
   * Fixed gbinder_remote_reply_copy_to_local() for empty replies
