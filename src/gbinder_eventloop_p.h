@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,12 +41,14 @@ gbinder_timeout_add(
     guint millis,
     GSourceFunc func,
     gpointer data)
+    G_GNUC_WARN_UNUSED_RESULT
     GBINDER_INTERNAL;
 
 GBinderEventLoopTimeout*
 gbinder_idle_add(
     GSourceFunc func,
     gpointer data)
+    G_GNUC_WARN_UNUSED_RESULT
     GBINDER_INTERNAL;
 
 void
@@ -59,6 +61,7 @@ gbinder_idle_callback_new(
     GBinderEventLoopCallbackFunc func,
     gpointer data,
     GDestroyNotify destroy)
+    G_GNUC_WARN_UNUSED_RESULT
     GBINDER_INTERNAL;
 
 GBinderEventLoopCallback*
@@ -66,6 +69,7 @@ gbinder_idle_callback_schedule_new(
     GBinderEventLoopCallbackFunc func,
     gpointer data,
     GDestroyNotify destroy)
+    G_GNUC_WARN_UNUSED_RESULT
     GBINDER_INTERNAL;
 
 GBinderEventLoopCallback*
@@ -91,6 +95,13 @@ gbinder_idle_callback_cancel(
 void
 gbinder_idle_callback_destroy(
     GBinderEventLoopCallback* cb)
+    GBINDER_INTERNAL;
+
+void
+gbinder_idle_callback_invoke_later(
+    GBinderEventLoopCallbackFunc func,
+    gpointer data,
+    GDestroyNotify destroy)
     GBINDER_INTERNAL;
 
 #endif /* GBINDER_EVENTLOOP_PRIVATE_H */

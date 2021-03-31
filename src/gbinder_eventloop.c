@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,6 +33,13 @@
 #include "gbinder_eventloop_p.h"
 
 #include <gutil_macros.h>
+
+typedef struct gbinder_idle_callback_data {
+    GBinderEventLoopCallback* cb;
+    GBinderEventLoopCallbackFunc func;
+    GDestroyNotify destroy;
+    gpointer data;
+} GBinderIdleCallbackData;
 
 #define GBINDER_DEFAULT_EVENTLOOP (&gbinder_eventloop_glib)
 
@@ -221,6 +228,36 @@ static const GBinderEventLoopIntegration gbinder_eventloop_glib = {
 };
 
 /*==========================================================================*
+ * Implementation
+ *==========================================================================*/
+
+static
+void
+gbinder_idle_callback_invoke_proc(
+    void* user_data)
+{
+    GBinderIdleCallbackData* idle = user_data;
+
+    if (idle->func) {
+        idle->func(idle->data);
+    }
+    gbinder_idle_callback_unref(idle->cb);
+}
+
+static
+void
+gbinder_idle_callback_invoke_done(
+    void* user_data)
+{
+    GBinderIdleCallbackData* idle = user_data;
+
+    if (idle->destroy) {
+        idle->destroy(idle->data);
+    }
+    gutil_slice_free(idle);
+}
+
+/*==========================================================================*
  * Internal interface
  *==========================================================================*/
 
@@ -324,6 +361,27 @@ gbinder_idle_callback_destroy(
         eventloop->callback_unref(cb);
     }
 }
+
+/* Non-cancellable callback */
+void
+gbinder_idle_callback_invoke_later(
+    GBinderEventLoopCallbackFunc func,
+    gpointer data,
+    GDestroyNotify destroy)
+{
+    GBinderIdleCallbackData* idle = g_slice_new(GBinderIdleCallbackData);
+
+    idle->func = func;
+    idle->data = data;
+    idle->destroy = destroy;
+    idle->cb = gbinder_idle_callback_new(gbinder_idle_callback_invoke_proc,
+        idle, gbinder_idle_callback_invoke_done);
+    gbinder_idle_callback_schedule(idle->cb);
+}
+
+/*==========================================================================*
+ * Public interface
+ *==========================================================================*/
 
 void
 gbinder_eventloop_set(
