@@ -1,3 +1,9 @@
+libgbinder (1.1.7) unstable; urgency=low
+
+  * Dropped use of g_main_context_invoke_full()
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 31 Mar 2021 23:10:37 +0300
+
 libgbinder (1.1.6) unstable; urgency=low
 
   * Implemented support for passing object over the bridge
