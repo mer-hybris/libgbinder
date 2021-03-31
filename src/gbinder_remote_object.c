@@ -36,10 +36,10 @@
 #include "gbinder_ipc.h"
 #include "gbinder_remote_object_p.h"
 #include "gbinder_servicemanager_p.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_log.h"
 
 struct gbinder_remote_object_priv {
-    GMainContext* context;
     gboolean acquired;
 };
 
@@ -67,8 +67,10 @@ static guint gbinder_remote_object_signals[SIGNAL_COUNT] = { 0 };
 static
 void
 gbinder_remote_object_handle_death_on_main_thread(
-    GBinderRemoteObject* self)
+    gpointer user_data)
 {
+    GBinderRemoteObject* self = THIS(user_data);
+
     if (!self->dead) {
         GBinderIpc* ipc = self->ipc;
         GBinderDriver* driver = ipc->driver;
@@ -83,15 +85,6 @@ gbinder_remote_object_handle_death_on_main_thread(
         gbinder_driver_dead_binder_done(driver, self);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
     }
-}
-
-static
-gboolean
-gbinder_remote_object_death_notification_proc(
-    gpointer self)
-{
-    gbinder_remote_object_handle_death_on_main_thread(THIS(self));
-    return G_SOURCE_REMOVE;
 }
 
 /*==========================================================================*
@@ -135,9 +128,9 @@ gbinder_remote_object_handle_death_notification(
     /* This function is invoked from the looper thread, the caller has
      * checked the object pointer */
     GVERBOSE_("%p %u", self, self->handle);
-    g_main_context_invoke_full(self->priv->context, G_PRIORITY_DEFAULT,
-        gbinder_remote_object_death_notification_proc,
-        gbinder_remote_object_ref(self), g_object_unref);
+    gbinder_idle_callback_invoke_later
+        (gbinder_remote_object_handle_death_on_main_thread,
+            gbinder_remote_object_ref(self), g_object_unref);
 }
 
 void
@@ -267,7 +260,6 @@ gbinder_remote_object_init(
     GBinderRemoteObjectPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
         THIS_TYPE, GBinderRemoteObjectPriv);
 
-    priv->context = g_main_context_default();
     self->priv = priv;
 }
 

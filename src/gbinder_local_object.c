@@ -38,6 +38,7 @@
 #include "gbinder_local_object_p.h"
 #include "gbinder_local_reply_p.h"
 #include "gbinder_remote_request.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
@@ -47,7 +48,6 @@
 #include <errno.h>
 
 struct gbinder_local_object_priv {
-    GMainContext* context;
     char** ifaces;
     GBinderLocalTransactFunc txproc;
     void* user_data;
@@ -280,18 +280,16 @@ static
 void
 gbinder_local_object_handle_later(
     GBinderLocalObject* self,
-    GSourceFunc function)
+    GBinderEventLoopCallbackFunc function)
 {
     if (G_LIKELY(self)) {
-        GBinderLocalObjectPriv* priv = self->priv;
-
-        g_main_context_invoke_full(priv->context, G_PRIORITY_DEFAULT, function,
+        gbinder_idle_callback_invoke_later(function,
             gbinder_local_object_ref(self), g_object_unref);
     }
 }
 
 static
-gboolean
+void
 gbinder_local_object_increfs_proc(
     gpointer user_data)
 {
@@ -300,11 +298,10 @@ gbinder_local_object_increfs_proc(
     self->weak_refs++;
     g_signal_emit(self, gbinder_local_object_signals
         [SIGNAL_WEAK_REFS_CHANGED], 0);
-    return G_SOURCE_REMOVE;
 }
 
 static
-gboolean
+void
 gbinder_local_object_decrefs_proc(
     gpointer user_data)
 {
@@ -314,7 +311,6 @@ gbinder_local_object_decrefs_proc(
     self->weak_refs--;
     g_signal_emit(self, gbinder_local_object_signals
         [SIGNAL_WEAK_REFS_CHANGED], 0);
-    return G_SOURCE_REMOVE;
 }
 
 static
@@ -330,7 +326,7 @@ gbinder_local_object_default_acquire(
 }
 
 static
-gboolean
+void
 gbinder_local_object_acquire_proc(
     gpointer user_data)
 {
@@ -338,7 +334,6 @@ gbinder_local_object_acquire_proc(
     GBinderLocalObject* self = data->object;
 
     GBINDER_LOCAL_OBJECT_GET_CLASS(self)->acquire(self);
-    return G_SOURCE_REMOVE;
 }
 
 static
@@ -371,14 +366,13 @@ gbinder_local_object_default_release(
 }
 
 static
-gboolean
+void
 gbinder_local_object_release_proc(
     gpointer obj)
 {
     GBinderLocalObject* self = GBINDER_LOCAL_OBJECT(obj);
 
     GBINDER_LOCAL_OBJECT_GET_CLASS(self)->release(self);
-    return G_SOURCE_REMOVE;
 }
 
 /*==========================================================================*
@@ -586,7 +580,6 @@ gbinder_local_object_handle_acquire(
     GBinderBufferContentsList* bufs)
 {
     if (G_LIKELY(self)) {
-        GBinderLocalObjectPriv* priv = self->priv;
         GBinderLocalObjectAcquireData* data =
             g_slice_new(GBinderLocalObjectAcquireData);
 
@@ -604,9 +597,8 @@ gbinder_local_object_handle_acquire(
          */
         data->object = gbinder_local_object_ref(self);
         data->bufs = gbinder_buffer_contents_list_dup(bufs);
-        g_main_context_invoke_full(priv->context, G_PRIORITY_DEFAULT,
-            gbinder_local_object_acquire_proc, data,
-            gbinder_local_object_acquire_done);
+        gbinder_idle_callback_invoke_later(gbinder_local_object_acquire_proc,
+            data, gbinder_local_object_acquire_done);
     }
 }
 
@@ -629,7 +621,6 @@ gbinder_local_object_init(
     GBinderLocalObjectPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
         GBINDER_TYPE_LOCAL_OBJECT, GBinderLocalObjectPriv);
 
-    priv->context = g_main_context_default();
     self->priv = priv;
 }
 
