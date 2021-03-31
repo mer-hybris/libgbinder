@@ -48,6 +48,14 @@ test_unreached_proc(
     return G_SOURCE_CONTINUE;
 }
 
+static
+void
+test_quit_cb(
+    gpointer data)
+{
+    g_main_loop_quit((GMainLoop*)data);
+}
+
 /*==========================================================================*
  * Test event loop integration
  *==========================================================================*/
@@ -214,14 +222,6 @@ test_timeout(
 
 static
 void
-test_quit_cb(
-    gpointer data)
-{
-    g_main_loop_quit((GMainLoop*)data);
-}
-
-static
-void
 test_callback(
     void)
 {
@@ -239,6 +239,28 @@ test_callback(
 }
 
 /*==========================================================================*
+ * invoke
+ *==========================================================================*/
+
+static
+void
+test_invoke(
+    void)
+{
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+
+    gbinder_eventloop_set(NULL);
+    gbinder_idle_callback_invoke_later(test_quit_cb, loop, NULL);
+    test_run(&test_opt, loop);
+
+    gbinder_eventloop_set(NULL);
+    gbinder_idle_callback_invoke_later(NULL, loop, test_quit_cb);
+    test_run(&test_opt, loop);
+
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -251,6 +273,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("idle"), test_idle);
     g_test_add_func(TEST_("timeout"), test_timeout);
     g_test_add_func(TEST_("callback"), test_callback);
+    g_test_add_func(TEST_("invoke"), test_invoke);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

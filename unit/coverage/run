@@ -1,4 +1,3 @@
-
 #!/bin/bash
 #
 # This script requires lcov, dirname
@@ -65,9 +64,13 @@ for t in $TESTS ; do
     popd
 done
 
+# Sometimes you need this, sometimes that :S
+BASE_DIR="$TOP_DIR"
+#BASE_DIR="$TOP_DIR/src"
+
 FULL_COV="$COV_DIR/full.gcov"
 LIB_COV="$COV_DIR/lib.gcov"
 rm -f "$FULL_COV" "$LIB_COV"
-lcov $LCOV_OPT -c -d "$TOP_DIR/build/coverage" -b "$TOP_DIR/src" -o "$FULL_COV" || exit 1
-lcov $LCOV_OPT -e "$FULL_COV" "$TOP_DIR/src/*" -o "$LIB_COV" || exit 1
+lcov $LCOV_OPT -c -d "$TOP_DIR/build/coverage" -b "$BASE_DIR" -o "$FULL_COV" || exit 1
+lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/*" -o "$LIB_COV" || exit 1
 genhtml $GENHTML_OPT "$LIB_COV" -t "libgbinder" --output-directory "$COV_DIR/report" || exit 1
