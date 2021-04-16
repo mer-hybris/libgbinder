@@ -139,6 +139,11 @@ test_interfaces(
     g_assert_cmpstr(gbinder_client_interface2(client, 33), == ,"33");
     g_assert(!gbinder_client_interface2(client, 34));
     g_assert(!gbinder_client_new_request2(client, 34));
+    /* Those fail to allocate default request for out-of-range codes: */
+    g_assert(!gbinder_client_transact_sync_reply(client, 34, NULL, NULL));
+    g_assert_cmpint(gbinder_client_transact_sync_oneway(client, 34, NULL),
+        == ,-EINVAL);
+    g_assert(!gbinder_client_transact(client, 34, 0, NULL, NULL, NULL, NULL));
     gbinder_client_unref(client);
 
     /* Client with no interface info */
