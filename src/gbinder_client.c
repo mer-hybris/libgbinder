@@ -203,9 +203,15 @@ gbinder_client_transact_sync_reply2(
                     req = r->basic_req;
                 }
             }
-            return api->sync_reply(obj->ipc, obj->handle, code, req, status);
+            if (req) {
+                return api->sync_reply(obj->ipc, obj->handle, code, req,
+                    status);
+            } else {
+                GWARN("Unable to build empty request for tx code %u", code);
+            }
+        } else {
+            GDEBUG("Refusing to perform transaction with a dead object");
         }
-        GDEBUG("Refusing to perform transaction with a dead object");
     }
     return NULL;
 }
@@ -230,10 +236,15 @@ gbinder_client_transact_sync_oneway2(
                     req = r->basic_req;
                 }
             }
-            return api->sync_oneway(obj->ipc, obj->handle, code, req);
+            if (req) {
+                return api->sync_oneway(obj->ipc, obj->handle, code, req);
+            } else {
+                GWARN("Unable to build empty request for tx code %u", code);
+            }
+        } else {
+            GDEBUG("Refusing to perform transaction with a dead object");
+            return (-ESTALE);
         }
-        GDEBUG("Refusing to perform transaction with a dead object");
-        return (-ESTALE);
     }
     return (-EINVAL);
 }
@@ -407,13 +418,6 @@ gbinder_client_transact(
         GBinderRemoteObject* obj = self->remote;
 
         if (G_LIKELY(!obj->dead)) {
-            GBinderClientTx* tx = g_slice_new0(GBinderClientTx);
-
-            tx->client = gbinder_client_ref(self);
-            tx->reply = reply;
-            tx->destroy = destroy;
-            tx->user_data = user_data;
-
             if (!req) {
                 const GBinderClientIfaceRange* r = gbinder_client_find_range
                     (gbinder_client_cast(self), code);
@@ -423,12 +427,22 @@ gbinder_client_transact(
                     req = r->basic_req;
                 }
             }
+            if (req) {
+                GBinderClientTx* tx = g_slice_new0(GBinderClientTx);
 
-            return gbinder_ipc_transact(obj->ipc, obj->handle, code,
-                flags, req, gbinder_client_transact_reply,
-                gbinder_client_transact_destroy, tx);
+                tx->client = gbinder_client_ref(self);
+                tx->reply = reply;
+                tx->destroy = destroy;
+                tx->user_data = user_data;
+                return gbinder_ipc_transact(obj->ipc, obj->handle, code,
+                    flags, req, gbinder_client_transact_reply,
+                    gbinder_client_transact_destroy, tx);
+            } else {
+                GWARN("Unable to build empty request for tx code %u", code);
+            }
+        } else {
+            GDEBUG("Refusing to perform transaction with a dead object");
         }
-        GDEBUG("Refusing to perform transaction with a dead object");
     }
     return 0;
 }
