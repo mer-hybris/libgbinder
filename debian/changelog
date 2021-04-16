@@ -1,3 +1,9 @@
+libgbinder (1.1.8) unstable; urgency=low
+
+  * Handle out-of-range transaction codes
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 16 Apr 2021 19:11:14 +0300
+
 libgbinder (1.1.7) unstable; urgency=low
 
   * Dropped use of g_main_context_invoke_full()
