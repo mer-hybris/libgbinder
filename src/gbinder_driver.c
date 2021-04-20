@@ -61,6 +61,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <linux/ioctl.h>
 
 /* BINDER_VM_SIZE copied from native/libs/binder/ProcessState.cpp */
 #define BINDER_VM_SIZE ((1024*1024) - sysconf(_SC_PAGE_SIZE)*2)
