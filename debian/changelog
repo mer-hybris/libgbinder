@@ -1,3 +1,9 @@
+libgbinder (1.1.9) unstable; urgency=low
+
+  * Include definition of _IOC_SIZE
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 20 Apr 2021 12:52:41 +0300
+
 libgbinder (1.1.8) unstable; urgency=low
 
   * Handle out-of-range transaction codes
