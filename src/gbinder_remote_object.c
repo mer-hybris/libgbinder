@@ -77,7 +77,11 @@ gbinder_remote_object_handle_death_on_main_thread(
         GBinderRemoteObjectPriv* priv = self->priv;
 
         self->dead = TRUE;
-        priv->acquired = FALSE;
+        if (priv->acquired) {
+            priv->acquired = FALSE;
+            /* Release the dead node */
+            gbinder_driver_release(driver, self->handle);
+        }
         /* ServiceManager always has the same handle, and can be reanimated. */
         if (self->handle != GBINDER_SERVICEMANAGER_HANDLE) {
             gbinder_ipc_invalidate_remote_handle(ipc, self->handle);
@@ -140,10 +144,16 @@ gbinder_remote_object_commit_suicide(
     /* This function is only invoked by GBinderProxyObject in context of
      * the main thread, the object pointer is checked by the caller */
     if (!self->dead) {
+        GBinderIpc* ipc = self->ipc;
+        GBinderDriver* driver = ipc->driver;
         GBinderRemoteObjectPriv* priv = self->priv;
 
         self->dead = TRUE;
-        priv->acquired = FALSE;
+        if (priv->acquired) {
+            priv->acquired = FALSE;
+            /* Release the dead node */
+            gbinder_driver_release(driver, self->handle);
+        }
         GVERBOSE_("%p %u", self, self->handle);
         gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
         /* Don't submit BC_DEAD_BINDER_DONE because this is a suicide */
@@ -286,9 +296,9 @@ gbinder_remote_object_finalize(
 
     if (!self->dead) {
         gbinder_driver_clear_death_notification(driver, self);
-        if (priv->acquired) {
-            gbinder_driver_release(driver, self->handle);
-        }
+    }
+    if (priv->acquired) {
+        gbinder_driver_release(driver, self->handle);
     }
     gbinder_ipc_unref(ipc);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
