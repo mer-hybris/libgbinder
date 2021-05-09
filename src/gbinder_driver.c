@@ -675,12 +675,11 @@ gbinder_driver_handle_command(
     } else if (cmd == io->br.transaction) {
         gbinder_driver_handle_transaction(self, context, data);
     } else if (cmd == io->br.dead_binder) {
-        guint8 buf[4 + GBINDER_MAX_COOKIE_SIZE];
         guint64 handle = 0;
         GBinderRemoteObject* obj;
 
         io->decode_cookie(data, &handle);
-        GVERBOSE("> BR_DEAD_BINDER %llu", (long long unsigned int)handle);
+        GVERBOSE("> BR_DEAD_BINDER 0x%08llx", (long long unsigned int) handle);
         obj = gbinder_object_registry_get_remote(reg, (guint32)handle,
             REMOTE_REGISTRY_DONT_CREATE);
         if (obj) {
@@ -688,13 +687,23 @@ gbinder_driver_handle_command(
             gbinder_remote_object_handle_death_notification(obj);
             gbinder_remote_object_unref(obj);
         } else {
+            guint8 buf[4 + GBINDER_MAX_COOKIE_SIZE];
+
             /* This shouldn't normally happen. Just send the same data back. */
-            GVERBOSE("< BC_DEAD_BINDER_DONE %llu", (long long unsigned int)
+            GVERBOSE("< BC_DEAD_BINDER_DONE 0x%08llx", (long long unsigned int)
                 handle);
             gbinder_driver_cmd_data(self, io->bc.dead_binder_done, data, buf);
         }
     } else if (cmd == io->br.clear_death_notification_done) {
-        GVERBOSE("> BR_CLEAR_DEATH_NOTIFICATION_DONE");
+#if GUTIL_LOG_VERBOSE
+        if (GLOG_ENABLED(GLOG_LEVEL_VERBOSE)) {
+            guint64 handle = 0;
+
+            io->decode_cookie(data, &handle);
+            GVERBOSE("> BR_CLEAR_DEATH_NOTIFICATION_DONE 0x%08llx",
+                (long long unsigned int) handle);
+        }
+#endif /* GUTIL_LOG_VERBOSE */
     } else {
 #pragma message("TODO: handle more commands from the driver")
         GWARN("Unexpected command 0x%08x", cmd);
@@ -1026,7 +1035,7 @@ gbinder_driver_dead_binder_done(
         write.ptr = (uintptr_t)buf;
         write.size = 4 + io->encode_cookie(data + 1, obj->handle);
 
-        GVERBOSE("< BC_DEAD_BINDER_DONE %u", obj->handle);
+        GVERBOSE("< BC_DEAD_BINDER_DONE 0x%08x", obj->handle);
         return gbinder_driver_write(self, &write) >= 0;
     } else {
         return FALSE;
