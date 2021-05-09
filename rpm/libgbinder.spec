@@ -1,4 +1,5 @@
 Name: libgbinder
+
 Version: 1.1.9
 Release: 0
 Summary: Binder client library
@@ -6,7 +7,7 @@ License: BSD
 URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
 
-%define libglibutil_version 1.0.49
+%define libglibutil_version 1.0.52
 
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
@@ -29,7 +30,7 @@ This package contains the development library for %{name}.
 %setup -q
 
 %build
-make LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
+make %{_smp_mflags} LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
 make -C test/binder-bridge KEEP_SYMBOLS=1 release
 make -C test/binder-list KEEP_SYMBOLS=1 release
 make -C test/binder-ping KEEP_SYMBOLS=1 release

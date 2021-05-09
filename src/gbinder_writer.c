@@ -40,6 +40,7 @@
 #include <gutil_intarray.h>
 #include <gutil_macros.h>
 #include <gutil_strv.h>
+#include <gutil_misc.h>
 
 #include <unistd.h>
 #include <stdint.h>
@@ -709,7 +710,7 @@ gbinder_writer_data_append_hidl_vec(
     GBinderParent vec_parent;
     GBinderHidlVec* vec = g_new0(GBinderHidlVec, 1);
     const gsize total = count * elemsize;
-    void* buf = g_memdup(base, total);
+    void* buf = gutil_memdup(base, total);
 
     /* Prepare parent descriptor for the string data */
     vec_parent.index = gbinder_writer_data_prepare(data);
