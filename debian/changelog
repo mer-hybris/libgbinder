@@ -1,3 +1,10 @@
+libgbinder (1.1.10) unstable; urgency=low
+
+  * Release dead binder nodes
+  * Use gutil_memdup() instead of g_memdup()
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 10 May 2021 02:36:43 +0300
+
 libgbinder (1.1.9) unstable; urgency=low
 
   * Include definition of _IOC_SIZE
