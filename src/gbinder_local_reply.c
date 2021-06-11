@@ -307,6 +307,17 @@ gbinder_local_reply_append_remote_object(
     return self;
 }
 
+GBinderLocalReply*
+gbinder_local_reply_append_fd(
+    GBinderLocalReply* self,
+    int fd)
+{
+    if (G_LIKELY(self)) {
+        gbinder_writer_data_append_fd(&self->data, fd);
+    }
+    return self;
+}
+
 /*
  * Local Variables:
  * mode: C

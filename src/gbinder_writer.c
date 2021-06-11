@@ -604,7 +604,6 @@ gbinder_writer_data_close_fd(
     }
 }
 
-static
 void
 gbinder_writer_data_append_fd(
     GBinderWriterData* data,

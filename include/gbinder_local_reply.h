@@ -112,6 +112,10 @@ gbinder_local_reply_append_remote_object(
     GBinderLocalReply* reply,
     GBinderRemoteObject* obj);
 
+GBinderLocalReply*
+gbinder_local_reply_append_fd(
+    GBinderLocalReply* reply,
+    int fd);
 G_END_DECLS
 
 #endif /* GBINDER_LOCAL_OBJECT_H */
