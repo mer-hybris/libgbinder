@@ -163,6 +163,12 @@ gbinder_writer_data_append_remote_object(
     GBinderRemoteObject* obj)
     GBINDER_INTERNAL;
 
+void
+gbinder_writer_data_append_fd(
+    GBinderWriterData* data,
+    int fd)
+    GBINDER_INTERNAL;
+
 #endif /* GBINDER_WRITER_PRIVATE_H */
 
 /*
