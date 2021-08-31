@@ -47,6 +47,7 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <linux/ioctl.h>
 
 #define gettid() ((int)syscall(SYS_gettid))
 
