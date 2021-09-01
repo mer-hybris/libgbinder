@@ -18,7 +18,31 @@ COMMON_SRC ?= test_binder.c test_main.c
 # Required packages
 #
 
-PKGS += libglibutil glib-2.0 gobject-2.0
+PKGS += glib-2.0 gobject-2.0
+
+ifeq ($(LIBGLIBUTIL_PATH),)
+
+# Assume that libglibutil devel package is installed
+PKGS += libglibutil
+
+else
+
+# Side-by-side build
+INCLUDES += -I$(LIBGLIBUTIL_PATH)/include
+DEBUG_LIBS = -L$(LIBGLIBUTIL_PATH)/build/debug -lglibutil
+RELEASE_LIBS = -L$(LIBGLIBUTIL_PATH)/build/release -lglibutil
+DEBUG_DEPS = libglibutil_debug
+RELEASE_DEPS = libglibutil_release
+
+.PHONY: libglibutil_debug libglibutil_release
+
+libglibutil_debug:
+	make -C $(LIBGLIBUTIL_PATH) debug
+
+libglibutil_release:
+	make -C $(LIBGLIBUTIL_PATH) release
+
+endif
 
 #
 # Default target
@@ -74,9 +98,9 @@ DEBUG_LIB = $(LIB_DIR)/$(DEBUG_LIB_FILE)
 RELEASE_LIB = $(LIB_DIR)/$(RELEASE_LIB_FILE)
 COVERAGE_LIB = $(LIB_DIR)/$(COVERAGE_LIB_FILE)
 
-DEBUG_LIBS = $(DEBUG_LIB) $(LIBS)
-RELEASE_LIBS = $(RELEASE_LIB) $(LIBS)
-COVERAGE_LIBS = $(COVERAGE_LIB) $(LIBS)
+DEBUG_LIBS += $(DEBUG_LIB) $(LIBS)
+RELEASE_LIBS += $(RELEASE_LIB) $(LIBS)
+COVERAGE_LIBS += $(COVERAGE_LIB) $(LIBS)
 
 #
 # Files
@@ -107,8 +131,8 @@ $(DEBUG_LIB): | debug_lib
 $(RELEASE_LIB): | release_lib
 $(COVERAGE_LIB): | coverage_lib
 
-$(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
-$(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
+$(DEBUG_OBJS): | $(DEBUG_BUILD_DIR) $(DEBUG_DEPS)
+$(RELEASE_OBJS): | $(RELEASE_BUILD_DIR) $(RELEASE_DEPS)
 $(COVERAGE_OBJS): | $(COVERAGE_BUILD_DIR)
 
 #
