@@ -429,7 +429,7 @@ void
 gbinder_ipc_looper_free(
     GBinderIpcLooper* looper)
 {
-    if (!looper->joined) {
+    if (!looper->joined && looper->thread != pthread_self()) {
         pthread_join(looper->thread, NULL);
     }
     close(looper->pipefd[0]);
