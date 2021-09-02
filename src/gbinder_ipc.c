@@ -429,7 +429,7 @@ void
 gbinder_ipc_looper_free(
     GBinderIpcLooper* looper)
 {
-    if (!looper->joined) {
+    if (!looper->joined && looper->thread != pthread_self()) {
         pthread_join(looper->thread, NULL);
     }
     close(looper->pipefd[0]);
@@ -766,13 +766,13 @@ gbinder_ipc_looper_thread(
     GBinderIpcLooper* looper = data;
     GBinderDriver* driver = looper->driver;
 
+    g_mutex_lock(&looper->mutex);
     pthread_setname_np(looper->thread, looper->name);
     if (gbinder_driver_enter_looper(driver)) {
         struct pollfd pipefd;
         int res;
 
         GDEBUG("Looper %s running", looper->name);
-        g_mutex_lock(&looper->mutex);
         g_atomic_int_set(&looper->started, TRUE);
         g_cond_broadcast(&looper->start_cond);
         g_mutex_unlock(&looper->mutex);
@@ -837,7 +837,6 @@ gbinder_ipc_looper_thread(
             GDEBUG("Looper %s is abandoned", looper->name);
         }
     } else {
-        g_mutex_lock(&looper->mutex);
         g_atomic_int_set(&looper->started, TRUE);
         g_cond_broadcast(&looper->start_cond);
         g_mutex_unlock(&looper->mutex);
@@ -869,6 +868,7 @@ gbinder_ipc_looper_new(
         g_atomic_int_set(&looper->refcount, 1);
         g_cond_init(&looper->start_cond);
         g_mutex_init(&looper->mutex);
+        g_mutex_lock(&looper->mutex);
         looper->name = g_strdup_printf("%s#%u", gbinder_ipc_name(ipc), id);
         looper->handler.f = &handler_functions;
         looper->ipc = ipc;
@@ -877,11 +877,13 @@ gbinder_ipc_looper_new(
             looper)) {
             /* gbinder_ipc_looper_thread() will release this reference: */
             gbinder_ipc_looper_ref(looper);
+            g_mutex_unlock(&looper->mutex);
             GDEBUG("Starting looper %s", looper->name);
             return looper;
         } else {
             GERR("Failed to create looper thread %s", looper->name);
         }
+        g_mutex_unlock(&looper->mutex);
         gbinder_ipc_looper_unref(looper);
     } else {
         GERR("Failed to create looper pipe: %s", strerror(errno));
