@@ -1,3 +1,13 @@
+libgbinder (1.1.11) unstable; urgency=low
+
+  * Fix potential deadlock in gbinder_ipc_looper_free()
+  * Fix occasional crashes in pthread_setname_np()
+  * Fix unit tests on some musl-based systems
+  * Make unit tests comptible with glib < 2.36
+  * Bump libglibutil requirement for debian build
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 02 Sep 2021 12:32:39 +0300
+
 libgbinder (1.1.10) unstable; urgency=low
 
   * Release dead binder nodes
