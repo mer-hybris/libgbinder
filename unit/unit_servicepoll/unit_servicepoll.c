@@ -201,6 +201,12 @@ gbinder_servicemanager_aidl2_get_type()
 }
 
 GType
+gbinder_servicemanager_aidl3_get_type()
+{
+    return TEST_TYPE_SERVICEMANAGER;
+}
+
+GType
 gbinder_servicemanager_hidl_get_type()
 {
     return TEST_TYPE_SERVICEMANAGER;

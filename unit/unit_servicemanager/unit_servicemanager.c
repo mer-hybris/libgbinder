@@ -390,6 +390,13 @@ gbinder_servicemanager_aidl2_get_type()
     return TEST_TYPE_DEFSERVICEMANAGER;
 }
 
+GType
+gbinder_servicemanager_aidl3_get_type()
+{
+    /* Avoid pulling in gbinder_servicemanager_aidl3 object */
+    return TEST_TYPE_DEFSERVICEMANAGER;
+}
+
 /*==========================================================================*
  * null
  *==========================================================================*/

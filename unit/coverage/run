@@ -25,6 +25,7 @@ unit_remote_request \
 unit_servicemanager \
 unit_servicemanager_aidl \
 unit_servicemanager_aidl2 \
+unit_servicemanager_aidl3 \
 unit_servicemanager_hidl \
 unit_servicename \
 unit_servicepoll \

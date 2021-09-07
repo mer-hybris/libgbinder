@@ -55,6 +55,20 @@ typedef struct gbinder_servicemanager_aidl_class {
     G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
     GBinderServiceManagerAidlClass)
 
+#define GBINDER_SERVICEMANAGER_AIDL_GET_CLASS(obj) \
+    G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
+    GBinderServiceManagerAidlClass)
+
+enum gbinder_servicemanager_aidl_calls {
+    GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    CHECK_SERVICE_TRANSACTION,
+    ADD_SERVICE_TRANSACTION,
+    LIST_SERVICES_TRANSACTION
+};
+
+#define DUMP_FLAG_PRIORITY_DEFAULT (0x08)
+#define DUMP_FLAG_PRIORITY_ALL     (0x0f)
+
 #endif /* GBINDER_SERVICEMANAGER_AIDL_H */
 
 /*
@@ -64,3 +78,4 @@ typedef struct gbinder_servicemanager_aidl_class {
  * indent-tabs-mode: nil
  * End:
  */
+
