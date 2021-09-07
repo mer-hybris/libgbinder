@@ -32,10 +32,12 @@
  */
 
 #include "gbinder_servicemanager_aidl.h"
+#include "gbinder_client_p.h"
 #include "gbinder_reader_p.h"
+#include "gbinder_log.h"
 
-#include <gbinder_client.h>
 #include <gbinder_local_request.h>
+#include <gbinder_remote_reply.h>
 
 /* Variant of AIDL servicemanager appeared in Android 11 (API level 30) */
 
@@ -49,18 +51,76 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl3,
 #define PARENT_CLASS gbinder_servicemanager_aidl3_parent_class
 
 static
+GBinderLocalRequest*
+gbinder_servicemanager_aidl3_list_services_req(
+    GBinderClient* client,
+    gint32 index)
+{
+    (void) index;
+    GBinderLocalRequest* req = gbinder_client_new_request(client);
+    // Starting from Android 11, no `index` field is required but
+    // only with `dump priority` field to request to list services.
+    // As a result, a vector of strings which stands for service
+    // list is given in the binder response.
+    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_ALL);
+    return req;
+}
+
+static
 void
 gbinder_servicemanager_aidl3_init(
     GBinderServiceManagerAidl* self)
 {
 }
 
+static
+char**
+gbinder_servicemanager_aidl3_list(
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
+{
+    GPtrArray* list = g_ptr_array_new();
+    GBinderClient* client = manager->client;
+    GBinderServiceManagerAidlClass* klass =
+        GBINDER_SERVICEMANAGER_AIDL_GET_CLASS(manager);
+
+    GBinderLocalRequest* req = klass->list_services_req(client, 0);
+    GBinderRemoteReply* reply = NULL;
+
+    int status;
+    if ((reply = gbinder_client_transact_sync_reply2(client,
+        LIST_SERVICES_TRANSACTION, req, &status, api)) != NULL) {
+
+        GBinderReader reader;
+        gbinder_remote_reply_init_reader(reply, &reader);
+        /* Read status */
+        GVERIFY(gbinder_reader_read_int32(&reader, &status));
+        /* Read size */
+        int srv_size = 0;
+        GVERIFY(gbinder_reader_read_int32(&reader, &srv_size));
+        /* Iterate each service name */
+        for (int i = 0; i < srv_size; i++) {
+            char* service = gbinder_reader_read_string16(&reader);
+            if (service) {
+                g_ptr_array_add(list, service);
+            }
+        }
+        gbinder_remote_reply_unref(reply);
+    }
+
+    gbinder_local_request_unref(req);
+    g_ptr_array_add(list, NULL);
+    return (char**)g_ptr_array_free(list, FALSE);
+}
 
 static
 void
 gbinder_servicemanager_aidl3_class_init(
     GBinderServiceManagerAidl3Class* cls)
 {
+    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(cls);
+    cls->list_services_req = gbinder_servicemanager_aidl3_list_services_req;
+    manager->list = gbinder_servicemanager_aidl3_list;
 }
 
 /*
