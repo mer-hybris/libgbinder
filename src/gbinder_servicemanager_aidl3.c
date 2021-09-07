@@ -39,6 +39,13 @@
 #include <gbinder_local_request.h>
 #include <gbinder_remote_reply.h>
 
+enum gbinder_stability_level {
+    UNDECLARED = 0,
+    VENDOR = 0b000011,
+    SYSTEM = 0b001100,
+    VINTF = 0b111111,
+};
+
 /* Variant of AIDL servicemanager appeared in Android 11 (API level 30) */
 
 typedef GBinderServiceManagerAidl GBinderServiceManagerAidl3;
@@ -63,6 +70,25 @@ gbinder_servicemanager_aidl3_list_services_req(
     // As a result, a vector of strings which stands for service
     // list is given in the binder response.
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_ALL);
+    return req;
+}
+
+static
+GBinderLocalRequest*
+gbinder_servicemanager_aidl3_add_service_req(
+    GBinderClient* client,
+    const char* name,
+    GBinderLocalObject* obj)
+{
+    GBinderLocalRequest* req = gbinder_client_new_request(client);
+
+    gbinder_local_request_append_string16(req, name);
+    gbinder_local_request_append_local_object(req, obj);
+    // Starting from Android 11, to add a service, Android framework requires
+    // an additional field `stability` when reading a strong binder.
+    gbinder_local_request_append_int32(req, SYSTEM);
+    gbinder_local_request_append_int32(req, 0);
+    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
     return req;
 }
 
@@ -120,6 +146,7 @@ gbinder_servicemanager_aidl3_class_init(
 {
     GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(cls);
     cls->list_services_req = gbinder_servicemanager_aidl3_list_services_req;
+    cls->add_service_req = gbinder_servicemanager_aidl3_add_service_req;
     manager->list = gbinder_servicemanager_aidl3_list;
 }
 
