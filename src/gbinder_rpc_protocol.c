@@ -40,6 +40,9 @@
 #define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
 #define UNSET_WORK_SOURCE (-1)
 
+#define BINDER_VND_HEADER GBINDER_FOURCC('V', 'N', 'D', 'R')
+#define BINDER_SYS_HEADER GBINDER_FOURCC('S', 'Y', 'S', 'T')
+
 /*==========================================================================*
  * GBinderIpcProtocol callbacks (see Parcel::writeInterfaceToken in Android)
  * Note that there are two slightly different kinds of Parcels:
@@ -174,6 +177,50 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl2 = {
 };
 
 /*==========================================================================*
+ * AIDL protocol appeared in Android 11 (API level 30)
+ *==========================================================================*/
+
+static
+void
+gbinder_rpc_protocol_aidl3_write_rpc_header(
+    GBinderWriter* writer,
+    const char* iface)
+{
+    gbinder_writer_append_int32(writer, BINDER_RPC_FLAGS);
+    gbinder_writer_append_int32(writer, UNSET_WORK_SOURCE);
+    gbinder_writer_append_int32(writer, BINDER_SYS_HEADER);
+    gbinder_writer_append_string16(writer, iface);
+}
+
+static
+const char*
+gbinder_rpc_protocol_aidl3_read_rpc_header(
+    GBinderReader* reader,
+    guint32 txcode,
+    char** iface)
+{
+    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+        *iface = NULL;
+    } else if (gbinder_reader_read_int32(reader, NULL) /* flags */ &&
+        gbinder_reader_read_int32(reader, NULL) /* work source */ &&
+        gbinder_reader_read_int32(reader, NULL) /* sys header */) {
+        *iface = gbinder_reader_read_string16(reader);
+    } else {
+        *iface = NULL;
+    }
+
+    return *iface;
+}
+
+static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
+    .name = "aidl3",
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
+    .write_rpc_header = gbinder_rpc_protocol_aidl3_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header
+};
+
+/*==========================================================================*
  * The original /dev/hwbinder protocol.
  *==========================================================================*/
 
@@ -225,6 +272,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_hidl = {
 static const GBinderRpcProtocol* gbinder_rpc_protocol_list[] = {
     &gbinder_rpc_protocol_aidl,
     &gbinder_rpc_protocol_aidl2,
+    &gbinder_rpc_protocol_aidl3,
     &gbinder_rpc_protocol_hidl
 };
 
