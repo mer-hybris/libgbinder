@@ -8,4 +8,5 @@ all:
 	@$(MAKE) -C binder-list $*
 	@$(MAKE) -C binder-ping $*
 	@$(MAKE) -C binder-service $*
+	@$(MAKE) -C binder-call $*
 	@$(MAKE) -C rild-card-status $*

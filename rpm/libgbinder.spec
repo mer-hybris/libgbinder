@@ -11,6 +11,8 @@ Source: %{name}-%{version}.tar.bz2
 
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
+BuildRequires: bison
+BuildRequires: flex
 Requires: libglibutil >= %{libglibutil_version}
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
@@ -34,6 +36,7 @@ make %{_smp_mflags} LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
 make -C test/binder-bridge KEEP_SYMBOLS=1 release
 make -C test/binder-list KEEP_SYMBOLS=1 release
 make -C test/binder-ping KEEP_SYMBOLS=1 release
+make -C test/binder-call KEEP_SYMBOLS=1 release
 
 %install
 rm -rf %{buildroot}
@@ -41,6 +44,7 @@ make LIBDIR=%{_libdir} DESTDIR=%{buildroot} install-dev
 make -C test/binder-bridge DESTDIR=%{buildroot} install
 make -C test/binder-list DESTDIR=%{buildroot} install
 make -C test/binder-ping DESTDIR=%{buildroot} install
+make -C test/binder-call DESTDIR=%{buildroot} install
 
 %check
 make -C unit test
@@ -73,3 +77,4 @@ Binder command line utilities
 %{_bindir}/binder-bridge
 %{_bindir}/binder-list
 %{_bindir}/binder-ping
+%{_bindir}/binder-call
