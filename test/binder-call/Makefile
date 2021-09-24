@@ -1,6 +1,6 @@
 # -*- Mode: makefile-gmake -*-
 
-.PHONY: all debug release clean cleaner
+.PHONY: all debug release install clean cleaner
 .PHONY: libgbinder-release libgbinder-debug
 
 #
@@ -57,10 +57,7 @@ QUIET_MAKE = make --no-print-directory
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =
 
-ifndef KEEP_SYMBOLS
-KEEP_SYMBOLS = 0
-endif
-
+KEEP_SYMBOLS ?= 0
 ifneq ($(KEEP_SYMBOLS),0)
 RELEASE_FLAGS += -g
 SUBMAKE_OPTS += KEEP_SYMBOLS=1
@@ -75,10 +72,13 @@ RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -O2
 # Files
 #
 
-DEBUG_OBJS = $(GEN_SRC:%.c=$(DEBUG_BUILD_DIR)/%.o) \
-	$(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
-RELEASE_OBJS = $(GEN_SRC:%.c=$(RELEASE_BUILD_DIR)/%.o) \
-	$(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
+DEBUG_OBJS = \
+  $(GEN_SRC:%.c=$(DEBUG_BUILD_DIR)/%.o) \
+  $(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
+RELEASE_OBJS = \
+  $(GEN_SRC:%.c=$(RELEASE_BUILD_DIR)/%.o) \
+  $(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
+
 DEBUG_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_so)
 RELEASE_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_so)
 DEBUG_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_link)
@@ -158,10 +158,10 @@ ifeq ($(KEEP_SYMBOLS),0)
 endif
 
 libgbinder-debug:
-	@make $(SUBMAKE_OPTS) -C $(LIB_DIR) $(DEBUG_SO_FILE) $(DEBUG_LINK_FILE)
+	@$(MAKE) $(SUBMAKE_OPTS) -C $(LIB_DIR) $(DEBUG_SO_FILE) $(DEBUG_LINK_FILE)
 
 libgbinder-release:
-	@make $(SUBMAKE_OPTS) -C $(LIB_DIR) $(RELEASE_SO_FILE) $(RELEASE_LINK_FILE)
+	@$(MAKE) $(SUBMAKE_OPTS) -C $(LIB_DIR) $(RELEASE_SO_FILE) $(RELEASE_LINK_FILE)
 
 #
 # Install

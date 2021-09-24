@@ -14,14 +14,11 @@ UTF16_SUFFIX   [uU]
 HSTRING_SUFFIX [hH]
 
 %{
-#include <stdio.h>
 #include <glib.h>
 #include "cmdline.tab.h"
-
 #include "binder-call.h"
-#define YY_NO_INPUT
+
 #define YY_SKIP_YYWRAP
-#define YY_NO_UNPUT
 int cmdlinewrap(App* app);
 #undef yywrap
 #define yywrap() cmdlinewrap( (App*) args )
@@ -40,6 +37,8 @@ char* handle_str8(char* text) {
 }
 
 %}
+
+%option never-interactive noinput nounput
 
 %%
 "i8"                                { return(INT8); }

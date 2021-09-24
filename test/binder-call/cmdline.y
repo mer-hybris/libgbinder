@@ -63,7 +63,6 @@ struct type_info* handle_type_struct(App* app, GList* l);
 %type <value> value_specifiers
 %type <trans_and_reply> translation_unit
 
-
 %type <value_list> values_list
 %type <type_list> specifiers_list
 
@@ -72,8 +71,6 @@ struct type_info* handle_type_struct(App* app, GList* l);
 %type <type> vec_specifier
 %type <type> struct_specifier
 %type <struct_type_list> struct_declaration_list
-
-//%type <value> values
 
 %token REPLY
 
