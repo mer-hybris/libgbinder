@@ -1,3 +1,9 @@
+libgbinder (1.1.12) unstable; urgency=low
+
+  * Added binder-call test tool
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 24 Sep 2021 16:46:05 +0300
+
 libgbinder (1.1.11) unstable; urgency=low
 
   * Fix potential deadlock in gbinder_ipc_looper_free()
