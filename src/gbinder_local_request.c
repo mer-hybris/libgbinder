@@ -338,6 +338,34 @@ gbinder_local_request_append_remote_object(
     return self;
 }
 
+gsize
+gbinder_local_request_size(
+    GBinderLocalRequest* self) /* Since 1.1.14 */
+{
+    return G_LIKELY(self) ? self->data.bytes->len : 0;
+}
+
+guint32
+gbinder_local_request_replace_int32(
+    GBinderLocalRequest* self,
+    gsize offset,
+    guint32 value) /* Since 1.1.14 */
+{
+    guint32 result = 0;
+
+    if (G_LIKELY(self)) {
+        GByteArray* buf = self->data.bytes;
+
+        if (offset + sizeof(value) <= buf->len) {
+            guint32* ptr = (guint32*)(buf->data + offset);
+
+            result = *ptr;
+            *ptr = value;
+        }
+    }
+    return result;
+}
+
 /*
  * Local Variables:
  * mode: C

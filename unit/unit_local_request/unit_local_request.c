@@ -94,7 +94,9 @@ test_null(
 
     g_assert(!gbinder_local_request_new(NULL, NULL));
     g_assert(!gbinder_local_request_ref(NULL));
+    g_assert(!gbinder_local_request_new_iface(NULL, NULL, NULL));
     g_assert(!gbinder_local_request_new_from_data(NULL, NULL));
+    g_assert(!gbinder_local_request_size(NULL));
     gbinder_local_request_unref(NULL);
     gbinder_local_request_init_writer(NULL, NULL);
     gbinder_local_request_init_writer(NULL, &writer);
@@ -102,6 +104,7 @@ test_null(
     gbinder_local_request_cleanup(NULL, test_int_inc, &count);
     g_assert(count == 1);
 
+    gbinder_local_request_append_contents(NULL, NULL, 0, NULL);
     g_assert(!gbinder_local_request_data(NULL));
     g_assert(!gbinder_local_request_append_bool(NULL, FALSE));
     g_assert(!gbinder_local_request_append_int32(NULL, 0));
@@ -114,6 +117,7 @@ test_null(
     g_assert(!gbinder_local_request_append_hidl_string_vec(NULL, NULL, 0));
     g_assert(!gbinder_local_request_append_local_object(NULL, NULL));
     g_assert(!gbinder_local_request_append_remote_object(NULL, NULL));
+    g_assert(!gbinder_local_request_replace_int32(NULL, 0, 1));
 }
 
 /*==========================================================================*
@@ -146,8 +150,9 @@ void
 test_init_data(
     void)
 {
-    const guint8 init_data[] = { 0x01, 0x02, 0x03, 0x04 };
-    GBytes* init_bytes = g_bytes_new_static(init_data, sizeof(init_data));
+    static const guint32 v1 = 0x01020304;
+    const guint32 v2 = 0x05060708;
+    GBytes* init_bytes = g_bytes_new_static(&v1, sizeof(v1));
     GBinderLocalRequest* req = gbinder_local_request_new
         (&gbinder_io_32, init_bytes);
     GBinderOutputData* data;
@@ -155,8 +160,17 @@ test_init_data(
     data = gbinder_local_request_data(req);
     g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
-    g_assert(data->bytes->len == sizeof(init_data));
-    g_assert(!memcmp(data->bytes->data, init_data, data->bytes->len));
+    g_assert_cmpuint(gbinder_local_request_size(req), == ,sizeof(v1));
+    g_assert_cmpuint(data->bytes->len, == ,sizeof(v1));
+    g_assert(!memcmp(data->bytes->data, &v1, data->bytes->len));
+
+    g_assert_cmpuint(gbinder_local_request_replace_int32(req, 0, v2), == ,v1);
+    g_assert_cmpuint(data->bytes->len, == ,sizeof(v2));
+    g_assert(!memcmp(data->bytes->data, &v2, data->bytes->len));
+
+    /* Out of bounds */
+    g_assert_cmpuint(gbinder_local_request_replace_int32(req, 1, v2), == ,0);
+
     g_assert(gbinder_local_request_ref(req) == req);
     gbinder_local_request_unref(req);
     gbinder_local_request_unref(req);
