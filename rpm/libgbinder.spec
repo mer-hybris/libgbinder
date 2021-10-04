@@ -37,6 +37,7 @@ make -C test/binder-bridge KEEP_SYMBOLS=1 release
 make -C test/binder-list KEEP_SYMBOLS=1 release
 make -C test/binder-ping KEEP_SYMBOLS=1 release
 make -C test/binder-call KEEP_SYMBOLS=1 release
+make -C test/binder-add KEEP_SYMBOLS=1 release
 
 %install
 rm -rf %{buildroot}
@@ -45,6 +46,7 @@ make -C test/binder-bridge DESTDIR=%{buildroot} install
 make -C test/binder-list DESTDIR=%{buildroot} install
 make -C test/binder-ping DESTDIR=%{buildroot} install
 make -C test/binder-call DESTDIR=%{buildroot} install
+make -C test/binder-add DESTDIR=%{buildroot} install
 
 %check
 make -C unit test
@@ -78,3 +80,4 @@ Binder command line utilities
 %{_bindir}/binder-list
 %{_bindir}/binder-ping
 %{_bindir}/binder-call
+%{_bindir}/binder-add
