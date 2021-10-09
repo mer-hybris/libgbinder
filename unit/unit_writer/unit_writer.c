@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -107,6 +107,8 @@ test_null(
     g_assert(!gbinder_writer_malloc0(NULL, 0));
     g_assert(!gbinder_writer_memdup(&writer, NULL, 0));
     g_assert(!gbinder_writer_memdup(NULL, &writer, 0));
+    g_assert(!gbinder_writer_strdup(&writer, NULL));
+    g_assert(!gbinder_writer_strdup(NULL, ""));
 }
 
 /*==========================================================================*
@@ -128,20 +130,24 @@ test_cleanup(
 {
     GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
     GBinderWriter writer;
+    const int value = 42;
+    const char* str = "foo";
     int cleanup_count = 0;
-    int value = 42;
     int* zero;
     int* copy;
+    char* scopy;
 
     gbinder_local_request_init_writer(req, &writer);
     zero = gbinder_writer_new0(&writer, int);
     copy = gbinder_writer_memdup(&writer, &value, sizeof(value));
-    g_assert(*zero == 0);
-    g_assert(*copy == value);
+    scopy = gbinder_writer_strdup(&writer, str);
+    g_assert_cmpint(*zero, == ,0);
+    g_assert_cmpint(*copy, == ,value);
+    g_assert_cmpstr(scopy, == ,str);
     gbinder_writer_add_cleanup(&writer, test_cleanup_fn, &cleanup_count);
     gbinder_writer_add_cleanup(&writer, test_cleanup_fn, &cleanup_count);
     gbinder_local_request_unref(req);
-    g_assert(cleanup_count == 2);
+    g_assert_cmpint(cleanup_count, == ,2);
 }
 
 /*==========================================================================*

@@ -995,6 +995,14 @@ gbinder_writer_malloc0(
     return gbinder_writer_alloc(self, size, g_malloc0, g_free);
 }
 
+char*
+gbinder_writer_strdup(
+    GBinderWriter* writer,
+    const char* str) /* since 1.1.13 */
+{
+    return str ? gbinder_writer_memdup(writer, str, strlen(str) + 1) : NULL;
+}
+
 void*
 gbinder_writer_memdup(
     GBinderWriter* self,

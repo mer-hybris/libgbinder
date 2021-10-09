@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -176,6 +176,8 @@ gbinder_writer_append_byte_array(
     const void* byte_array,
     gint32 len); /* since 1.0.12 */
 
+/* Note: memory allocated by GBinderWriter is owned by GBinderWriter */
+
 void*
 gbinder_writer_malloc(
     GBinderWriter* writer,
@@ -192,17 +194,22 @@ gbinder_writer_malloc0(
 #define gbinder_writer_new0(writer,type) \
     ((type*) gbinder_writer_malloc0(writer, sizeof(type)))
 
+void
+gbinder_writer_add_cleanup(
+    GBinderWriter* writer,
+    GDestroyNotify destroy,
+    gpointer data); /* since 1.0.19 */
+
 void*
 gbinder_writer_memdup(
     GBinderWriter* writer,
     const void* buf,
     gsize size); /* since 1.0.19 */
 
-void
-gbinder_writer_add_cleanup(
+char*
+gbinder_writer_strdup(
     GBinderWriter* writer,
-    GDestroyNotify destroy,
-    gpointer data); /* since 1.0.19 */
+    const char* str); /* since 1.1.13 */
 
 G_END_DECLS
 
