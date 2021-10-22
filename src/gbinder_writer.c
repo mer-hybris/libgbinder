@@ -701,6 +701,21 @@ gbinder_writer_append_hidl_string(
 }
 
 void
+gbinder_writer_append_hidl_string_copy(
+    GBinderWriter* self,
+    const char* str) /* Since 1.1.13 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        static const char empty[] = "";
+
+        gbinder_writer_data_append_hidl_string(data, str ? (str[0] ?
+            gbinder_writer_strdup(self, str) : empty) : NULL);
+    }
+}
+
+void
 gbinder_writer_data_append_hidl_vec(
     GBinderWriterData* data,
     const void* base,

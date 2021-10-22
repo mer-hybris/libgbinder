@@ -84,6 +84,7 @@ test_null(
     gbinder_writer_append_bytes(&writer, NULL, 0);
     gbinder_writer_append_hidl_vec(NULL, NULL, 0, 0);
     gbinder_writer_append_hidl_string(NULL, NULL);
+    gbinder_writer_append_hidl_string_copy(NULL, NULL);
     gbinder_writer_append_hidl_string(&writer, NULL);
     gbinder_writer_append_hidl_string_vec(NULL, NULL, 0);
     gbinder_writer_append_hidl_string_vec(&writer, NULL, 0);
@@ -179,11 +180,11 @@ test_int32(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == sizeof(value2));
     g_assert(!memcmp(data->bytes->data, &value2, data->bytes->len));
-    
+
     // test overlap over the end of the buffer
     gbinder_writer_overwrite_int32(&writer, 2, value2);
     g_assert(data->bytes->len == sizeof(value2));
-    
+
     gbinder_local_request_unref(req);
 }
 
@@ -557,12 +558,18 @@ static const TestHidlStringData test_hidl_string_tests[] = {
     { "32/null", &gbinder_io_32, NULL,
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
       sizeof(GBinderHidlString) },
+    { "32/empty", &gbinder_io_32, "",
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
+      sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "32/xxx", &gbinder_io_32, "xxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
       sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "64/null", &gbinder_io_64, NULL,
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
       sizeof(GBinderHidlString) },
+    { "64/empty", &gbinder_io_64, "",
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
+      sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "64/xxxxxxx", &gbinder_io_64, "xxxxxxx",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
       sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ }
@@ -570,10 +577,10 @@ static const TestHidlStringData test_hidl_string_tests[] = {
 
 static
 void
-test_hidl_string(
-    gconstpointer test_data)
+test_hidl_string_xxx(
+    const TestHidlStringData* test,
+    void (*append)(GBinderWriter* writer, const char* str))
 {
-    const TestHidlStringData* test = test_data;
     GBinderLocalRequest* req = gbinder_local_request_new(test->io, NULL);
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -581,7 +588,7 @@ test_hidl_string(
     guint i;
 
     gbinder_local_request_init_writer(req, &writer);
-    gbinder_writer_append_hidl_string(&writer, test->str);
+    append(&writer, test->str);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
@@ -591,6 +598,22 @@ test_hidl_string(
     }
     g_assert(gbinder_output_data_buffers_size(data) == test->buffers_size);
     gbinder_local_request_unref(req);
+}
+
+static
+void
+test_hidl_string(
+    gconstpointer test_data)
+{
+    test_hidl_string_xxx(test_data, gbinder_writer_append_hidl_string);
+}
+
+static
+void
+test_hidl_string_copy(
+    gconstpointer test_data)
+{
+    test_hidl_string_xxx(test_data, gbinder_writer_append_hidl_string_copy);
 }
 
 static
@@ -959,7 +982,7 @@ test_bytes_written(
     g_assert(gbinder_writer_bytes_written(&writer) == 0);
     gbinder_writer_append_int32(&writer, value);
     g_assert(gbinder_writer_bytes_written(&writer) == sizeof(value));
-    
+
     gbinder_local_request_unref(req);
 }
 /*==========================================================================*
@@ -1012,9 +1035,12 @@ int main(int argc, char* argv[])
     for (i = 0; i < G_N_ELEMENTS(test_hidl_string_tests); i++) {
         const TestHidlStringData* test = test_hidl_string_tests + i;
         char* path = g_strconcat(TEST_("hidl_string/"), test->name, NULL);
+        char* path2 = g_strconcat(TEST_("hidl_string_copy/"), test->name, NULL);
 
         g_test_add_data_func(path, test, test_hidl_string);
+        g_test_add_data_func(path2, test, test_hidl_string_copy);
         g_free(path);
+        g_free(path2);
     }
 
     for (i = 0; i < G_N_ELEMENTS(test_hidl_string_vec_tests); i++) {
