@@ -155,30 +155,6 @@ gbinder_writer_data_record_offset(
     gutil_int_array_append(data->offsets, offset);
 }
 
-static
-void
-gbinder_writer_data_write_buffer_object(
-    GBinderWriterData* data,
-    const void* ptr,
-    gsize size,
-    const GBinderParent* parent)
-{
-    GByteArray* buf = data->bytes;
-    const guint offset = buf->len;
-    guint n;
-
-    /* Preallocate enough space */
-    g_byte_array_set_size(buf, offset + GBINDER_MAX_BUFFER_OBJECT_SIZE);
-    /* Write the object */
-    n = data->io->encode_buffer_object(buf->data + offset, ptr, size, parent);
-    /* Fix the data size */
-    g_byte_array_set_size(buf, offset + n);
-    /* Record the offset */
-    gbinder_writer_data_record_offset(data, offset);
-    /* The driver seems to require each buffer to be 8-byte aligned */
-    data->buffers_size += G_ALIGN8(size);
-}
-
 void
 gbinder_writer_init(
     GBinderWriter* self,
@@ -582,17 +558,6 @@ gbinder_writer_append_bytes(
 }
 
 static
-guint
-gbinder_writer_data_prepare(
-    GBinderWriterData* data)
-{
-    if (!data->offsets) {
-        data->offsets = gutil_int_array_new();
-    }
-    return data->offsets->count;
-}
-
-static
 void
 gbinder_writer_data_close_fd(
     gpointer data)
@@ -682,9 +647,21 @@ gbinder_writer_data_append_buffer_object(
     gsize size,
     const GBinderParent* parent)
 {
-    guint index = gbinder_writer_data_prepare(data);
+    const guint index = data->offsets ? data->offsets->count : 0;
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
+    guint n;
 
-    gbinder_writer_data_write_buffer_object(data, ptr, size, parent);
+    /* Preallocate enough space */
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BUFFER_OBJECT_SIZE);
+    /* Write the object */
+    n = data->io->encode_buffer_object(buf->data + offset, ptr, size, parent);
+    /* Fix the data size */
+    g_byte_array_set_size(buf, offset + n);
+    /* Record the offset */
+    gbinder_writer_data_record_offset(data, offset);
+    /* The driver seems to require each buffer to be 8-byte aligned */
+    data->buffers_size += G_ALIGN8(size);
     return index;
 }
 
@@ -727,10 +704,6 @@ gbinder_writer_data_append_hidl_vec(
     const gsize total = count * elemsize;
     void* buf = gutil_memdup(base, total);
 
-    /* Prepare parent descriptor for the string data */
-    vec_parent.index = gbinder_writer_data_prepare(data);
-    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
-
     /* Fill in the vector descriptor */
     if (buf) {
         vec->data.ptr = buf;
@@ -741,8 +714,10 @@ gbinder_writer_data_append_hidl_vec(
     data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec);
 
     /* Every vector, even the one without data, requires two buffer objects */
-    gbinder_writer_data_write_buffer_object(data, vec, sizeof(*vec), NULL);
-    gbinder_writer_data_write_buffer_object(data, buf, total, &vec_parent);
+    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
+    vec_parent.index = gbinder_writer_data_append_buffer_object(data,
+        vec, sizeof(*vec), NULL);
+    gbinder_writer_data_append_buffer_object(data, buf, total, &vec_parent);
 }
 
 void
@@ -768,10 +743,6 @@ gbinder_writer_data_append_hidl_string(
     GBinderHidlString* hidl_string = g_new0(GBinderHidlString, 1);
     const gsize len = str ? strlen(str) : 0;
 
-    /* Prepare parent descriptor for the string data */
-    str_parent.index = gbinder_writer_data_prepare(data);
-    str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
-
     /* Fill in the string descriptor and store it */
     hidl_string->data.str = str;
     hidl_string->len = len;
@@ -779,17 +750,18 @@ gbinder_writer_data_append_hidl_string(
     data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, hidl_string);
 
     /* Write the buffer object pointing to the string descriptor */
-    gbinder_writer_data_write_buffer_object(data, hidl_string,
-        sizeof(*hidl_string), NULL);
+    str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
+    str_parent.index = gbinder_writer_data_append_buffer_object(data,
+        hidl_string, sizeof(*hidl_string), NULL);
 
     if (str) {
         /* Write the buffer pointing to the string data including the
          * NULL terminator, referencing string descriptor as a parent. */
-        gbinder_writer_data_write_buffer_object(data, str, len+1, &str_parent);
+        gbinder_writer_data_append_buffer_object(data, str, len+1, &str_parent);
         GVERBOSE_("\"%s\" %u %u %u", str, (guint)len, (guint)str_parent.index,
             (guint)data->buffers_size);
     } else {
-        gbinder_writer_data_write_buffer_object(data, NULL, 0, &str_parent);
+        gbinder_writer_data_append_buffer_object(data, NULL, 0, &str_parent);
     }
 }
 
@@ -822,10 +794,6 @@ gbinder_writer_data_append_hidl_string_vec(
         count = gutil_strv_length((char**)strv);
     }
 
-    /* Prepare parent descriptor for the vector data */
-    vec_parent.index = gbinder_writer_data_prepare(data);
-    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
-
     /* Fill in the vector descriptor */
     if (count > 0) {
         strings = g_new0(GBinderHidlString, count);
@@ -848,7 +816,10 @@ gbinder_writer_data_append_hidl_string_vec(
     }
 
     /* Write the vector object */
-    gbinder_writer_data_write_buffer_object(data, vec, sizeof(*vec), NULL);
+    vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
+    vec_parent.index = gbinder_writer_data_append_buffer_object(data,
+        vec, sizeof(*vec), NULL);
+
     if (strings) {
         GBinderParent str_parent;
 
@@ -857,7 +828,7 @@ gbinder_writer_data_append_hidl_string_vec(
         str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
 
         /* Write the vector data (it's parent for the string data) */
-        gbinder_writer_data_write_buffer_object(data, strings,
+        gbinder_writer_data_append_buffer_object(data, strings,
             sizeof(*strings) * count, &vec_parent);
 
         /* Write the string data */
@@ -865,7 +836,7 @@ gbinder_writer_data_append_hidl_string_vec(
             GBinderHidlString* hidl_str = strings + i;
 
             if (hidl_str->data.str) {
-                gbinder_writer_data_write_buffer_object(data,
+                gbinder_writer_data_append_buffer_object(data,
                     hidl_str->data.str, hidl_str->len + 1, &str_parent);
                 GVERBOSE_("%d. \"%s\" %u %u %u", i + 1, hidl_str->data.str,
                     (guint)hidl_str->len, (guint)str_parent.index,
@@ -873,13 +844,13 @@ gbinder_writer_data_append_hidl_string_vec(
             } else {
                 GVERBOSE_("%d. NULL %u %u %u", i + 1, (guint)hidl_str->len,
                     (guint)str_parent.index, (guint)data->buffers_size);
-                gbinder_writer_data_write_buffer_object(data, NULL, 0,
+                gbinder_writer_data_append_buffer_object(data, NULL, 0,
                     &str_parent);
             }
             str_parent.offset += sizeof(GBinderHidlString);
         }
     } else {
-        gbinder_writer_data_write_buffer_object(data, NULL, 0, &vec_parent);
+        gbinder_writer_data_append_buffer_object(data, NULL, 0, &vec_parent);
     }
 }
 
