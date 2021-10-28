@@ -1,3 +1,11 @@
+libgbinder (1.1.13) unstable; urgency=low
+
+  * Added gbinder_writer_strdup()
+  * Added gbinder_writer_append_hidl_string_copy()
+  * Dropped pkgconfig requirement for devel package
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 28 Oct 2021 14:31:01 +0300
+
 libgbinder (1.1.12) unstable; urgency=low
 
   * Added binder-call test tool
