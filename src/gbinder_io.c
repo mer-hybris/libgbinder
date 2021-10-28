@@ -215,6 +215,23 @@ GBINDER_IO_FN(encode_fd_object)(
     return sizeof(*dest);
 }
 
+static
+guint
+GBINDER_IO_FN(encode_fda_object)(
+    void* out,
+    const GBinderFds *fds,
+    const GBinderParent* parent)
+{
+    struct binder_fd_array_object* dest = out;
+
+    memset(dest, 0, sizeof(*dest));
+    dest->hdr.type = BINDER_TYPE_FDA;
+    dest->num_fds = fds->num_fds;
+    dest->parent = parent->index;
+    dest->parent_offset = parent->offset;
+    return sizeof(*dest);
+}
+
 /* Encodes binder_buffer_object */
 static
 guint
@@ -637,6 +654,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .encode_local_object = GBINDER_IO_FN(encode_local_object),
     .encode_remote_object = GBINDER_IO_FN(encode_remote_object),
     .encode_fd_object = GBINDER_IO_FN(encode_fd_object),
+    .encode_fda_object = GBINDER_IO_FN(encode_fda_object),
     .encode_buffer_object = GBINDER_IO_FN(encode_buffer_object),
     .encode_handle_cookie = GBINDER_IO_FN(encode_handle_cookie),
     .encode_ptr_cookie = GBINDER_IO_FN(encode_ptr_cookie),

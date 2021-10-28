@@ -32,6 +32,7 @@
 
 #include "gbinder_writer_p.h"
 #include "gbinder_buffer_p.h"
+#include "gbinder_fmq_p.h"
 #include "gbinder_local_object.h"
 #include "gbinder_object_converter.h"
 #include "gbinder_io.h"
@@ -610,6 +611,53 @@ gbinder_writer_append_fd(
     }
 }
 
+void
+gbinder_writer_data_append_fda_object(
+    GBinderWriterData* data,
+    const GBinderFds *fds,
+    const GBinderParent* parent)
+{
+    GByteArray* buf = data->bytes;
+    const guint offset = buf->len;
+    guint written;
+
+    /* Preallocate enough space */
+    g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
+
+    written = data->io->encode_fda_object(buf->data + offset, fds, parent);
+
+    /* Fix the data size */
+    g_byte_array_set_size(buf, offset + written);
+    /* Record the offset */
+    gbinder_writer_data_record_offset(data, offset);
+}
+
+void
+gbinder_writer_data_append_fds(
+    GBinderWriterData* data,
+    const GBinderFds *fds,
+    const GBinderParent* parent)
+{
+    /* If the pointer is null only write zero size */
+    if (!fds) {
+        gbinder_writer_data_append_int64(data, 0);
+        return;
+    }
+
+    /* Write the fds information: size, fds data buffer and fd_array_object */
+    const gsize fds_total = sizeof(GBinderFds) +
+        sizeof(int) * (fds->num_fds + fds->num_ints);
+    GBinderParent fds_parent;
+
+    gbinder_writer_data_append_int64(data, fds_total);
+
+    fds_parent.index = gbinder_writer_data_append_buffer_object(data,
+        fds, fds_total, parent);
+    fds_parent.offset = sizeof(GBinderFds);
+
+    gbinder_writer_data_append_fda_object(data, fds, &fds_parent);
+}
+
 guint
 gbinder_writer_append_buffer_object_with_parent(
     GBinderWriter* self,
@@ -923,6 +971,61 @@ gbinder_writer_append_byte_array(
         } else {
             *((gint32*)ptr) = -1;
         }
+    }
+}
+
+void
+gbinder_writer_data_append_fmq_descriptor(
+    GBinderWriterData* data,
+    const GBinderFmq* queue)
+{
+    GBinderParent parent;
+    GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);
+    GBinderMQDescriptor* mqdesc = gutil_memdup(desc,
+        sizeof(GBinderMQDescriptor));
+
+    const gsize vec_total =
+        desc->grantors.count * sizeof(GBinderFmqGrantorDescriptor);
+    void* vec_buf = gutil_memdup(desc->grantors.data.ptr, vec_total);
+
+    const gsize fds_total = sizeof(GBinderFds) +
+        sizeof(int) * (desc->data.fds->num_fds + desc->data.fds->num_ints);
+    GBinderFds* fds = gutil_memdup(desc->data.fds, fds_total);
+    mqdesc->data.fds = fds;
+    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, fds);
+
+    /* Fill in the grantor vector descriptor */
+    if (vec_buf) {
+        mqdesc->grantors.count = desc->grantors.count;
+        mqdesc->grantors.data.ptr = vec_buf;
+        mqdesc->grantors.owns_buffer = TRUE;
+        data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec_buf);
+    }
+    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, mqdesc);
+
+    /* Write the FMQ descriptor object */
+    parent.index = gbinder_writer_data_append_buffer_object(data,
+        mqdesc, sizeof(*mqdesc), NULL);
+
+    /* Write the vector data buffer */
+    parent.offset = GBINDER_MQ_DESCRIPTOR_GRANTORS_OFFSET;
+    gbinder_writer_data_append_buffer_object(data, vec_buf, vec_total,
+        &parent);
+
+    /* Write the fds */
+    parent.offset = GBINDER_MQ_DESCRIPTOR_FDS_OFFSET;
+    gbinder_writer_data_append_fds(data, mqdesc->data.fds, &parent);
+}
+
+void
+gbinder_writer_append_fmq_descriptor(
+    GBinderWriter* self,
+    const GBinderFmq* queue) /* since 1.1.14 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data) && G_LIKELY(queue)) {
+        gbinder_writer_data_append_fmq_descriptor(data, queue);
     }
 }
 
