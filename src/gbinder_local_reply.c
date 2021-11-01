@@ -310,7 +310,7 @@ gbinder_local_reply_append_remote_object(
 GBinderLocalReply*
 gbinder_local_reply_append_fd(
     GBinderLocalReply* self,
-    int fd)
+    int fd) /* Since 1.1.14 */
 {
     if (G_LIKELY(self)) {
         gbinder_writer_data_append_fd(&self->data, fd);
