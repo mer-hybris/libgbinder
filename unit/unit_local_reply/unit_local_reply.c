@@ -106,6 +106,7 @@ test_null(
     g_assert(!gbinder_local_reply_append_hidl_string_vec(NULL, NULL, 0));
     g_assert(!gbinder_local_reply_append_local_object(NULL, NULL));
     g_assert(!gbinder_local_reply_append_remote_object(NULL, NULL));
+    g_assert(!gbinder_local_reply_append_fd(NULL, 0));
 }
 
 /*==========================================================================*
@@ -167,6 +168,31 @@ test_bool(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == sizeof(output_true));
     g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
+    gbinder_local_reply_unref(reply);
+}
+
+/*==========================================================================*
+ * fd
+ *==========================================================================*/
+
+static
+void
+test_fd(
+    void)
+{
+    const gint32 fd = 1;
+    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderOutputData* data;
+    GUtilIntArray* offsets;
+
+    g_assert(gbinder_local_reply_append_fd(reply, fd));
+    data = gbinder_local_reply_data(reply);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert(offsets->count == 1);
+    g_assert(offsets->data[0] == 0);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
 }
 
@@ -511,6 +537,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "cleanup", test_cleanup);
     g_test_add_func(TEST_PREFIX "bool", test_bool);
+    g_test_add_func(TEST_PREFIX "fd", test_fd);
     g_test_add_func(TEST_PREFIX "int32", test_int32);
     g_test_add_func(TEST_PREFIX "int64", test_int64);
     g_test_add_func(TEST_PREFIX "float", test_float);
