@@ -11,6 +11,7 @@ unit_client \
 unit_config \
 unit_driver \
 unit_eventloop \
+unit_fmq \
 unit_ipc \
 unit_local_object \
 unit_local_reply \

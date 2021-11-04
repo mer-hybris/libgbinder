@@ -9,6 +9,7 @@ all:
 	@$(MAKE) -C unit_config $*
 	@$(MAKE) -C unit_driver $*
 	@$(MAKE) -C unit_eventloop $*
+	@$(MAKE) -C unit_fmq $*
 	@$(MAKE) -C unit_ipc $*
 	@$(MAKE) -C unit_local_object $*
 	@$(MAKE) -C unit_local_reply $*
