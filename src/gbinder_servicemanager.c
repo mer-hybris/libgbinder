@@ -699,6 +699,13 @@ gbinder_servicemanager_unref(
     }
 }
 
+const char*
+gbinder_servicemanager_device(
+    GBinderServiceManager* self) /* Since 1.1.14 */
+{
+    return G_LIKELY(self) ? self->dev : NULL;
+}
+
 gboolean
 gbinder_servicemanager_is_present(
     GBinderServiceManager* self) /* Since 1.0.25 */
