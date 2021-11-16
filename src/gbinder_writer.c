@@ -165,12 +165,35 @@ gbinder_writer_init(
     gbinder_writer_cast(self)->data = data;
 }
 
+const void*
+gbinder_writer_get_data(
+    GBinderWriter* self,
+    gsize* size) /* Since 1.1.14 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        GByteArray* buf = data->bytes;
+
+        if (size) {
+            *size = buf->len;
+        }
+        return buf->data;
+    } else {
+        if (size) {
+            *size = 0;
+        }
+        return NULL;
+    }
+}
+
 gsize
 gbinder_writer_bytes_written(
     GBinderWriter* self) /* since 1.0.21 */
 {
     GBinderWriterData* data = gbinder_writer_data(self);
-    return data->bytes->len;
+
+    return G_LIKELY(data) ? data->bytes->len : 0;
 }
 
 void
