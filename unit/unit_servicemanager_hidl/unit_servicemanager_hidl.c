@@ -72,6 +72,13 @@ gbinder_servicemanager_aidl2_get_type()
     return 0;
 }
 
+GType
+gbinder_servicemanager_aidl3_get_type()
+{
+    /* Avoid pulling in gbinder_servicemanager_aidl3 object */
+    return 0;
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/

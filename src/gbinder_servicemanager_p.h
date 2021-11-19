@@ -110,6 +110,7 @@ gbinder_servicemanager_exit(
 
 GType gbinder_servicemanager_aidl_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_aidl2_get_type(void) GBINDER_INTERNAL;
+GType gbinder_servicemanager_aidl3_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_hidl_get_type(void) GBINDER_INTERNAL;
 
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */
