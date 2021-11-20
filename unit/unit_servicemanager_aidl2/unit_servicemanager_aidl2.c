@@ -53,7 +53,8 @@ static const char TMP_DIR_TEMPLATE[] =
 GType
 gbinder_servicemanager_hidl_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_hidl object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_hidl */
+    g_assert_not_reached();
     return 0;
 }
 

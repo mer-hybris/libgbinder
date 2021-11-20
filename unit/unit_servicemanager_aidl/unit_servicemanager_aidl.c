@@ -50,21 +50,24 @@ static TestOpt test_opt;
 GType
 gbinder_servicemanager_hidl_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_hidl object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_hidl */
+    g_assert_not_reached();
     return 0;
 }
 
 GType
 gbinder_servicemanager_aidl2_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl2 object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
+    g_assert_not_reached();
     return 0;
 }
 
 GType
 gbinder_servicemanager_aidl3_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl3 object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
+    g_assert_not_reached();
     return 0;
 }
 

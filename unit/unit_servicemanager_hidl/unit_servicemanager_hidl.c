@@ -61,21 +61,24 @@ typedef struct test_config {
 GType
 gbinder_servicemanager_aidl_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl */
+    g_assert_not_reached();
     return 0;
 }
 
 GType
 gbinder_servicemanager_aidl2_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl2 object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
+    g_assert_not_reached();
     return 0;
 }
 
 GType
 gbinder_servicemanager_aidl3_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl3 object */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
+    g_assert_not_reached();
     return 0;
 }
 

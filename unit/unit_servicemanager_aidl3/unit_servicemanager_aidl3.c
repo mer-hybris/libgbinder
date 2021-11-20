@@ -51,19 +51,20 @@ static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] =
     "gbinder-test-servicemanager_aidl3-XXXXXX";
 
-GType
-gbinder_servicemanager_hidl_get_type()
-{
-    /* Avoid pulling in gbinder_servicemanager_hidl object */
-    return 0;
-}
-
 enum gbinder_stability_level {
     UNDECLARED = 0,
     VENDOR = 0b000011,
     SYSTEM = 0b001100,
-    VINTF = 0b111111,
+    VINTF = 0b111111
 };
+
+GType
+gbinder_servicemanager_hidl_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_hidl */
+    g_assert_not_reached();
+    return 0;
+}
 
 /*==========================================================================*
  * Test service manager

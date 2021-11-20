@@ -386,15 +386,17 @@ gbinder_servicemanager_aidl_get_type()
 GType
 gbinder_servicemanager_aidl2_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl2 object */
-    return TEST_TYPE_DEFSERVICEMANAGER;
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
+    g_assert_not_reached();
+    return 0;
 }
 
 GType
 gbinder_servicemanager_aidl3_get_type()
 {
-    /* Avoid pulling in gbinder_servicemanager_aidl3 object */
-    return TEST_TYPE_DEFSERVICEMANAGER;
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
+    g_assert_not_reached();
+    return 0;
 }
 
 /*==========================================================================*
