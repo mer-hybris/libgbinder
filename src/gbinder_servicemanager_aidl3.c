@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
  * Copyright (C) 2021 Madhushan Nishantha <jlmadushan@gmail.com>
  *
@@ -35,7 +35,6 @@
 #include "gbinder_servicemanager_aidl.h"
 #include "gbinder_client_p.h"
 #include "gbinder_reader_p.h"
-#include "gbinder_log.h"
 
 #include <gbinder_local_request.h>
 #include <gbinder_remote_reply.h>
@@ -55,7 +54,7 @@ enum gbinder_stability_level {
     UNDECLARED = 0,
     VENDOR = 0b000011,
     SYSTEM = 0b001100,
-    VINTF = 0b111111,
+    VINTF = 0b111111
 };
 
 static
@@ -66,19 +65,18 @@ gbinder_servicemanager_aidl3_get_service(
     int* status,
     const GBinderIpcSyncApi* api)
 {
+    GBinderClient* client = self->client;
+    GBinderLocalRequest* req = gbinder_client_new_request(client);
     GBinderRemoteObject* obj;
     GBinderRemoteReply* reply;
-    GBinderLocalRequest* req = gbinder_client_new_request(self->client);
     GBinderReader reader;
-    gint32 stability;
 
     gbinder_local_request_append_string16(req, name);
-    reply = gbinder_client_transact_sync_reply2(self->client,
+    reply = gbinder_client_transact_sync_reply2(client,
         CHECK_SERVICE_TRANSACTION, req, status, api);
 
     gbinder_remote_reply_init_reader(reply, &reader);
-    /* Discard binder stability byte */
-    gbinder_reader_read_int32(&reader, &stability);
+    gbinder_reader_read_int32(&reader, NULL /* stability */);
     obj = gbinder_reader_read_object(&reader);
 
     gbinder_remote_reply_unref(reply);
@@ -97,19 +95,14 @@ gbinder_servicemanager_aidl3_add_service_req(
 
     gbinder_local_request_append_string16(req, name);
     gbinder_local_request_append_local_object(req, obj);
-    /* Starting from Android 11, to add a service, Android framework requires
-     * an additional field `stability` when reading a strong binder. */
+    /*
+     * Starting from Android 11, to add a service, Android framework requires
+     * an additional field `stability` when reading a strong binder.
+     */
     gbinder_local_request_append_int32(req, SYSTEM);
     gbinder_local_request_append_int32(req, 0);
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
     return req;
-}
-
-static
-void
-gbinder_servicemanager_aidl3_init(
-    GBinderServiceManagerAidl* self)
-{
 }
 
 static
@@ -120,34 +113,31 @@ gbinder_servicemanager_aidl3_list(
 {
     GPtrArray* list = g_ptr_array_new();
     GBinderClient* client = manager->client;
-    int status;
     GBinderRemoteReply* reply;
     GBinderLocalRequest* req = gbinder_client_new_request(client);
 
-    /* Starting from Android 11, no `index` field is required but
+    /*
+     * Starting from Android 11, no `index` field is required but
      * only with `dump priority` field to request to list services.
      * As a result, a vector of strings which stands for service
-     * list is given in the binder response. */
+     * list is given in the binder response.
+     */
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_ALL);
     reply = gbinder_client_transact_sync_reply2(client,
-        LIST_SERVICES_TRANSACTION, req, &status, api);
+        LIST_SERVICES_TRANSACTION, req, NULL, api);
 
     if (reply) {
-        int i;
-        int srv_size = 0;
         GBinderReader reader;
+        gint32 count;
 
         gbinder_remote_reply_init_reader(reply, &reader);
-        /* Read status */
-        GVERIFY(gbinder_reader_read_int32(&reader, &status));
-        /* Read size */
-        GVERIFY(gbinder_reader_read_int32(&reader, &srv_size));
+        gbinder_reader_read_int32(&reader, NULL /* status */);
+        if (gbinder_reader_read_int32(&reader, &count)) {
+            int i;
 
-        /* Iterate each service name */
-        for (i = 0; i < srv_size; i++) {
-            char* service = gbinder_reader_read_string16(&reader);
-            if (service) {
-                g_ptr_array_add(list, service);
+            /* Iterate each service name */
+            for (i = 0; i < count; i++) {
+                g_ptr_array_add(list, gbinder_reader_read_string16(&reader));
             }
         }
         gbinder_remote_reply_unref(reply);
@@ -160,12 +150,19 @@ gbinder_servicemanager_aidl3_list(
 
 static
 void
-gbinder_servicemanager_aidl3_class_init(
-    GBinderServiceManagerAidl3Class* cls)
+gbinder_servicemanager_aidl3_init(
+    GBinderServiceManagerAidl3* self)
 {
-    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(cls);
+}
 
-    cls->add_service_req = gbinder_servicemanager_aidl3_add_service_req;
+static
+void
+gbinder_servicemanager_aidl3_class_init(
+    GBinderServiceManagerAidl3Class* klass)
+{
+    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
+
+    klass->add_service_req = gbinder_servicemanager_aidl3_add_service_req;
     manager->list = gbinder_servicemanager_aidl3_list;
     manager->get_service = gbinder_servicemanager_aidl3_get_service;
 }
@@ -177,4 +174,3 @@ gbinder_servicemanager_aidl3_class_init(
  * indent-tabs-mode: nil
  * End:
  */
-
