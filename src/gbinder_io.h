@@ -146,6 +146,8 @@ struct gbinder_io {
     guint (*encode_local_object)(void* out, GBinderLocalObject* obj);
     guint (*encode_remote_object)(void* out, GBinderRemoteObject* obj);
     guint (*encode_fd_object)(void* out, int fd);
+    guint (*encode_fda_object)(void* out, const GBinderFds *fds,
+        const GBinderParent* parent);
 
     /* Encode binder_buffer_object */
 #define GBINDER_MAX_BUFFER_OBJECT_SIZE (40)

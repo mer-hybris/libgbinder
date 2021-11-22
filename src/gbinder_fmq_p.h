@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,27 +29,48 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_H
-#define GBINDER_H
+#ifndef GBINDER_FMQ_PRIVATE_H
+#define GBINDER_FMQ_PRIVATE_H
 
-/* Convenience header to pull in everything at once */
+#include <gbinder_fmq.h>
 
-#include "gbinder_bridge.h"
-#include "gbinder_buffer.h"
-#include "gbinder_client.h"
-#include "gbinder_fmq.h"
-#include "gbinder_local_object.h"
-#include "gbinder_local_reply.h"
-#include "gbinder_local_request.h"
-#include "gbinder_reader.h"
-#include "gbinder_remote_object.h"
-#include "gbinder_remote_reply.h"
-#include "gbinder_remote_request.h"
-#include "gbinder_servicename.h"
-#include "gbinder_servicemanager.h"
-#include "gbinder_writer.h"
+#include "gbinder_types_p.h"
 
-#endif /* GBINDER_H */
+typedef struct gbinder_fmq_grantor_descriptor {
+    guint32 flags GBINDER_ALIGNED(4);
+    guint32 fd_index GBINDER_ALIGNED(4);
+    guint32 offset GBINDER_ALIGNED(4);
+    guint64 extent GBINDER_ALIGNED(8);
+} GBinderFmqGrantorDescriptor;
+
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderFmqGrantorDescriptor, flags) == 0);
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderFmqGrantorDescriptor, fd_index) == 4);
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderFmqGrantorDescriptor, offset) == 8);
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderFmqGrantorDescriptor, extent) == 16);
+G_STATIC_ASSERT(sizeof(GBinderFmqGrantorDescriptor) == 24);
+
+typedef struct gbinder_mq_descriptor {
+    GBinderHidlVec grantors;
+    union {
+        guint64 value;
+        const GBinderFds* fds;
+    } data;
+    guint32 quantum;
+    guint32 flags;
+} GBinderMQDescriptor;
+
+#define GBINDER_MQ_DESCRIPTOR_GRANTORS_OFFSET (0)
+#define GBINDER_MQ_DESCRIPTOR_FDS_OFFSET (16)
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderMQDescriptor, grantors) == GBINDER_MQ_DESCRIPTOR_GRANTORS_OFFSET);
+G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderMQDescriptor, data) == GBINDER_MQ_DESCRIPTOR_FDS_OFFSET);
+G_STATIC_ASSERT(sizeof(GBinderMQDescriptor) == 32);
+
+GBinderMQDescriptor*
+gbinder_fmq_get_descriptor(
+    const GBinderFmq* self)
+    GBINDER_INTERNAL;
+
+#endif /* GBINDER_FMQ_PRIVATE_H */
 
 /*
  * Local Variables:

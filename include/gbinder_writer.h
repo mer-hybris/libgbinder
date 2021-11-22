@@ -119,6 +119,12 @@ gbinder_writer_append_fd(
     GBinderWriter* writer,
     int fd); /* Since 1.0.18 */
 
+void
+gbinder_writer_append_fds(
+    GBinderWriter* writer,
+    const GBinderFds *fds,
+    const GBinderParent* parent); /* Since 1.1.14 */
+
 gsize
 gbinder_writer_bytes_written(
     GBinderWriter* writer); /* Since 1.0.21 */
@@ -180,6 +186,11 @@ gbinder_writer_append_byte_array(
     GBinderWriter* writer,
     const void* byte_array,
     gint32 len); /* Since 1.0.12 */
+
+void
+gbinder_writer_append_fmq_descriptor(
+    GBinderWriter* writer,
+    const GBinderFmq* queue); /* since 1.1.14 */
 
 /* Note: memory allocated by GBinderWriter is owned by GBinderWriter */
 

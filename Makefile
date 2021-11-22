@@ -82,6 +82,7 @@ SRC = \
   gbinder_config.c \
   gbinder_driver.c \
   gbinder_eventloop.c \
+  gbinder_fmq.c \
   gbinder_io_32.c \
   gbinder_io_64.c \
   gbinder_ipc.c \
