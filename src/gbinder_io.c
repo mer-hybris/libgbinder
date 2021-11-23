@@ -681,6 +681,10 @@ const GBinderIo GBINDER_IO_PREFIX = {
 G_STATIC_ASSERT(GBINDER_POINTER_SIZE <= GBINDER_MAX_POINTER_SIZE);
 G_STATIC_ASSERT(sizeof(struct flat_binder_object) <=
     GBINDER_MAX_BINDER_OBJECT_SIZE);
+G_STATIC_ASSERT(sizeof(struct binder_fd_object) <=
+    GBINDER_MAX_BUFFER_OBJECT_SIZE);
+G_STATIC_ASSERT(sizeof(struct binder_fd_array_object) <=
+    GBINDER_MAX_BUFFER_OBJECT_SIZE);
 G_STATIC_ASSERT(sizeof(struct binder_buffer_object) <=
     GBINDER_MAX_BUFFER_OBJECT_SIZE);
 G_STATIC_ASSERT(sizeof(struct binder_handle_cookie) <=

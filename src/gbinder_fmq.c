@@ -44,8 +44,6 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-/* Private API */
-
 /* Grantor data positions */
 enum {
     READ_PTR_POS = 0,
@@ -63,21 +61,14 @@ typedef struct gbinder_fmq {
     guint32 refcount;
 } GBinderFmq;
 
-GBinderMQDescriptor*
-gbinder_fmq_get_descriptor(
-    const GBinderFmq* self)
-{
-    return self->desc;
-}
-
 GBINDER_INLINE_FUNC
 GBinderFmqGrantorDescriptor*
 gbinder_fmq_get_grantor_descriptor(
     GBinderFmq* self,
     gint index)
 {
-    return &((GBinderFmqGrantorDescriptor *)(
-        self->desc->grantors.data.ptr))[index];
+    return (GBinderFmqGrantorDescriptor*)(self->desc->grantors.data.ptr) +
+        index;
 }
 
 static
@@ -86,27 +77,25 @@ gbinder_fmq_available_to_read_bytes(
     GBinderFmq* self,
     gboolean contiguous)
 {
-    gsize available;
-
-    guint64 read_ptr =
-        atomic_load_explicit(self->read_ptr, memory_order_acquire);
-    gsize available_to_read =
-        atomic_load_explicit(self->write_ptr, memory_order_acquire) - read_ptr;
+    const guint64 read_ptr = atomic_load_explicit(self->read_ptr,
+        memory_order_acquire);
+    const gsize available_total = atomic_load_explicit(self->write_ptr,
+        memory_order_acquire) - read_ptr;
 
     if (contiguous) {
-        gsize size =
-            gbinder_fmq_get_grantor_descriptor(self, DATA_PTR_POS)->extent;
-        gsize read_offset = read_ptr % size;
-        /* The number of bytes that can be read contiguously from
-         * read_offset without wrapping around the ring buffer */
-        gsize available_to_read_contiguous = size - read_offset;
-        available = available_to_read_contiguous < available_to_read ?
-            available_to_read_contiguous : available_to_read;
-    } else {
-        available = available_to_read;
-    }
+        /*
+         * The number of bytes that can be read contiguously from
+         * read offset without wrapping around the ring buffer.
+         */
+        const gsize size = gbinder_fmq_get_grantor_descriptor(self,
+            DATA_PTR_POS)->extent;
+        const gsize available_contiguous = size - (read_ptr % size);
 
-    return available;
+        return (available_contiguous < available_total) ?
+            available_contiguous : available_total;
+    } else {
+        return available_total;
+    }
 }
 
 static
@@ -115,28 +104,25 @@ gbinder_fmq_available_to_write_bytes(
     GBinderFmq* self,
     gboolean contiguous)
 {
-    gsize available;
-
-    gsize available_to_write =
-        gbinder_fmq_get_grantor_descriptor(self, DATA_PTR_POS)->extent -
+    const guint32 size = gbinder_fmq_get_grantor_descriptor(self,
+        DATA_PTR_POS)->extent;
+    const gsize available_total = size -
         gbinder_fmq_available_to_read_bytes(self, FALSE);
 
     if (contiguous) {
-        guint64 write_ptr = atomic_load_explicit(self->write_ptr,
+        /*
+         * The number of bytes that can be written contiguously starting from
+         * write_offset without wrapping around the ring buffer.
+         */
+        const guint64 write_ptr = atomic_load_explicit(self->write_ptr,
             memory_order_relaxed);
-        gsize size =
-            gbinder_fmq_get_grantor_descriptor(self, DATA_PTR_POS)->extent;
-        gsize write_offset = write_ptr % size;
-        /* The number of bytes that can be written contiguously starting from
-         * write_offset without wrapping around the ring buffer */
-        gsize available_to_write_contiguous = size - write_offset;
-        available = available_to_write_contiguous < available_to_write ?
-            available_to_write_contiguous : available_to_write;
-    } else {
-        available = available_to_write;
-    }
+        const gsize available_contiguous = size - (write_ptr % size);
 
-    return available;
+        return (available_contiguous < available_total) ?
+            available_contiguous : available_total;
+    } else {
+        return available_total;
+    }
 }
 
 static
@@ -146,36 +132,34 @@ gbinder_fmq_create_grantors(
     gsize num_fds,
     gboolean configure_event_flag)
 {
-    gsize num_grantors = configure_event_flag ? EVENT_FLAG_PTR_POS + 1
-                                              : DATA_PTR_POS + 1;
-
+    const gsize num_grantors = configure_event_flag ?
+        (EVENT_FLAG_PTR_POS + 1) : (DATA_PTR_POS + 1);
     GBinderFmqGrantorDescriptor* grantors =
         g_new0(GBinderFmqGrantorDescriptor, num_grantors);
-
+    gsize pos, offset;
     gsize mem_sizes[] = {
         sizeof(guint64),  /* read pointer counter */
         sizeof(guint64),  /* write pointer counter */
         queue_size_bytes, /* data buffer */
         sizeof(guint32)   /* event flag pointer */
     };
-    gsize grantor_pos, offset;
 
-    for (grantor_pos = 0, offset = 0; grantor_pos < num_grantors;
-            grantor_pos++) {
-        GBinderFmqGrantorDescriptor *grantor = &grantors[grantor_pos];
+    for (pos = 0, offset = 0; pos < num_grantors; pos++) {
+        GBinderFmqGrantorDescriptor* grantor = grantors + pos;
         guint32 grantor_fd_index;
         gsize grantor_offset;
-        if (grantor_pos == DATA_PTR_POS && num_fds == 2) {
+
+        if (pos == DATA_PTR_POS && num_fds == 2) {
             grantor_fd_index = 1;
             grantor_offset = 0;
         } else {
             grantor_fd_index = 0;
             grantor_offset = offset;
-            offset += mem_sizes[grantor_pos];
+            offset += mem_sizes[pos];
         }
         grantor->fd_index = grantor_fd_index;
-        grantor->offset = (guint32)(G_ALIGN8(grantor_offset));
-        grantor->extent = mem_sizes[grantor_pos];
+        grantor->offset = (guint32)G_ALIGN8(grantor_offset);
+        grantor->extent = mem_sizes[pos];
     }
     return grantors;
 }
@@ -186,35 +170,23 @@ gbinder_fmq_map_grantor_descriptor(
     GBinderFmq* self,
     guint32 index)
 {
-    const GBinderFds* fds = self->desc->data.fds;
-    gint fd_index;
-    gint map_offset;
-    gint map_length;
-    void* address;
-    void* ptr = NULL;
-
-    if (index >= self->desc->grantors.count) {
-        GWARN("grantor index must be less than %d", self->desc->grantors.count);
-    } else {
-        fd_index = gbinder_fmq_get_grantor_descriptor(self, index)->fd_index;
+    if (index < self->desc->grantors.count) {
+        const GBinderFmqGrantorDescriptor* desc =
+            gbinder_fmq_get_grantor_descriptor(self, index);
         /* Offset for mmap must be a multiple of PAGE_SIZE */
-        map_offset = (gbinder_fmq_get_grantor_descriptor(self, index)->offset /
-            getpagesize()) * getpagesize();
-        map_length = gbinder_fmq_get_grantor_descriptor(self, index)->offset -
-            map_offset +
-            gbinder_fmq_get_grantor_descriptor(self, index)->extent;
+        const guint32 map_offset = (desc->offset & ~(getpagesize()-1));
+        const guint32 map_length = desc->offset - map_offset + desc->extent;
+        const GBinderFds* fds = self->desc->data.fds;
+        void* address = mmap(0, map_length, PROT_READ | PROT_WRITE, MAP_SHARED,
+            gbinder_fds_get_fd(fds, desc->fd_index), map_offset);
 
-        address = mmap(0, map_length, PROT_READ | PROT_WRITE, MAP_SHARED,
-            gbinder_fds_get_fd(fds, fd_index), map_offset);
-        if (address == MAP_FAILED) {
-            GWARN("mmap failed: %d", errno);
+        if (address != MAP_FAILED) {
+            return (guint8*)address + (desc->offset - map_offset);
         } else {
-            ptr = (guint8*)(address) +
-                (gbinder_fmq_get_grantor_descriptor(self, index)->offset -
-                map_offset);
+            GWARN("mmap failed: %d", errno);
         }
     }
-    return ptr;
+    return NULL;
 }
 
 static
@@ -222,27 +194,14 @@ void
 gbinder_fmq_unmap_grantor_descriptor(
     GBinderFmq* self,
     void* address,
-    guint32 index)
+    guint index)
 {
-    gint map_offset;
-    gint map_length;
-    void* base_address;
+    if (index < self->desc->grantors.count && address) {
+        const GBinderFmqGrantorDescriptor* desc =
+            gbinder_fmq_get_grantor_descriptor(self, index);
+        const gsize remainder = desc->offset & (getpagesize() - 1);
 
-    if (index >= self->desc->grantors.count) {
-        GWARN("grantor index must be less than %d", self->desc->grantors.count);
-    } else if (address) {
-        map_offset = (gbinder_fmq_get_grantor_descriptor(self, index)->offset /
-            getpagesize()) * getpagesize();
-        map_length =
-            gbinder_fmq_get_grantor_descriptor(self, index)->offset - map_offset
-            + gbinder_fmq_get_grantor_descriptor(self, index)->extent;
-
-        base_address = (guint8*)(address) -
-            (gbinder_fmq_get_grantor_descriptor(self, index)->offset -
-            map_offset);
-        if (base_address) {
-            munmap(base_address, map_length);
-        }
+        munmap((guint8*)address - remainder, remainder + desc->extent);
     }
 }
 
@@ -273,6 +232,15 @@ gbinder_fmq_free(
     g_slice_free(GBinderFmq, self);
 }
 
+/* Private API */
+
+GBinderMQDescriptor*
+gbinder_fmq_get_descriptor(
+    const GBinderFmq* self)
+{
+    return self->desc;
+}
+
 /* Public API */
 
 GBinderFmq*
@@ -284,8 +252,6 @@ gbinder_fmq_new(
     gint fd,
     gsize buffer_size)
 {
-    GBinderFmq* self = NULL;
-
     if (item_size <= 0) {
         GWARN("Incorrect item size");
     } else if (num_items <= 0) {
@@ -293,18 +259,17 @@ gbinder_fmq_new(
     } else if (num_items > SIZE_MAX / item_size) {
         GWARN("Requested message queue size too large");
     } else if (fd != -1 && num_items * item_size > buffer_size) {
-        GWARN("The size needed for items (%"G_GSIZE_FORMAT") is larger\
-            than the supplied buffer size (%"G_GSIZE_FORMAT")",
+        GWARN("The size needed for items (%"G_GSIZE_FORMAT") is larger "
+            "than the supplied buffer size (%"G_GSIZE_FORMAT")",
             num_items * item_size, buffer_size);
     } else {
+        GBinderFmq* self = g_slice_new0(GBinderFmq);
         gboolean configure_event_flag =
             (flags & GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG) != 0;
         gsize queue_size_bytes = num_items * item_size;
         gsize meta_data_size;
         gsize shmem_size;
         int shmem_fd;
-
-        self = g_slice_new0(GBinderFmq);
 
         meta_data_size = 2 * sizeof(guint64);
         if (configure_event_flag) {
@@ -325,11 +290,7 @@ gbinder_fmq_new(
 
         shmem_fd = syscall(__NR_memfd_create, "MessageQueue", MFD_CLOEXEC);
 
-        if (shmem_fd < 0 || ftruncate(shmem_fd, shmem_size) < 0) {
-            GWARN("Failed to create shared memory file");
-            gbinder_fmq_free(self);
-            self = NULL;
-        } else {
+        if (shmem_fd >= 0 && ftruncate(shmem_fd, shmem_size) == 0) {
             GBinderFmqGrantorDescriptor* grantors;
             gsize num_fds = (fd != -1) ? 2 : 1;
             gsize fds_size = sizeof(GBinderFds) + sizeof(int) * num_fds;
@@ -344,8 +305,8 @@ gbinder_fmq_new(
                 /* Use user-supplied file descriptor for fd_index 1 */
                 (((int*)((fds) + 1))[1]) = fd;
             }
-            grantors = gbinder_fmq_create_grantors(
-                queue_size_bytes, num_fds, configure_event_flag);
+            grantors = gbinder_fmq_create_grantors(queue_size_bytes,
+                num_fds, configure_event_flag);
 
             /* Fill FMQ descriptor */
             self->desc = g_new0(GBinderMQDescriptor, 1);
@@ -353,32 +314,33 @@ gbinder_fmq_new(
             self->desc->quantum = item_size;
             self->desc->flags = type;
             self->desc->grantors.data.ptr = grantors;
-            self->desc->grantors.count =
-                configure_event_flag ? EVENT_FLAG_PTR_POS + 1
-                                     : DATA_PTR_POS + 1;
+            self->desc->grantors.count = configure_event_flag ?
+                (EVENT_FLAG_PTR_POS + 1) : (DATA_PTR_POS + 1);
             self->desc->grantors.owns_buffer = TRUE;
 
             /* Initialize memory pointers */
             if (type == GBINDER_FMQ_TYPE_SYNC_READ_WRITE) {
-                self->read_ptr = (_Atomic guint64*)(
-                    gbinder_fmq_map_grantor_descriptor(self, READ_PTR_POS));
+                self->read_ptr = gbinder_fmq_map_grantor_descriptor(self,
+                    READ_PTR_POS);
             } else {
-                /* Unsynchronized write FMQs may have multiple readers and
-                 * each reader would have their own read pointer counter */
+                /*
+                 * Unsynchronized write FMQs may have multiple readers and
+                 * each reader would have their own read pointer counter.
+                 */
                 self->read_ptr = g_new0(_Atomic guint64, 1);
             }
 
-            if (self->read_ptr == NULL) {
+            if (!self->read_ptr) {
                 GWARN("Read pointer is null");
             }
 
-            self->write_ptr = (_Atomic guint64*)(
-                gbinder_fmq_map_grantor_descriptor(self, WRITE_PTR_POS));
-            if (self->write_ptr == NULL) {
+            self->write_ptr = gbinder_fmq_map_grantor_descriptor(self,
+                WRITE_PTR_POS);
+            if (!self->write_ptr) {
                 GWARN("Write pointer is null");
             }
 
-            if ((flags & GBINDER_FMQ_FLAG_NO_RESET_POINTERS) == 0) {
+            if (!(flags & GBINDER_FMQ_FLAG_NO_RESET_POINTERS)) {
                 atomic_store_explicit(self->read_ptr, 0, memory_order_release);
                 atomic_store_explicit(self->write_ptr, 0, memory_order_release);
             } else if (type != GBINDER_FMQ_TYPE_SYNC_READ_WRITE) {
@@ -386,26 +348,29 @@ gbinder_fmq_new(
                 atomic_store_explicit(self->read_ptr, 0, memory_order_release);
             }
 
-            self->ring = (guint8 *)(gbinder_fmq_map_grantor_descriptor(self,
-                DATA_PTR_POS));
-            if (self->ring == NULL) {
+            self->ring = gbinder_fmq_map_grantor_descriptor(self,
+                DATA_PTR_POS);
+            if (!self->ring) {
                 GWARN("Ring buffer pointer is null");
             }
 
             if (self->desc->grantors.count > EVENT_FLAG_PTR_POS) {
-                self->event_flag_ptr = (_Atomic guint32*)(
-                    gbinder_fmq_map_grantor_descriptor(self,
-                    EVENT_FLAG_PTR_POS));
-                if (self->event_flag_ptr == NULL) {
+                self->event_flag_ptr = gbinder_fmq_map_grantor_descriptor(self,
+                    EVENT_FLAG_PTR_POS);
+                if (!self->event_flag_ptr) {
                     GWARN("Event flag pointer is null");
                 }
             }
 
             g_atomic_int_set(&self->refcount, 1);
+            return self;
         }
+
+        GWARN("Failed to allocate shared memory: %s", strerror(errno));
+        gbinder_fmq_free(self);
     }
 
-    return self;
+    return NULL;
 }
 
 GBinderFmq*
@@ -435,48 +400,32 @@ gsize
 gbinder_fmq_available_to_read(
     GBinderFmq* self)
 {
-    gsize ret = 0;
-    if (G_LIKELY(self)) {
-        ret = gbinder_fmq_available_to_read_bytes(self, FALSE) /
-            self->desc->quantum;
-    }
-    return ret;
+    return G_LIKELY(self) ? (gbinder_fmq_available_to_read_bytes(self, FALSE) /
+        self->desc->quantum) : 0;
 }
 
 gsize
 gbinder_fmq_available_to_write(
     GBinderFmq* self)
 {
-    gsize ret = 0;
-    if (G_LIKELY(self)) {
-        ret = gbinder_fmq_available_to_write_bytes(self, FALSE) /
-            self->desc->quantum;
-    }
-    return ret;
+    return G_LIKELY(self) ? (gbinder_fmq_available_to_write_bytes(self, FALSE) /
+        self->desc->quantum) : 0;
 }
 
 gsize
 gbinder_fmq_available_to_read_contiguous(
     GBinderFmq* self)
 {
-    gsize ret = 0;
-    if (G_LIKELY(self)) {
-        ret = gbinder_fmq_available_to_read_bytes(self, TRUE) /
-            self->desc->quantum;
-    }
-    return ret;
+    return G_LIKELY(self) ? (gbinder_fmq_available_to_read_bytes(self, TRUE) /
+        self->desc->quantum) : 0;
 }
 
 gsize
 gbinder_fmq_available_to_write_contiguous(
     GBinderFmq* self)
 {
-    gsize ret = 0;
-    if (G_LIKELY(self)) {
-        ret = gbinder_fmq_available_to_write_bytes(self, TRUE) /
-            self->desc->quantum;
-    }
-    return ret;
+    return G_LIKELY(self) ? (gbinder_fmq_available_to_write_bytes(self, TRUE) /
+        self->desc->quantum) : 0;
 }
 
 const void*
@@ -485,19 +434,18 @@ gbinder_fmq_begin_read(
     gsize items)
 {
     void* ptr = NULL;
+
     if (G_LIKELY(self) && G_LIKELY(items > 0)) {
         gsize size = gbinder_fmq_get_grantor_descriptor(self,
             DATA_PTR_POS)->extent;
         gsize item_size = self->desc->quantum;
         gsize bytes_desired = items * item_size;
-        gsize read_offset;
-
         guint64 write_ptr = atomic_load_explicit(self->write_ptr,
             memory_order_acquire);
         guint64 read_ptr = atomic_load_explicit(self->read_ptr,
             memory_order_relaxed);
 
-        if (write_ptr % item_size != 0 || read_ptr % item_size != 0) {
+        if ((write_ptr % item_size) || (read_ptr % item_size)) {
             GWARN("Unable to write data because of misaligned pointer");
         } else if (write_ptr - read_ptr > size) {
             atomic_store_explicit(self->read_ptr, write_ptr,
@@ -505,8 +453,7 @@ gbinder_fmq_begin_read(
         } else if (write_ptr - read_ptr < bytes_desired) {
             /* Not enough data to read in FMQ. */
         } else {
-            read_offset = read_ptr % size;
-            ptr = self->ring + read_offset;
+            ptr = self->ring + (read_ptr % size);
         }
     }
 
@@ -520,21 +467,22 @@ gbinder_fmq_begin_write(
 {
     void* ptr = NULL;
     if (G_LIKELY(self) && G_LIKELY(items > 0)) {
-        gsize size = gbinder_fmq_get_grantor_descriptor(self,
+        const gsize item_size = self->desc->quantum;
+        const gsize size = gbinder_fmq_get_grantor_descriptor(self,
             DATA_PTR_POS)->extent;
-        gsize item_size = self->desc->quantum;
 
         if ((self->desc->flags == GBINDER_FMQ_TYPE_SYNC_READ_WRITE &&
             (gbinder_fmq_available_to_write(self) < items)) ||
-            items > gbinder_fmq_get_grantor_descriptor(self,
-                DATA_PTR_POS)->extent / item_size) {
+            items > size / item_size) {
             /* Incorrect parameters */
         } else {
             guint64 write_ptr = atomic_load_explicit(self->write_ptr,
                 memory_order_relaxed);
-            if (write_ptr % item_size != 0) {
+
+            if (write_ptr % item_size) {
                 GWARN("The write pointer has become misaligned.");
             } else {
+
                 ptr = self->ring + (write_ptr % size);
             }
         }
@@ -550,14 +498,15 @@ gbinder_fmq_end_read(
     if (G_LIKELY(self) && G_LIKELY(items > 0)) {
         gsize size = gbinder_fmq_get_grantor_descriptor(self,
             DATA_PTR_POS)->extent;
-
         guint64 read_ptr = atomic_load_explicit(self->read_ptr,
             memory_order_relaxed);
         guint64 write_ptr = atomic_load_explicit(self->write_ptr,
             memory_order_acquire);
 
-        /* If queue type is unsynchronized, it is possible that a write overflow
-         * may have occurred */
+        /*
+         * If queue type is unsynchronized, it is possible that a write
+         * overflow may have occurred.
+         */
         if (write_ptr - read_ptr > size) {
             atomic_store_explicit(self->read_ptr, write_ptr,
                 memory_order_release);
@@ -589,35 +538,33 @@ gbinder_fmq_read(
     void* data,
     gsize items)
 {
-    gboolean ret = FALSE;
     if (G_LIKELY(self) && G_LIKELY(data) && G_LIKELY(items > 0)) {
-        const void *in_data = gbinder_fmq_begin_read(self, items);
+        const void* in_data = gbinder_fmq_begin_read(self, items);
 
         if (in_data) {
-            gsize item_size = self->desc->quantum;
-
-            /* The number of messages that can be read contiguously without
-             * wrapping around the ring buffer */
-            gsize contiguous_messages =
+            /*
+             * The number of messages that can be read contiguously without
+             * wrapping around the ring buffer.
+             */
+            const gsize contiguous_messages =
                 gbinder_fmq_available_to_read_contiguous(self);
+            const gsize item_size = self->desc->quantum;
 
             if (contiguous_messages < items) {
                 /* A wrap around is required */
                 memcpy(data, in_data, contiguous_messages * item_size);
-                memcpy((char *)data + contiguous_messages * item_size /
-                    sizeof(char), self->ring,
-                    (items - contiguous_messages) * item_size);
+                memcpy((char*)data + contiguous_messages * item_size,
+                    self->ring, (items - contiguous_messages) * item_size);
             } else {
                 /* A wrap around is not required */
                 memcpy(data, in_data, items * item_size);
             }
 
             gbinder_fmq_end_read(self, items);
-            ret = TRUE;
+            return TRUE;
         }
     }
-
-    return ret;
+    return FALSE;
 }
 
 gboolean
@@ -626,17 +573,17 @@ gbinder_fmq_write(
     const void* data,
     gsize items)
 {
-    gboolean ret = FALSE;
     if (G_LIKELY(self) && G_LIKELY(data) && G_LIKELY(items > 0)) {
         void *out_data = gbinder_fmq_begin_write(self, items);
 
         if (out_data) {
-            gsize item_size = self->desc->quantum;
-
-            /* The number of messages that can be written contiguously without
-             * wrapping around the ring buffer */
-            gsize contiguous_messages =
+            /*
+             * The number of messages that can be written contiguously without
+             * wrapping around the ring buffer.
+             */
+            const gsize contiguous_messages =
                 gbinder_fmq_available_to_write_contiguous(self);
+            const gsize item_size = self->desc->quantum;
 
             if (contiguous_messages < items) {
                 /* A wrap around is required. */
@@ -650,11 +597,10 @@ gbinder_fmq_write(
             }
 
             gbinder_fmq_end_write(self, items);
-            ret = TRUE;
+            return TRUE;
         }
     }
-
-    return ret;
+    return FALSE;
 }
 
 int
@@ -662,65 +608,56 @@ gbinder_fmq_wait_timeout(
     GBinderFmq* self,
     guint32 bit_mask,
     guint32* state,
-    guint timeout_ms)
+    int timeout_ms)
 {
-    int ret = 0;
-    if (G_LIKELY(self) && G_LIKELY(state)) {
-        /* Event flag is not configured */
-        if (self->event_flag_ptr == NULL) {
-            ret = -ENOSYS;
-        } else if (bit_mask == 0 || state == NULL) {
-            ret = -EINVAL;
+    if (G_UNLIKELY(!state) || G_UNLIKELY(!self)) {
+        return (-EINVAL);
+    } else if (!self->event_flag_ptr) {
+        return (-ENOSYS);
+    } else if (!bit_mask) {
+        return (-EINVAL);
+    } else {
+        guint32 old_value = atomic_fetch_and(self->event_flag_ptr, ~bit_mask);
+        guint32 set_bits = old_value & bit_mask;
+
+        /* Check if any of the bits was already set */
+        if (set_bits != 0) {
+            *state = set_bits;
+            return 0;
+        } else if (!timeout_ms) {
+            return (-ETIMEDOUT);
         } else {
-            guint32 old_value = atomic_fetch_and(self->event_flag_ptr,
-                ~bit_mask);
-            guint32 set_bits = old_value & bit_mask;
+            int ret;
 
-            /* Check if any of the bits was already set */
-            if (set_bits != 0) {
-                *state = set_bits;
+            if (timeout_ms > 0) {
+                struct timespec deadline;
+                const guint64 ms = 1000000;
+                const guint64 sec = 1000 * ms;
+
+                clock_gettime(CLOCK_MONOTONIC, &deadline);
+                deadline.tv_sec += timeout_ms / 1000;
+                deadline.tv_nsec += (timeout_ms % 1000) * ms;
+                if (deadline.tv_nsec >= sec) {
+                    deadline.tv_sec++;
+                    deadline.tv_nsec -= sec;
+                }
+
+                ret = syscall(__NR_futex, self->event_flag_ptr,
+                    FUTEX_WAIT_BITSET, old_value, &deadline, NULL, bit_mask);
             } else {
-                if (timeout_ms > 0) {
-                    struct timespec wait_time;
-                    clock_gettime(CLOCK_MONOTONIC, &wait_time);
-                    guint64 ns_in_sec = 1000000000;
+                ret = syscall(__NR_futex, self->event_flag_ptr,
+                    FUTEX_WAIT_BITSET, old_value, NULL, NULL, bit_mask);
+            }
 
-                    wait_time.tv_sec += timeout_ms / 1000;
-                    wait_time.tv_nsec += (timeout_ms % 1000) * 1000000;
-
-                    if (wait_time.tv_nsec >= ns_in_sec) {
-                        wait_time.tv_sec++;
-                        wait_time.tv_nsec -= ns_in_sec;
-                    }
-
-                    ret = syscall(__NR_futex, self->event_flag_ptr,
-                        FUTEX_WAIT_BITSET, old_value, &wait_time, NULL,
-                            bit_mask);
-                } else {
-                    ret = syscall(__NR_futex, self->event_flag_ptr,
-                        FUTEX_WAIT_BITSET, old_value, NULL, NULL, bit_mask);
-                }
-
-                if (ret != -1) {
-                    old_value = atomic_fetch_and(self->event_flag_ptr,
-                        ~bit_mask);
-                    *state = old_value & bit_mask;
-
-                    if (*state == 0) {
-                        ret = -EINTR;
-                    }
-                    ret = 0;
-                } else {
-                    /* Report error code */
-                    *state = 0;
-                    ret = -errno;
-                }
+            if (ret == -1) {
+                return errno ? (-errno) : -EFAULT;
+            } else {
+                old_value = atomic_fetch_and(self->event_flag_ptr, ~bit_mask);
+                *state = old_value & bit_mask;
+                return (*state) ? 0 : (-EAGAIN);
             }
         }
-    } else {
-        ret = -EINVAL;
     }
-    return ret;
 }
 
 int
@@ -729,16 +666,18 @@ gbinder_fmq_wake(
     guint32 bit_mask)
 {
     int ret = 0;
+
     if (G_LIKELY(self)) {
-        if (self->event_flag_ptr == NULL) {
+        if (!self->event_flag_ptr) {
             /* Event flag is not configured */
             ret = -ENOSYS;
-        } else if (bit_mask == 0) {
+        } else if (!bit_mask) {
             /* Ignore zero bit mask */
         } else {
             /* Set bit mask only if needed */
             guint32 old_value = atomic_fetch_or(self->event_flag_ptr, bit_mask);
-            if ((~old_value & bit_mask) != 0) {
+
+            if (~old_value & bit_mask) {
                 ret = syscall(__NR_futex, self->event_flag_ptr,
                     FUTEX_WAKE_BITSET, G_MAXUINT32, NULL, NULL, bit_mask);
             }

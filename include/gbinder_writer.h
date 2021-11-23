@@ -122,7 +122,7 @@ gbinder_writer_append_fd(
 void
 gbinder_writer_append_fds(
     GBinderWriter* writer,
-    const GBinderFds *fds,
+    const GBinderFds* fds,
     const GBinderParent* parent); /* Since 1.1.14 */
 
 gsize
