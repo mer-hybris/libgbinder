@@ -59,38 +59,38 @@ gbinder_fmq_new(
 
 GBinderFmq*
 gbinder_fmq_ref(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 void
 gbinder_fmq_unref(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 /* Functions for checking how many items are available in queue */
 gsize
 gbinder_fmq_available_to_read(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 gsize
 gbinder_fmq_available_to_write(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 gsize
 gbinder_fmq_available_to_read_contiguous(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 gsize
 gbinder_fmq_available_to_write_contiguous(
-    GBinderFmq* self);
+    GBinderFmq* fmq);
 
 /* Functions for obtaining data pointer for zero copy read/write */
 const void*
 gbinder_fmq_begin_read(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     gsize items);
 
 void*
 gbinder_fmq_begin_write(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     gsize items);
 
 /* Functions for ending zero copy read/write
@@ -98,42 +98,47 @@ gbinder_fmq_begin_write(
  * or gbinder_fmq_begin_write */
 void
 gbinder_fmq_end_read(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     gsize items);
 
 void
 gbinder_fmq_end_write(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     gsize items);
 
 /* Regular read/write functions (non-zero-copy) */
 gboolean
 gbinder_fmq_read(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     void* data,
     gsize items);
 
 gboolean
 gbinder_fmq_write(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     const void* data,
     gsize items);
 
-/* Functions for waiting and waking message queue.
- * Requires configured event flag in message queue */
+/*
+ * Functions for waiting and waking message queue.
+ * Requires configured event flag in message queue.
+ */
 int
 gbinder_fmq_wait_timeout(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     guint32 bit_mask,
     guint32* state,
-    guint timeout_ms);
+    int timeout_ms);
+
+#define gbinder_fmq_try_wait(fmq, mask, state) \
+    gbinder_fmq_wait_timeout(fmq, mask, state, 0)
 
 #define gbinder_fmq_wait(fmq, mask, state) \
-    gbinder_fmq_wait_timeout(fmq, mask, state, 0)
+    gbinder_fmq_wait_timeout(fmq, mask, state, -1)
 
 int
 gbinder_fmq_wake(
-    GBinderFmq* self,
+    GBinderFmq* fmq,
     guint32 bit_mask);
 
 G_END_DECLS
