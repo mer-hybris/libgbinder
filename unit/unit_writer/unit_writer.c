@@ -59,6 +59,7 @@ test_null(
     void)
 {
     GBinderWriter writer;
+    gsize size = 1;
 
     gbinder_local_request_init_writer(NULL, &writer);
     gbinder_writer_append_int32(NULL, 0);
@@ -105,6 +106,10 @@ test_null(
     gbinder_writer_add_cleanup(NULL, g_free, 0);
     gbinder_writer_overwrite_int32(NULL, 0, 0);
 
+    g_assert(!gbinder_writer_bytes_written(NULL));
+    g_assert(!gbinder_writer_get_data(NULL, NULL));
+    g_assert(!gbinder_writer_get_data(NULL, &size));
+    g_assert_cmpuint(size, ==, 0);
     g_assert(!gbinder_output_data_offsets(NULL));
     g_assert(!gbinder_output_data_buffers_size(NULL));
     g_assert(!gbinder_writer_malloc(NULL, 0));
@@ -1019,14 +1024,22 @@ test_bytes_written(
     const guint32 value = 1234567;
     GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
     GBinderWriter writer;
+    const void* data;
+    gsize size = 0;
 
     gbinder_local_request_init_writer(req, &writer);
     g_assert(gbinder_writer_bytes_written(&writer) == 0);
     gbinder_writer_append_int32(&writer, value);
-    g_assert(gbinder_writer_bytes_written(&writer) == sizeof(value));
+    g_assert_cmpuint(gbinder_writer_bytes_written(&writer), == ,sizeof(value));
+    data = gbinder_writer_get_data(&writer, NULL);
+    g_assert(data);
+    g_assert(data == gbinder_writer_get_data(&writer, &size));
+    g_assert_cmpuint(size, == ,sizeof(value));
+    g_assert(!memcmp(data, &value, size));
 
     gbinder_local_request_unref(req);
 }
+
 /*==========================================================================*
  * Common
  *==========================================================================*/

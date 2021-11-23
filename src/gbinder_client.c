@@ -351,6 +351,22 @@ gbinder_client_interface2(
     return NULL;
 }
 
+GBytes*
+gbinder_client_rpc_header(
+    GBinderClient* self,
+    guint32 code) /* since 1.1.14 */
+{
+    if (G_LIKELY(self)) {
+        const GBinderClientIfaceRange* r =
+            gbinder_client_find_range(gbinder_client_cast(self), code);
+
+        if (r) {
+            return r->rpc_header;
+        }
+    }
+    return NULL;
+}
+
 GBinderLocalRequest*
 gbinder_client_new_request(
     GBinderClient* self)

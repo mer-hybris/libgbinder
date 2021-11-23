@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -90,7 +90,7 @@ gbinder_reader_at_end(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->ptr >= p->end;
+    return !p || p->ptr >= p->end;
 }
 
 static
@@ -680,13 +680,38 @@ gbinder_reader_read_byte_array(
     return data;
 }
 
+const void*
+gbinder_reader_get_data(
+    const GBinderReader* reader,
+    gsize* size) /* Since 1.1.14 */
+{
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
+
+    if (p) {
+        const GBinderReaderData* data = p->data;
+
+        if (data && data->buffer) {
+            if (size) {
+                *size = data->buffer->size;
+            }
+            return data->buffer->data;
+        }
+    }
+
+    /* No data */
+    if (size) {
+        *size = 0;
+    }
+    return NULL;
+}
+
 gsize
 gbinder_reader_bytes_read(
     const GBinderReader* reader)
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->ptr - p->start;
+    return p ? (p->ptr - p->start) : 0;
 }
 
 gsize
@@ -695,7 +720,7 @@ gbinder_reader_bytes_remaining(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->end - p->ptr;
+    return p ? (p->end - p->ptr) : 0;
 }
 
 void
@@ -703,8 +728,11 @@ gbinder_reader_copy(
     GBinderReader* dest,
     const GBinderReader* src)
 {
-    /* It's actually quite simple :) */
-    memcpy(dest, src, sizeof(*dest));
+    if (src) {
+        memcpy(dest, src, sizeof(*dest));
+    } else {
+        memset(dest, 0, sizeof(*dest));
+    }
 }
 
 /*

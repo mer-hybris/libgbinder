@@ -66,6 +66,27 @@ typedef struct binder_buffer_object_64 {
 G_STATIC_ASSERT(sizeof(BinderObject64) == BUFFER_OBJECT_SIZE_64);
 
 /*==========================================================================*
+ * null
+ *==========================================================================*/
+
+static
+void
+test_null(
+    void)
+{
+    GBinderReader reader;
+
+    /* NULL const pointers are tolerated */
+    g_assert(gbinder_reader_at_end(NULL));
+    g_assert(!gbinder_reader_bytes_read(NULL));
+    g_assert(!gbinder_reader_bytes_remaining(NULL));
+    g_assert(!gbinder_reader_get_data(NULL, NULL));
+
+    gbinder_reader_copy(&reader, NULL);
+    g_assert(gbinder_reader_at_end(&reader));
+}
+
+/*==========================================================================*
  * empty
  *==========================================================================*/
 
@@ -76,10 +97,13 @@ test_empty(
 {
     GBinderReader reader;
     gsize count = 1, elemsize = 1;
-    gsize len;
+    gsize size = 1;
 
     gbinder_reader_init(&reader, NULL, 0, 0);
     g_assert(gbinder_reader_at_end(&reader));
+    g_assert(!gbinder_reader_get_data(&reader, NULL));
+    g_assert(!gbinder_reader_get_data(&reader, &size));
+    g_assert(!size);
     g_assert(!gbinder_reader_bytes_read(&reader));
     g_assert(!gbinder_reader_bytes_remaining(&reader));
     g_assert(!gbinder_reader_read_byte(&reader, NULL));
@@ -107,7 +131,7 @@ test_empty(
     g_assert(!gbinder_reader_read_string8(&reader));
     g_assert(!gbinder_reader_read_string16(&reader));
     g_assert(!gbinder_reader_skip_string16(&reader));
-    g_assert(!gbinder_reader_read_byte_array(&reader, &len));
+    g_assert(!gbinder_reader_read_byte_array(&reader, &size));
 }
 
 /*==========================================================================*
@@ -1864,7 +1888,6 @@ test_hidl_string_vec2(
         TEST_INT64_BYTES(2),
         TEST_INT64_BYTES(sizeof(GBinderHidlString) +
             GBINDER_HIDL_STRING_BUFFER_OFFSET)
-                        
     };
     static const char* const result[] = { str1, str2, NULL };
 
@@ -1990,7 +2013,6 @@ test_hidl_string_vec5(
         TEST_INT64_BYTES(sizeof(str2)),
         TEST_INT64_BYTES(2),
         TEST_INT64_BYTES(GBINDER_HIDL_STRING_BUFFER_OFFSET)
-                        
     };
 
     test_hidl_string_vec(TEST_ARRAY_AND_SIZE(input), NULL);
@@ -2098,9 +2120,9 @@ test_copy(
     gint32 in_len2 = sizeof(in_data2) - 1;
     const void* out_data = NULL;
     gsize out_len = 0;
-    void* tmp;
     guint8* ptr;
-    gsize tmp_len = 2 * sizeof(guint32) + in_len1 + in_len2;
+    void* buf;
+    gsize buf_len = 2 * sizeof(guint32) + in_len1 + in_len2;
 
     GBinderDriver* driver;
     GBinderReader reader;
@@ -2109,7 +2131,7 @@ test_copy(
 
     /* test for data */
     g_assert((driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL)));
-    ptr = tmp = g_malloc0(tmp_len);
+    ptr = buf = g_malloc0(buf_len);
     memcpy(ptr, &in_len1, sizeof(in_len1));
     ptr += sizeof(in_len1);
     memcpy(ptr, in_data1, in_len1);
@@ -2119,13 +2141,19 @@ test_copy(
     memcpy(ptr, in_data2, in_len2);
 
     memset(&data, 0, sizeof(data));
-    data.buffer = gbinder_buffer_new(driver, tmp, tmp_len, NULL);
-    gbinder_reader_init(&reader, &data, 0, tmp_len);
+    data.buffer = gbinder_buffer_new(driver, buf, buf_len, NULL);
+    gbinder_reader_init(&reader, &data, 0, buf_len);
 
     /* Read the first array */
     g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
-    g_assert((gsize)in_len1 == out_len);
+    g_assert_cmpuint(in_len1, == ,out_len);
     g_assert(memcmp(in_data1, out_data, in_len1) == 0);
+
+    /* Fetch raw data */
+    g_assert((out_data = gbinder_reader_get_data(&reader, &out_len)));
+    g_assert(out_data == gbinder_reader_get_data(&reader, NULL));
+    g_assert_cmpuint(out_len, == ,buf_len);
+    g_assert(memcmp(out_data, buf, buf_len) == 0);
 
     /* Copy the reader */
     gbinder_reader_copy(&reader2, &reader);
@@ -2133,13 +2161,19 @@ test_copy(
     /* Read both and compare the output */
     g_assert((out_data = gbinder_reader_read_byte_array(&reader, &out_len)));
     g_assert(gbinder_reader_at_end(&reader));
-    g_assert((gsize)in_len2 == out_len);
+    g_assert_cmpuint(in_len1, == ,out_len);
     g_assert(memcmp(in_data2, out_data, in_len2) == 0);
 
     g_assert((out_data = gbinder_reader_read_byte_array(&reader2, &out_len)));
     g_assert(gbinder_reader_at_end(&reader2));
-    g_assert((gsize)in_len2 == out_len);
+    g_assert_cmpuint(in_len2, == ,out_len);
     g_assert(memcmp(in_data2, out_data, in_len2) == 0);
+
+    /* Fetch raw data from the copied reader */
+    g_assert((out_data = gbinder_reader_get_data(&reader2, &out_len)));
+    g_assert(out_data == gbinder_reader_get_data(&reader2, NULL));
+    g_assert_cmpuint(out_len, == ,buf_len);
+    g_assert(memcmp(out_data, buf, buf_len) == 0);
 
     gbinder_buffer_free(data.buffer);
     gbinder_driver_unref(driver);
@@ -2161,6 +2195,7 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
 
+    g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("empty"), test_empty);
     g_test_add_func(TEST_("byte"), test_byte);
     g_test_add_func(TEST_("bool"), test_bool);
