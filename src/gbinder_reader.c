@@ -90,7 +90,7 @@ gbinder_reader_at_end(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->ptr >= p->end;
+    return !p || p->ptr >= p->end;
 }
 
 static
@@ -685,19 +685,24 @@ gbinder_reader_get_data(
     const GBinderReader* reader,
     gsize* size) /* Since 1.1.14 */
 {
-    const GBinderReaderData* data = gbinder_reader_cast_c(reader)->data;
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    if (data && data->buffer) {
-        if (size) {
-            *size = data->buffer->size;
+    if (p) {
+        const GBinderReaderData* data = p->data;
+
+        if (data && data->buffer) {
+            if (size) {
+                *size = data->buffer->size;
+            }
+            return data->buffer->data;
         }
-        return data->buffer->data;
-    } else {
-        if (size) {
-            *size = 0;
-        }
-        return NULL;
     }
+
+    /* No data */
+    if (size) {
+        *size = 0;
+    }
+    return NULL;
 }
 
 gsize
@@ -706,7 +711,7 @@ gbinder_reader_bytes_read(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->ptr - p->start;
+    return p ? (p->ptr - p->start) : 0;
 }
 
 gsize
@@ -715,7 +720,7 @@ gbinder_reader_bytes_remaining(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p->end - p->ptr;
+    return p ? (p->end - p->ptr) : 0;
 }
 
 void
@@ -723,8 +728,11 @@ gbinder_reader_copy(
     GBinderReader* dest,
     const GBinderReader* src)
 {
-    /* It's actually quite simple :) */
-    memcpy(dest, src, sizeof(*dest));
+    if (src) {
+        memcpy(dest, src, sizeof(*dest));
+    } else {
+        memset(dest, 0, sizeof(*dest));
+    }
 }
 
 /*

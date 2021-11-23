@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -64,6 +64,27 @@ typedef struct binder_buffer_object_64 {
 #define BINDER_FLAG_ACCEPTS_FDS 0x100
 #define BUFFER_OBJECT_SIZE_64 (GBINDER_MAX_BUFFER_OBJECT_SIZE)
 G_STATIC_ASSERT(sizeof(BinderObject64) == BUFFER_OBJECT_SIZE_64);
+
+/*==========================================================================*
+ * null
+ *==========================================================================*/
+
+static
+void
+test_null(
+    void)
+{
+    GBinderReader reader;
+
+    /* NULL const pointers are tolerated */
+    g_assert(gbinder_reader_at_end(NULL));
+    g_assert(!gbinder_reader_bytes_read(NULL));
+    g_assert(!gbinder_reader_bytes_remaining(NULL));
+    g_assert(!gbinder_reader_get_data(NULL, NULL));
+
+    gbinder_reader_copy(&reader, NULL);
+    g_assert(gbinder_reader_at_end(&reader));
+}
 
 /*==========================================================================*
  * empty
@@ -2174,6 +2195,7 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
 
+    g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("empty"), test_empty);
     g_test_add_func(TEST_("byte"), test_byte);
     g_test_add_func(TEST_("bool"), test_bool);
