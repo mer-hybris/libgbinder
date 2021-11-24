@@ -1,3 +1,16 @@
+libgbinder (1.1.14) unstable; urgency=low
+
+  * Support for FMQ (Fast Message Queues)
+  * Support for Android 11 (API level 30)
+  * Made GBinderReader API slightly more NULL tolerant
+  * Added gbinder_client_rpc_header()
+  * Added gbinder_reader_get_data()
+  * Added gbinder_writer_get_data()
+  * Added gbinder_servicemanager_device()
+  * Added gbinder_local_reply_append_fd()
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 24 Nov 2021 17:15:48 +0200
+
 libgbinder (1.1.13) unstable; urgency=low
 
   * Added gbinder_writer_strdup()
