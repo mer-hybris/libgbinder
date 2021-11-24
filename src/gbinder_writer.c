@@ -997,6 +997,9 @@ gbinder_writer_append_byte_array(
     }
 }
 
+#if GBINDER_FMQ_SUPPORTED
+
+static
 void
 gbinder_writer_data_append_fmq_descriptor(
     GBinderWriterData* data,
@@ -1051,6 +1054,8 @@ gbinder_writer_append_fmq_descriptor(
         gbinder_writer_data_append_fmq_descriptor(data, queue);
     }
 }
+
+#endif /* GBINDER_FMQ_SUPPORTED */
 
 void
 gbinder_writer_data_append_remote_object(

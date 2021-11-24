@@ -39,8 +39,9 @@
 #include <linux/futex.h>
 #include <stdint.h>
 #include <sys/mman.h>
-#include <sys/syscall.h>
 #include <unistd.h>
+
+#if GBINDER_FMQ_SUPPORTED
 
 /* Grantor data positions */
 enum {
@@ -684,6 +685,10 @@ gbinder_fmq_wake(
     }
     return ret;
 }
+
+#else /* !GBINDER_FMQ_SUPPORTED */
+#pragma message("Not compiling FMQ")
+#endif
 
 /*
  * Local Variables:

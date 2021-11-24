@@ -39,8 +39,10 @@
 #include "gbinder_io.h"
 
 #include <gutil_intarray.h>
+#include <gutil_log.h>
 
 #include <unistd.h>
+#include <errno.h>
 
 static TestOpt test_opt;
 
@@ -100,11 +102,14 @@ test_null(
     gbinder_writer_append_remote_object(&writer, NULL);
     gbinder_writer_append_byte_array(NULL, NULL, 0);
     gbinder_writer_append_byte_array(&writer, NULL, 0);
-    gbinder_writer_append_fmq_descriptor(NULL, NULL);
-    gbinder_writer_append_fmq_descriptor(&writer, NULL);
     gbinder_writer_add_cleanup(NULL, NULL, 0);
     gbinder_writer_add_cleanup(NULL, g_free, 0);
     gbinder_writer_overwrite_int32(NULL, 0, 0);
+
+#if GBINDER_FMQ_SUPPORTED
+    gbinder_writer_append_fmq_descriptor(NULL, NULL);
+    gbinder_writer_append_fmq_descriptor(&writer, NULL);
+#endif
 
     g_assert(!gbinder_writer_bytes_written(NULL));
     g_assert(!gbinder_writer_get_data(NULL, NULL));
@@ -978,6 +983,8 @@ test_byte_array(
  * fmq descriptor
  *==========================================================================*/
 
+#if GBINDER_FMQ_SUPPORTED
+
 static
 void
 test_fmq_descriptor(
@@ -987,30 +994,32 @@ test_fmq_descriptor(
     GBinderOutputData* data;
     GUtilIntArray* offsets;
     GBinderWriter writer;
-
-    gint32 in_len = 3 * BUFFER_OBJECT_SIZE_64 /* Buffer objects */
+    const gint32 len = 3 * BUFFER_OBJECT_SIZE_64 /* Buffer objects */
         + sizeof(gint64) /* gint64 */
         + 4 * sizeof(gint64); /* binder_fd_array_object */
 
-    GBinderFmq* in_data = gbinder_fmq_new(sizeof(guint32), 5,
-        GBINDER_FMQ_TYPE_SYNC_READ_WRITE, GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG,
-        -1, 0);
+    GBinderFmq* fmq = gbinder_fmq_new(sizeof(guint32), 5,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE,
+        GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
 
+    g_assert(fmq);
     req = gbinder_local_request_new(&gbinder_io_64, NULL);
     gbinder_local_request_init_writer(req, &writer);
-    gbinder_writer_append_fmq_descriptor(&writer, in_data);
+    gbinder_writer_append_fmq_descriptor(&writer, fmq);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 4);
+    g_assert_cmpuint(offsets->count, == ,4);
     g_assert(offsets->data[0] == 0);
     g_assert(offsets->data[1] == BUFFER_OBJECT_SIZE_64);
     g_assert(offsets->data[2] == 2 * BUFFER_OBJECT_SIZE_64 + sizeof(gint64));
     g_assert(offsets->data[3] == 3 * BUFFER_OBJECT_SIZE_64 + sizeof(gint64));
-    g_assert(data->bytes->len == in_len);
+    g_assert_cmpuint(data->bytes->len, == ,len);
     gbinder_local_request_unref(req);
-    gbinder_fmq_unref(in_data);
+    gbinder_fmq_unref(fmq);
 }
+
+#endif /* GBINDER_FMQ_SUPPORTED */
 
 /*==========================================================================*
  * bytes_written
@@ -1114,8 +1123,21 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("local_object"), test_local_object);
     g_test_add_func(TEST_("remote_object"), test_remote_object);
     g_test_add_func(TEST_("byte_array"), test_byte_array);
-    g_test_add_func(TEST_("fmq_descriptor"), test_fmq_descriptor);
     g_test_add_func(TEST_("bytes_written"), test_bytes_written);
+
+#if GBINDER_FMQ_SUPPORTED
+    {
+        int test_fd = syscall(__NR_memfd_create, "test", MFD_CLOEXEC);
+
+        if (test_fd < 0 && errno == ENOSYS) {
+            GINFO("Skipping tests that rely on memfd_create");
+        } else {
+            close(test_fd);
+            g_test_add_func(TEST_("fmq_descriptor"), test_fmq_descriptor);
+        }
+    }
+#endif /* GBINDER_FMQ_SUPPORTED */
+
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

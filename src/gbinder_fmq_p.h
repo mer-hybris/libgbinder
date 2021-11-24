@@ -36,6 +36,15 @@
 
 #include "gbinder_types_p.h"
 
+/* FMQ functionality requires __NR_memfd_create syscall */
+#include <sys/syscall.h>
+
+#ifdef __NR_memfd_create
+#  define GBINDER_FMQ_SUPPORTED 1
+#else
+#  define GBINDER_FMQ_SUPPORTED 0
+#endif
+
 /*
  * From linux/memfd.h
  */

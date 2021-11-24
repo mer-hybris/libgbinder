@@ -31,8 +31,10 @@
 
 #include "test_common.h"
 
-#include "gbinder_driver.h"
 #include "gbinder_fmq_p.h"
+
+#if GBINDER_FMQ_SUPPORTED
+
 #include "gbinder_log.h"
 
 #include <errno.h>
@@ -526,6 +528,8 @@ test_zero_copy(
     gbinder_fmq_unref(fmq);
 }
 
+#endif /* GBINDER_FMQ_SUPPORTED */
+
 /*==========================================================================*
  * Common
  *==========================================================================*/
@@ -535,6 +539,7 @@ test_zero_copy(
 
 int main(int argc, char* argv[])
 {
+#if GBINDER_FMQ_SUPPORTED
     guint i;
     int test_fd;
 
@@ -551,7 +556,7 @@ int main(int argc, char* argv[])
     }
 
     /* Some test environments don't know how handle this syscall */
-    test_fd = syscall(__NR_memfd_create, "MessageQueue", MFD_CLOEXEC);
+    test_fd = syscall(__NR_memfd_create, "test", MFD_CLOEXEC);
     if (test_fd < 0 && errno == ENOSYS) {
         GINFO("Skipping tests that rely on memfd_create");
     } else {
@@ -577,7 +582,9 @@ int main(int argc, char* argv[])
         g_test_add_func(TEST_("wait_wake"), test_wait_wake);
         g_test_add_func(TEST_("zero_copy"), test_zero_copy);
     }
-
+#else /* GBINDER_FMQ_SUPPORTED */
+    g_test_init(&argc, &argv, NULL);
+#endif
     return g_test_run();
 }
 
