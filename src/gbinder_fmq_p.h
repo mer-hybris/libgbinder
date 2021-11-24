@@ -36,6 +36,16 @@
 
 #include "gbinder_types_p.h"
 
+/*
+ * From linux/memfd.h
+ */
+#ifndef MFD_CLOEXEC
+#  define MFD_CLOEXEC 0x0001U
+#endif
+
+/*
+ * FMQ types
+ */
 typedef struct gbinder_fmq_grantor_descriptor {
     guint32 flags GBINDER_ALIGNED(4);
     guint32 fd_index GBINDER_ALIGNED(4);

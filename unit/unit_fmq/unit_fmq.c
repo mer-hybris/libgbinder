@@ -36,7 +36,6 @@
 #include "gbinder_log.h"
 
 #include <errno.h>
-#include <linux/memfd.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>

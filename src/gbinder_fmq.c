@@ -37,8 +37,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
-#include <linux/memfd.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -55,9 +53,9 @@ enum {
 typedef struct gbinder_fmq {
     GBinderMQDescriptor* desc;
     guint8* ring;
-    _Atomic guint64* read_ptr;
-    _Atomic guint64* write_ptr;
-    _Atomic guint32* event_flag_ptr;
+    guint64* read_ptr;
+    guint64* write_ptr;
+    guint32* event_flag_ptr;
     guint32 refcount;
 } GBinderFmq;
 
@@ -77,10 +75,9 @@ gbinder_fmq_available_to_read_bytes(
     GBinderFmq* self,
     gboolean contiguous)
 {
-    const guint64 read_ptr = atomic_load_explicit(self->read_ptr,
-        memory_order_acquire);
-    const gsize available_total = atomic_load_explicit(self->write_ptr,
-        memory_order_acquire) - read_ptr;
+    const guint64 read_ptr = __atomic_load_n(self->read_ptr, __ATOMIC_ACQUIRE);
+    const gsize available_total = __atomic_load_n(self->write_ptr,
+        __ATOMIC_ACQUIRE) - read_ptr;
 
     if (contiguous) {
         /*
@@ -114,8 +111,8 @@ gbinder_fmq_available_to_write_bytes(
          * The number of bytes that can be written contiguously starting from
          * write_offset without wrapping around the ring buffer.
          */
-        const guint64 write_ptr = atomic_load_explicit(self->write_ptr,
-            memory_order_relaxed);
+        const guint64 write_ptr = __atomic_load_n(self->write_ptr,
+            __ATOMIC_RELAXED);
         const gsize available_contiguous = size - (write_ptr % size);
 
         return (available_contiguous < available_total) ?
@@ -327,7 +324,7 @@ gbinder_fmq_new(
                  * Unsynchronized write FMQs may have multiple readers and
                  * each reader would have their own read pointer counter.
                  */
-                self->read_ptr = g_new0(_Atomic guint64, 1);
+                self->read_ptr = g_new0(guint64, 1);
             }
 
             if (!self->read_ptr) {
@@ -341,11 +338,11 @@ gbinder_fmq_new(
             }
 
             if (!(flags & GBINDER_FMQ_FLAG_NO_RESET_POINTERS)) {
-                atomic_store_explicit(self->read_ptr, 0, memory_order_release);
-                atomic_store_explicit(self->write_ptr, 0, memory_order_release);
+                __atomic_store_n(self->read_ptr, 0, __ATOMIC_RELEASE);
+                __atomic_store_n(self->write_ptr, 0, __ATOMIC_RELEASE);
             } else if (type != GBINDER_FMQ_TYPE_SYNC_READ_WRITE) {
                 /* Always reset the read pointer */
-                atomic_store_explicit(self->read_ptr, 0, memory_order_release);
+                __atomic_store_n(self->read_ptr, 0, __ATOMIC_RELEASE);
             }
 
             self->ring = gbinder_fmq_map_grantor_descriptor(self,
@@ -440,16 +437,13 @@ gbinder_fmq_begin_read(
             DATA_PTR_POS)->extent;
         gsize item_size = self->desc->quantum;
         gsize bytes_desired = items * item_size;
-        guint64 write_ptr = atomic_load_explicit(self->write_ptr,
-            memory_order_acquire);
-        guint64 read_ptr = atomic_load_explicit(self->read_ptr,
-            memory_order_relaxed);
+        guint64 write_ptr = __atomic_load_n(self->write_ptr, __ATOMIC_ACQUIRE);
+        guint64 read_ptr = __atomic_load_n(self->read_ptr, __ATOMIC_RELAXED);
 
         if ((write_ptr % item_size) || (read_ptr % item_size)) {
             GWARN("Unable to write data because of misaligned pointer");
         } else if (write_ptr - read_ptr > size) {
-            atomic_store_explicit(self->read_ptr, write_ptr,
-                memory_order_release);
+            __atomic_store_n(self->read_ptr, write_ptr, __ATOMIC_RELEASE);
         } else if (write_ptr - read_ptr < bytes_desired) {
             /* Not enough data to read in FMQ. */
         } else {
@@ -476,8 +470,8 @@ gbinder_fmq_begin_write(
             items > size / item_size) {
             /* Incorrect parameters */
         } else {
-            guint64 write_ptr = atomic_load_explicit(self->write_ptr,
-                memory_order_relaxed);
+            guint64 write_ptr = __atomic_load_n(self->write_ptr,
+                __ATOMIC_RELAXED);
 
             if (write_ptr % item_size) {
                 GWARN("The write pointer has become misaligned.");
@@ -498,22 +492,18 @@ gbinder_fmq_end_read(
     if (G_LIKELY(self) && G_LIKELY(items > 0)) {
         gsize size = gbinder_fmq_get_grantor_descriptor(self,
             DATA_PTR_POS)->extent;
-        guint64 read_ptr = atomic_load_explicit(self->read_ptr,
-            memory_order_relaxed);
-        guint64 write_ptr = atomic_load_explicit(self->write_ptr,
-            memory_order_acquire);
+        guint64 read_ptr = __atomic_load_n(self->read_ptr, __ATOMIC_RELAXED);
+        guint64 write_ptr = __atomic_load_n(self->write_ptr, __ATOMIC_ACQUIRE);
 
         /*
          * If queue type is unsynchronized, it is possible that a write
          * overflow may have occurred.
          */
         if (write_ptr - read_ptr > size) {
-            atomic_store_explicit(self->read_ptr, write_ptr,
-                memory_order_release);
+            __atomic_store_n(self->read_ptr, write_ptr, __ATOMIC_RELEASE);
         } else {
             read_ptr += items * self->desc->quantum;
-            atomic_store_explicit(self->read_ptr, read_ptr,
-                memory_order_release);
+            __atomic_store_n(self->read_ptr, read_ptr, __ATOMIC_RELEASE);
         }
     }
 }
@@ -524,11 +514,10 @@ gbinder_fmq_end_write(
     gsize items)
 {
     if (G_LIKELY(self) && G_LIKELY(items > 0)) {
-        guint64 write_ptr = atomic_load_explicit(self->write_ptr,
-            memory_order_relaxed);
+        guint64 write_ptr = __atomic_load_n(self->write_ptr, __ATOMIC_RELAXED);
 
         write_ptr += items * self->desc->quantum;
-        atomic_store_explicit(self->write_ptr, write_ptr, memory_order_release);
+        __atomic_store_n(self->write_ptr, write_ptr, __ATOMIC_RELEASE);
     }
 }
 
@@ -617,7 +606,8 @@ gbinder_fmq_wait_timeout(
     } else if (!bit_mask) {
         return (-EINVAL);
     } else {
-        guint32 old_value = atomic_fetch_and(self->event_flag_ptr, ~bit_mask);
+        guint32 old_value = __atomic_fetch_and(self->event_flag_ptr, ~bit_mask,
+            __ATOMIC_SEQ_CST);
         guint32 set_bits = old_value & bit_mask;
 
         /* Check if any of the bits was already set */
@@ -652,7 +642,8 @@ gbinder_fmq_wait_timeout(
             if (ret == -1) {
                 return errno ? (-errno) : -EFAULT;
             } else {
-                old_value = atomic_fetch_and(self->event_flag_ptr, ~bit_mask);
+                old_value = __atomic_fetch_and(self->event_flag_ptr, ~bit_mask,
+                    __ATOMIC_SEQ_CST);
                 *state = old_value & bit_mask;
                 return (*state) ? 0 : (-EAGAIN);
             }
@@ -675,7 +666,8 @@ gbinder_fmq_wake(
             /* Ignore zero bit mask */
         } else {
             /* Set bit mask only if needed */
-            guint32 old_value = atomic_fetch_or(self->event_flag_ptr, bit_mask);
+            guint32 old_value = __atomic_fetch_or(self->event_flag_ptr,
+                bit_mask, __ATOMIC_SEQ_CST);
 
             if (~old_value & bit_mask) {
                 ret = syscall(__NR_futex, self->event_flag_ptr,
