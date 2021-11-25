@@ -171,6 +171,8 @@ app_init(
           app_log_verbose, "Enable verbose output", NULL },
         { "quiet", 'q', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           app_log_quiet, "Be quiet", NULL },
+        { "device", 'd', 0, G_OPTION_ARG_STRING, &opt->dev,
+          "Binder device [" DEV_DEFAULT "]", "DEVICE" },
         { NULL }
     };
 
@@ -187,7 +189,7 @@ app_init(
     if (g_option_context_parse(options, &argc, &argv, &error)) {
         char* help;
 
-        opt->dev = g_strdup(DEV_DEFAULT);
+        if (!opt->dev || !opt->dev[0]) opt->dev = g_strdup(DEV_DEFAULT);
         switch (argc) {
         case 2:
             opt->service = argv[1];
