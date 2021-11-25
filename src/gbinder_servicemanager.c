@@ -83,11 +83,12 @@ static const GBinderServiceManagerType gbinder_servicemanager_types[] = {
     { "aidl", gbinder_servicemanager_aidl_get_type },
     { "aidl2", gbinder_servicemanager_aidl2_get_type },
     { "aidl3", gbinder_servicemanager_aidl3_get_type },
+    { "aidl4", gbinder_servicemanager_aidl4_get_type },
     { "hidl", gbinder_servicemanager_hidl_get_type }
 };
 
 #define SERVICEMANAGER_TYPE_AIDL (gbinder_servicemanager_types + 0)
-#define SERVICEMANAGER_TYPE_HIDL (gbinder_servicemanager_types + 3)
+#define SERVICEMANAGER_TYPE_HIDL (gbinder_servicemanager_types + 4)
 #define SERVICEMANAGER_TYPE_DEFAULT SERVICEMANAGER_TYPE_AIDL
 
 static GHashTable* gbinder_servicemanager_map = NULL;

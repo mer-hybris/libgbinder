@@ -32,7 +32,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "gbinder_servicemanager_aidl.h"
+#include "gbinder_servicemanager_aidl_p.h"
 #include "gbinder_client_p.h"
 #include "gbinder_reader_p.h"
 
@@ -50,14 +50,6 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl3,
 
 #define PARENT_CLASS gbinder_servicemanager_aidl3_parent_class
 
-enum gbinder_stability_level {
-    UNDECLARED = 0,
-    VENDOR = 0b000011,
-    SYSTEM = 0b001100,
-    VINTF = 0b111111
-};
-
-static
 GBinderRemoteObject*
 gbinder_servicemanager_aidl3_get_service(
     GBinderServiceManager* self,
@@ -84,28 +76,6 @@ gbinder_servicemanager_aidl3_get_service(
     return obj;
 }
 
-static
-GBinderLocalRequest*
-gbinder_servicemanager_aidl3_add_service_req(
-    GBinderClient* client,
-    const char* name,
-    GBinderLocalObject* obj)
-{
-    GBinderLocalRequest* req = gbinder_client_new_request(client);
-
-    gbinder_local_request_append_string16(req, name);
-    gbinder_local_request_append_local_object(req, obj);
-    /*
-     * Starting from Android 11, to add a service, Android framework requires
-     * an additional field `stability` when reading a strong binder.
-     */
-    gbinder_local_request_append_int32(req, SYSTEM);
-    gbinder_local_request_append_int32(req, 0);
-    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
-    return req;
-}
-
-static
 char**
 gbinder_servicemanager_aidl3_list(
     GBinderServiceManager* manager,
@@ -146,6 +116,27 @@ gbinder_servicemanager_aidl3_list(
     gbinder_local_request_unref(req);
     g_ptr_array_add(list, NULL);
     return (char**)g_ptr_array_free(list, FALSE);
+}
+
+static
+GBinderLocalRequest*
+gbinder_servicemanager_aidl3_add_service_req(
+    GBinderClient* client,
+    const char* name,
+    GBinderLocalObject* obj)
+{
+    GBinderLocalRequest* req = gbinder_client_new_request(client);
+
+    gbinder_local_request_append_string16(req, name);
+    gbinder_local_request_append_local_object(req, obj);
+    /*
+     * Starting from Android 11, to add a service, Android framework requires
+     * an additional field `stability` when reading a strong binder.
+     */
+    gbinder_local_request_append_int32(req, SYSTEM);
+    gbinder_local_request_append_int32(req, 0);
+    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
+    return req;
 }
 
 static
