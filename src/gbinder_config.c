@@ -133,9 +133,24 @@ static const GBinderConfigPresetGroup gbinder_config_30[] = {
     { NULL, NULL }
 };
 
+/* API level 31 */
+
+static const GBinderConfigPresetEntry gbinder_config_31_servicemanager[] = {
+    { "/dev/binder", "aidl4" },
+    { "/dev/vndbinder", "aidl4" },
+    { NULL, NULL }
+};
+
+static const GBinderConfigPresetGroup gbinder_config_31[] = {
+    { GBINDER_CONFIG_GROUP_PROTOCOL, gbinder_config_30_protocol },
+    { GBINDER_CONFIG_GROUP_SERVICEMANAGER, gbinder_config_31_servicemanager },
+    { NULL, NULL }
+};
+
 /* Presets sorted by API level in descending order */
 
 static const GBinderConfigPreset gbinder_config_presets[] = {
+    { 31, gbinder_config_31 },
     { 30, gbinder_config_30 },
     { 29, gbinder_config_29 },
     { 28, gbinder_config_28 }
