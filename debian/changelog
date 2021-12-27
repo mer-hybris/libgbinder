@@ -1,3 +1,9 @@
+libgbinder (1.1.15) unstable; urgency=low
+
+  * Added readers and writers for int8 and int16
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 27 Dec 2021 15:13:23 +0200
+
 libgbinder (1.1.14) unstable; urgency=low
 
   * Support for FMQ (Fast Message Queues)
