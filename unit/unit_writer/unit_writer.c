@@ -64,6 +64,10 @@ test_null(
     gsize size = 1;
 
     gbinder_local_request_init_writer(NULL, &writer);
+    gbinder_writer_append_int8(NULL, 0);
+    gbinder_writer_append_int8(&writer, 0);
+    gbinder_writer_append_int16(NULL, 0);
+    gbinder_writer_append_int16(&writer, 0);
     gbinder_writer_append_int32(NULL, 0);
     gbinder_writer_append_int32(&writer, 0);
     gbinder_writer_append_int64(NULL, 0);
@@ -162,6 +166,60 @@ test_cleanup(
     gbinder_writer_add_cleanup(&writer, test_cleanup_fn, &cleanup_count);
     gbinder_local_request_unref(req);
     g_assert_cmpint(cleanup_count, == ,2);
+}
+
+/*==========================================================================*
+ * int8
+ *==========================================================================*/
+
+static
+void
+test_int8(
+    void)
+{
+    const char encoded[] = {
+        TEST_INT8_BYTES_4(0x80)
+    };
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int8(&writer, 0x80);
+
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert_cmpuint(data->bytes->len, == ,sizeof(encoded));
+    g_assert(!memcmp(data->bytes->data, encoded, data->bytes->len));
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * int16
+ *==========================================================================*/
+
+static
+void
+test_int16(
+    void)
+{
+    const char encoded[] = {
+        TEST_INT16_BYTES_4(0x80ff)
+    };
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int16(&writer, 0x80ff);
+
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert_cmpuint(data->bytes->len, == ,sizeof(encoded));
+    g_assert(!memcmp(data->bytes->data, encoded, data->bytes->len));
+    gbinder_local_request_unref(req);
 }
 
 /*==========================================================================*
@@ -283,9 +341,9 @@ test_bool(
     void)
 {
     const char encoded[] = {
-        0x00, 0x00, 0x00, 0x00,
-        0x01, 0x00, 0x00, 0x00,
-        0x01, 0x00, 0x00, 0x00
+        TEST_INT8_BYTES_4(0),
+        TEST_INT8_BYTES_4(1),
+        TEST_INT8_BYTES_4(1)
     };
     GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32, NULL);
     GBinderOutputData* data;
@@ -1063,6 +1121,8 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("cleanup"), test_cleanup);
+    g_test_add_func(TEST_("int8"), test_int8);
+    g_test_add_func(TEST_("int16"), test_int16);
     g_test_add_func(TEST_("int32"), test_int32);
     g_test_add_func(TEST_("int64"), test_int64);
     g_test_add_func(TEST_("float"), test_float);

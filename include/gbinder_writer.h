@@ -56,6 +56,16 @@ struct gbinder_parent {
 };
 
 void
+gbinder_writer_append_int8(
+    GBinderWriter* writer,
+    guint8 value); /* Since 1.1.15 */
+
+void
+gbinder_writer_append_int16(
+    GBinderWriter* writer,
+    guint16 value); /* Since 1.1.15 */
+
+void
 gbinder_writer_append_int32(
     GBinderWriter* writer,
     guint32 value);

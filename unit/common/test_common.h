@@ -80,6 +80,10 @@ test_run_in_context(
 /* Helper macros */
 
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
+#  define TEST_INT8_BYTES_4(v) \
+    (guint8)(v), 0, 0, 0
+#  define TEST_INT16_BYTES_4(v) \
+    (guint8)(v), (guint8)((v) >> 8), 0, 0
 #  define TEST_INT16_BYTES(v) \
     (guint8)(v), (guint8)((v) >> 8)
 #  define TEST_INT32_BYTES(v) \
@@ -91,6 +95,10 @@ test_run_in_context(
     (guint8)(((guint64)(v)) >> 32), (guint8)(((guint64)(v)) >> 40), \
     (guint8)(((guint64)(v)) >> 48), (guint8)(((guint64)(v)) >> 56)
 #elif G_BYTE_ORDER == G_BIG_ENDIAN
+#  define TEST_INT8_BYTES_4(v) \
+    0, 0, 0, (guint8)(v)
+#  define TEST_INT16_BYTES_4(v) \
+    0, 0, (guint8)((v) >> 8), (guint8)(v)
 #  define TEST_INT16_BYTES(v) \
     (guint8)((v) >> 8), (guint8)(v)
 #  define TEST_INT32_BYTES(v) \
