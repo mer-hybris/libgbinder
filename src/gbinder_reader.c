@@ -139,6 +139,62 @@ gbinder_reader_read_bool(
 }
 
 gboolean
+gbinder_reader_read_int8(
+    GBinderReader* reader,
+    gint8* value) /* Since 1.1.15 */
+{
+    return gbinder_reader_read_uint8(reader, (guint8*)value);
+}
+
+gboolean
+gbinder_reader_read_uint8(
+    GBinderReader* reader,
+    guint8* value) /* Since 1.1.15 */
+{
+    /* Primitive values are supposed to be padded to 4-byte boundary */
+    if (value) {
+        guint32 padded;
+
+        if (gbinder_reader_read_uint32(reader, &padded)) {
+            *value = (guint8)padded;
+            return TRUE;
+        } else {
+            return FALSE;
+        }
+    } else {
+        return gbinder_reader_read_uint32(reader, NULL);
+    }
+}
+
+gboolean
+gbinder_reader_read_int16(
+    GBinderReader* reader,
+    gint16* value) /* Since 1.1.15 */
+{
+    return gbinder_reader_read_uint16(reader, (guint16*)value);
+}
+
+gboolean
+gbinder_reader_read_uint16(
+    GBinderReader* reader,
+    guint16* value) /* Since 1.1.15 */
+{
+    /* Primitive values are supposed to be padded to 4-byte boundary */
+    if (value) {
+        guint32 padded;
+
+        if (gbinder_reader_read_uint32(reader, &padded)) {
+            *value = (guint16)padded;
+            return TRUE;
+        } else {
+            return FALSE;
+        }
+    } else {
+        return gbinder_reader_read_uint32(reader, NULL);
+    }
+}
+
+gboolean
 gbinder_reader_read_int32(
     GBinderReader* reader,
     gint32* value)

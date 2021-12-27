@@ -66,6 +66,26 @@ gbinder_reader_read_bool(
     gboolean* value);
 
 gboolean
+gbinder_reader_read_int8(
+    GBinderReader* reader,
+    gint8* value); /* Since 1.1.15 */
+
+gboolean
+gbinder_reader_read_uint8(
+    GBinderReader* reader,
+    guint8* value); /* Since 1.1.15 */
+
+gboolean
+gbinder_reader_read_int16(
+    GBinderReader* reader,
+    gint16* value); /* Since 1.1.15 */
+
+gboolean
+gbinder_reader_read_uint16(
+    GBinderReader* reader,
+    guint16* value); /* Since 1.1.15 */
+
+gboolean
 gbinder_reader_read_int32(
     GBinderReader* reader,
     gint32* value);
