@@ -213,12 +213,34 @@ gbinder_writer_data_append_bool(
     GBinderWriterData* data,
     gboolean value)
 {
-    guint8 padded[4];
+    /* Primitive values are padded to 4-byte boundary */
+    gbinder_writer_data_append_int32(data, value != FALSE);
+}
 
-    /* Boolean values are padded to 4-byte boundary */
-    padded[0] = (value != FALSE);
-    padded[1] = padded[2] = padded[3] = 0;
-    g_byte_array_append(data->bytes, padded, sizeof(padded));
+void
+gbinder_writer_append_int8(
+    GBinderWriter* self,
+    guint8 value) /* Since 1.1.15 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        /* Primitive values are padded to 4-byte boundary */
+        gbinder_writer_data_append_int32(data, value);
+    }
+}
+
+void
+gbinder_writer_append_int16(
+    GBinderWriter* self,
+    guint16 value) /* Since 1.1.15 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        /* Primitive values are padded to 4-byte boundary */
+        gbinder_writer_data_append_int32(data, value);
+    }
 }
 
 void
@@ -661,24 +683,21 @@ gbinder_writer_data_append_fds(
     const GBinderFds *fds,
     const GBinderParent* parent)
 {
-    /* If the pointer is null only write zero size */
-    if (!fds) {
+    if (fds) {
+        /* Size, fds data buffer and fd_array_object */
+        const gsize fds_total = sizeof(GBinderFds) +
+            sizeof(int) * (fds->num_fds + fds->num_ints);
+        GBinderParent fds_parent;
+
+        gbinder_writer_data_append_int64(data, fds_total);
+        fds_parent.index = gbinder_writer_data_append_buffer_object(data,
+            fds, fds_total, parent);
+        fds_parent.offset = sizeof(GBinderFds);
+        gbinder_writer_data_append_fda_object(data, fds, &fds_parent);
+    } else {
+        /* If the pointer is null only write zero size */
         gbinder_writer_data_append_int64(data, 0);
-        return;
     }
-
-    /* Write the fds information: size, fds data buffer and fd_array_object */
-    const gsize fds_total = sizeof(GBinderFds) +
-        sizeof(int) * (fds->num_fds + fds->num_ints);
-    GBinderParent fds_parent;
-
-    gbinder_writer_data_append_int64(data, fds_total);
-
-    fds_parent.index = gbinder_writer_data_append_buffer_object(data,
-        fds, fds_total, parent);
-    fds_parent.offset = sizeof(GBinderFds);
-
-    gbinder_writer_data_append_fda_object(data, fds, &fds_parent);
 }
 
 guint
@@ -1017,6 +1036,7 @@ gbinder_writer_data_append_fmq_descriptor(
     const gsize fds_total = sizeof(GBinderFds) +
         sizeof(int) * (desc->data.fds->num_fds + desc->data.fds->num_ints);
     GBinderFds* fds = gutil_memdup(desc->data.fds, fds_total);
+
     mqdesc->data.fds = fds;
     data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, fds);
 
