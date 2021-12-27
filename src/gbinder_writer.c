@@ -661,24 +661,21 @@ gbinder_writer_data_append_fds(
     const GBinderFds *fds,
     const GBinderParent* parent)
 {
-    /* If the pointer is null only write zero size */
-    if (!fds) {
+    if (fds) {
+        /* Size, fds data buffer and fd_array_object */
+        const gsize fds_total = sizeof(GBinderFds) +
+            sizeof(int) * (fds->num_fds + fds->num_ints);
+        GBinderParent fds_parent;
+
+        gbinder_writer_data_append_int64(data, fds_total);
+        fds_parent.index = gbinder_writer_data_append_buffer_object(data,
+            fds, fds_total, parent);
+        fds_parent.offset = sizeof(GBinderFds);
+        gbinder_writer_data_append_fda_object(data, fds, &fds_parent);
+    } else {
+        /* If the pointer is null only write zero size */
         gbinder_writer_data_append_int64(data, 0);
-        return;
     }
-
-    /* Write the fds information: size, fds data buffer and fd_array_object */
-    const gsize fds_total = sizeof(GBinderFds) +
-        sizeof(int) * (fds->num_fds + fds->num_ints);
-    GBinderParent fds_parent;
-
-    gbinder_writer_data_append_int64(data, fds_total);
-
-    fds_parent.index = gbinder_writer_data_append_buffer_object(data,
-        fds, fds_total, parent);
-    fds_parent.offset = sizeof(GBinderFds);
-
-    gbinder_writer_data_append_fda_object(data, fds, &fds_parent);
 }
 
 guint
@@ -1017,6 +1014,7 @@ gbinder_writer_data_append_fmq_descriptor(
     const gsize fds_total = sizeof(GBinderFds) +
         sizeof(int) * (desc->data.fds->num_fds + desc->data.fds->num_ints);
     GBinderFds* fds = gutil_memdup(desc->data.fds, fds_total);
+
     mqdesc->data.fds = fds;
     data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, fds);
 
