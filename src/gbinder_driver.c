@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -169,6 +169,14 @@ gbinder_driver_verbose_transaction_data(
                     GVERBOSE("> %s %d (%u bytes, %u objects)", name,
                         tx->status, (guint)tx->size, n);
                 }
+            } else if (tx->code) {
+                if (tx->target) {
+                    GVERBOSE("> %s %p 0x%08x (%u bytes, %u objects)", name,
+                        tx->target, tx->code, (guint)tx->size, n);
+                } else {
+                    GVERBOSE("> %s 0x%08x (%u bytes, %u objects)", name,
+                        tx->code, (guint)tx->size, n);
+                }
             } else {
                 if (tx->target) {
                     GVERBOSE("> %s %p (%u bytes, %u objects)", name,
@@ -186,6 +194,14 @@ gbinder_driver_verbose_transaction_data(
                 } else {
                     GVERBOSE("> %s %d (%u bytes)", name, tx->status, (guint)
                         tx->size);
+                }
+            } else if (tx->code) {
+                if (tx->target) {
+                    GVERBOSE("> %s %p 0x%08x (%u bytes)", name,
+                        tx->target, tx->code, (guint)tx->size);
+                } else {
+                    GVERBOSE("> %s 0x%08x (%u bytes)", name,
+                        tx->code, (guint)tx->size);
                 }
             } else {
                 if (tx->target) {
