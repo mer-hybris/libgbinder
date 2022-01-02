@@ -149,6 +149,7 @@ gbinder_remote_object_commit_suicide(
         GBinderRemoteObjectPriv* priv = self->priv;
 
         self->dead = TRUE;
+        gbinder_driver_clear_death_notification(driver, self);
         if (priv->acquired) {
             priv->acquired = FALSE;
             /* Release the dead node */
