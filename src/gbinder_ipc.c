@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -1183,7 +1183,7 @@ gbinder_ipc_local_object_disposed(
 
     /* Lock */
     g_mutex_lock(&priv->local_objects_mutex);
-    if (obj->object.ref_count == 1 && priv->local_objects) {
+    if (g_atomic_int_get(&obj->object.ref_count) == 1 && priv->local_objects) {
         if (g_hash_table_remove(priv->local_objects, obj)) {
             GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
             if (g_hash_table_size(priv->local_objects) == 0) {
@@ -1205,7 +1205,7 @@ gbinder_ipc_remote_object_disposed(
 
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
-    if (obj->object.ref_count == 1) {
+    if (g_atomic_int_get(&obj->object.ref_count) == 1) {
         gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);
