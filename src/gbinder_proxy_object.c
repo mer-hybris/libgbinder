@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -416,10 +416,8 @@ gbinder_proxy_object_release(
     GBinderProxyObjectPriv* priv = self->priv;
 
     if (priv->remote_death_id && object->strong_refs == 1) {
-        GBinderRemoteObject* remote = self->remote;
-
         /* Last strong ref, release the attached remote object */
-        gbinder_driver_release(remote->ipc->driver, remote->handle);
+        gbinder_remote_object_commit_suicide(self->remote);
     }
     GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->release(object);
 }

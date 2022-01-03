@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -644,6 +644,7 @@ gbinder_local_object_finalize(
     GBinderLocalObjectPriv* priv = self->priv;
 
     GASSERT(!self->strong_refs);
+    gbinder_ipc_invalidate_local_object(self->ipc, self);
     gbinder_ipc_unref(self->ipc);
     g_strfreev(priv->ifaces);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
