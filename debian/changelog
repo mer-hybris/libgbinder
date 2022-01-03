@@ -1,3 +1,11 @@
+libgbinder (1.1.16) unstable; urgency=low
+
+  * Make sure stale object pointers don't hang around
+  * Properly shut down remote object inside the proxy
+  * Read ref_count from GObject atomically
+
+ -- Slava Monich <slava.monich@jolla.com>  Mon, 03 Jan 2022 13:58:44 +0200
+
 libgbinder (1.1.15) unstable; urgency=low
 
   * Added readers and writers for int8 and int16
