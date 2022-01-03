@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -121,12 +121,22 @@ test_basic_find_none(
 }
 
 static
+gboolean
+test_basic_find(
+    GBinderLocalObject* obj,
+    void* user_data)
+{
+    return obj == user_data;
+}
+
+static
 void
 test_basic(
     void)
 {
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
     GBinderIpc* ipc2 = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderLocalObject* obj;
 
     g_assert(ipc);
     g_assert(ipc2);
@@ -136,6 +146,12 @@ test_basic(
 
     g_assert(!gbinder_ipc_find_local_object(NULL, test_basic_find_none, NULL));
     g_assert(!gbinder_ipc_find_local_object(ipc, test_basic_find_none, NULL));
+    obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    g_assert(obj);
+    g_assert(!gbinder_ipc_find_local_object(ipc, test_basic_find_none, NULL));
+    g_assert(gbinder_ipc_find_local_object(ipc, test_basic_find, obj) == obj);
+    gbinder_local_object_unref(obj); /* Above call added a reference */
+    gbinder_local_object_unref(obj);
 
     /* Second gbinder_ipc_new returns the same (default) object */
     g_assert(gbinder_ipc_new(NULL) == ipc);
