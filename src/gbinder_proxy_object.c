@@ -61,6 +61,7 @@ struct gbinder_proxy_tx {
 
 struct gbinder_proxy_object_priv {
     gulong remote_death_id;
+    gboolean acquired;
     gboolean dropped;
     GBinderProxyTx* tx;
     GMutex mutex; /* Protects the hashtable below */
@@ -398,28 +399,14 @@ gbinder_proxy_object_acquire(
     GBinderProxyObject* self = THIS(object);
     GBinderProxyObjectPriv* priv = self->priv;
 
-    if (priv->remote_death_id && !object->strong_refs) {
+    if (priv->remote_death_id && !priv->dropped && !priv->acquired) {
         GBinderRemoteObject* remote = self->remote;
 
-        /* First strong ref, acquire the attached remote object */
+        /* Not acquired yet */
+        priv->acquired = TRUE;
         gbinder_driver_acquire(remote->ipc->driver, remote->handle);
     }
     GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->acquire(object);
-}
-
-static
-void
-gbinder_proxy_object_release(
-    GBinderLocalObject* object)
-{
-    GBinderProxyObject* self = THIS(object);
-    GBinderProxyObjectPriv* priv = self->priv;
-
-    if (priv->remote_death_id && object->strong_refs == 1) {
-        /* Last strong ref, release the attached remote object */
-        gbinder_remote_object_commit_suicide(self->remote);
-    }
-    GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->release(object);
 }
 
 static
@@ -475,10 +462,14 @@ gbinder_proxy_object_finalize(
 {
     GBinderProxyObject* self = THIS(object);
     GBinderProxyObjectPriv* priv = self->priv;
+    GBinderRemoteObject* remote = self->remote;
 
+    if (priv->acquired) {
+        gbinder_driver_release(remote->ipc->driver, remote->handle);
+    }
     gbinder_proxy_object_drop_subproxies(self);
-    gbinder_remote_object_remove_handler(self->remote, priv->remote_death_id);
-    gbinder_remote_object_unref(self->remote);
+    gbinder_remote_object_remove_handler(remote, priv->remote_death_id);
+    gbinder_remote_object_unref(remote);
     g_mutex_clear(&priv->mutex);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
@@ -507,7 +498,6 @@ gbinder_proxy_object_class_init(
     klass->can_handle_transaction = gbinder_proxy_object_can_handle_transaction;
     klass->handle_transaction = gbinder_proxy_object_handle_transaction;
     klass->acquire = gbinder_proxy_object_acquire;
-    klass->release = gbinder_proxy_object_release;
     klass->drop = gbinder_proxy_object_drop;
 }
 
