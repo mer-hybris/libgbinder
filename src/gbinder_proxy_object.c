@@ -60,12 +60,9 @@ struct gbinder_proxy_tx {
 };
 
 struct gbinder_proxy_object_priv {
-    gulong remote_death_id;
     gboolean acquired;
     gboolean dropped;
     GBinderProxyTx* tx;
-    GMutex mutex; /* Protects the hashtable below */
-    GHashTable* subproxies;
 };
 
 G_DEFINE_TYPE(GBinderProxyObject, gbinder_proxy_object, \
@@ -77,79 +74,12 @@ G_DEFINE_TYPE(GBinderProxyObject, gbinder_proxy_object, \
 #define THIS_TYPE GBINDER_TYPE_PROXY_OBJECT
 #define PARENT_CLASS gbinder_proxy_object_parent_class
 
-static
-void
-gbinder_proxy_object_subproxy_gone(
-    gpointer proxy,
-    GObject* subproxy)
-{
-    GBinderProxyObject* self = THIS(proxy);
-    GBinderProxyObjectPriv* priv = self->priv;
-
-    /* Lock */
-    g_mutex_lock(&priv->mutex);
-    g_hash_table_remove(priv->subproxies, subproxy);
-    if (g_hash_table_size(priv->subproxies) == 0) {
-        g_hash_table_unref(priv->subproxies);
-        priv->subproxies = NULL;
-    }
-    g_mutex_unlock(&priv->mutex);
-    /* Unlock */
-}
-
-static
-void
-gbinder_proxy_object_drop_subproxies(
-    GBinderProxyObject* self)
-{
-    GBinderProxyObjectPriv* priv = self->priv;
-    GSList* list = NULL;
-
-    /* Lock */
-    g_mutex_lock(&priv->mutex);
-    if (priv->subproxies) {
-        GHashTableIter it;
-        gpointer value;
-
-        g_hash_table_iter_init(&it, priv->subproxies);
-        while (g_hash_table_iter_next(&it, NULL, &value)) {
-            list = g_slist_append(list, gbinder_local_object_ref(value));
-            g_object_weak_unref(G_OBJECT(value),
-                gbinder_proxy_object_subproxy_gone, self);
-        }
-        g_hash_table_destroy(priv->subproxies);
-        priv->subproxies = NULL;
-    }
-    g_mutex_unlock(&priv->mutex);
-    /* Unlock */
-
-    /* Drop (and possibly destroy) the objects outside of the lock */
-    g_slist_free_full(list, (GDestroyNotify) gbinder_local_object_drop);
-}
-
-static
-void
-gbinder_proxy_remote_death_proc(
-    GBinderRemoteObject* obj,
-    void* proxy)
-{
-    GBinderProxyObject* self = THIS(proxy);
-    GBinderProxyObjectPriv* priv = self->priv;
-
-    GDEBUG("Remote object %u died on %s", obj->handle, obj->ipc->dev);
-    gbinder_remote_object_remove_handler(obj, priv->remote_death_id);
-    priv->remote_death_id = 0;
-    /* Drop the implicit reference */
-    gbinder_local_object_unref(&self->parent);
-}
-
 /*==========================================================================*
  * Converter
  *==========================================================================*/
 
 typedef struct gbinder_proxy_object_converter {
     GBinderObjectConverter pub;
-    GBinderProxyObject* proxy;
     GBinderIpc* remote;
     GBinderIpc* local;
 } GBinderProxyObjectConverter;
@@ -183,8 +113,6 @@ gbinder_proxy_object_converter_handle_to_local(
     guint32 handle)
 {
     GBinderProxyObjectConverter* c = gbinder_proxy_object_converter_cast(pub);
-    GBinderProxyObject* proxy = c->proxy;
-    GBinderProxyObjectPriv* priv = proxy->priv;
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(c->remote);
     GBinderRemoteObject* remote = gbinder_object_registry_get_remote(reg,
         handle, REMOTE_REGISTRY_CAN_CREATE /* but don't acquire */);
@@ -193,32 +121,7 @@ gbinder_proxy_object_converter_handle_to_local(
 
     if (!local && !remote->dead) {
         /* GBinderProxyObject will reference GBinderRemoteObject */
-        GBinderProxyObject* subp = gbinder_proxy_object_new(c->local, remote);
-
-        /*
-         * Auto-created proxies may get spontaneously destroyed and
-         * not necessarily on the UI thread.
-         */
-        subp->priv->remote_death_id = gbinder_remote_object_add_death_handler
-            (remote, gbinder_proxy_remote_death_proc, subp);
-
-        /*
-         * Remote keeps an implicit reference to this auto-created
-         * proxy. The reference gets released when the remote object
-         * dies, i.e. by gbinder_proxy_remote_death_proc().
-         */
-        gbinder_local_object_ref(local = GBINDER_LOCAL_OBJECT(subp));
-
-        /* Lock */
-        g_mutex_lock(&priv->mutex);
-        if (!priv->subproxies) {
-            priv->subproxies = g_hash_table_new(g_direct_hash, g_direct_equal);
-        }
-        g_hash_table_insert(priv->subproxies, subp, subp);
-        g_object_weak_ref(G_OBJECT(subp),
-            gbinder_proxy_object_subproxy_gone, proxy);
-        g_mutex_unlock(&priv->mutex);
-        /* Unlock */
+        local = &gbinder_proxy_object_new(c->local, remote)->parent;
     }
 
     /* Release the reference returned by gbinder_object_registry_get_remote */
@@ -242,7 +145,6 @@ gbinder_proxy_object_converter_init(
     GBinderIpc* dest = proxy->parent.ipc;
 
     memset(convert, 0, sizeof(*convert));
-    convert->proxy = proxy;
     convert->remote = remote;
     convert->local = local;
     pub->f = &gbinder_converter_fn;
@@ -347,7 +249,7 @@ gbinder_proxy_object_handle_transaction(
     GBinderProxyObjectPriv* priv = self->priv;
     GBinderRemoteObject* remote = self->remote;
 
-    if (!priv->dropped && !gbinder_remote_object_is_dead(remote)) {
+    if (!priv->dropped && !remote->dead) {
         GBinderLocalRequest* fwd;
         GBinderProxyTx* tx = g_slice_new0(GBinderProxyTx);
         GBinderProxyObjectConverter convert;
@@ -375,6 +277,7 @@ gbinder_proxy_object_handle_transaction(
         gbinder_local_request_unref(fwd);
         *status = GBINDER_STATUS_OK;
     } else {
+        GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
         *status = (-EBADMSG);
     }
     return NULL;
@@ -398,10 +301,9 @@ gbinder_proxy_object_acquire(
 {
     GBinderProxyObject* self = THIS(object);
     GBinderProxyObjectPriv* priv = self->priv;
+    GBinderRemoteObject* remote = self->remote;
 
-    if (priv->remote_death_id && !priv->dropped && !priv->acquired) {
-        GBinderRemoteObject* remote = self->remote;
-
+    if (!remote->dead && !priv->dropped && !priv->acquired) {
         /* Not acquired yet */
         priv->acquired = TRUE;
         gbinder_driver_acquire(remote->ipc->driver, remote->handle);
@@ -418,7 +320,6 @@ gbinder_proxy_object_drop(
     GBinderProxyObjectPriv* priv = self->priv;
 
     priv->dropped = TRUE;
-    gbinder_proxy_object_drop_subproxies(self);
     GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->drop(object);
 }
 
@@ -444,6 +345,8 @@ gbinder_proxy_object_new(
         if (object) {
             GBinderProxyObject* self = THIS(object);
 
+            GDEBUG("Proxy %p %s => %u %s created", self, gbinder_ipc_name(src),
+                remote->handle, gbinder_ipc_name(remote->ipc));
             self->remote = gbinder_remote_object_ref(remote);
             return self;
         }
@@ -462,15 +365,25 @@ gbinder_proxy_object_finalize(
 {
     GBinderProxyObject* self = THIS(object);
     GBinderProxyObjectPriv* priv = self->priv;
+    GBinderLocalObject* local = &self->parent;
     GBinderRemoteObject* remote = self->remote;
 
+    /*
+     * gbinder_local_object_finalize() will also try to do the same thing
+     * i.e. invalidate self but proxy objects need to do it before releasing
+     * the handle, to leave no room for race conditions. That's not very good
+     * because it grabs ipc-wide mutex but shouldn'd have much of an impact
+     * on the performance because finalizing a proxy is not supposed to be a
+     * frequent operation.
+     */
+    gbinder_ipc_invalidate_local_object(local->ipc, local);
     if (priv->acquired) {
         gbinder_driver_release(remote->ipc->driver, remote->handle);
     }
-    gbinder_proxy_object_drop_subproxies(self);
-    gbinder_remote_object_remove_handler(remote, priv->remote_death_id);
+    GDEBUG("Proxy %p %s => %u %s gone", self,
+        gbinder_ipc_name(self->parent.ipc), remote->handle,
+        gbinder_ipc_name(remote->ipc));
     gbinder_remote_object_unref(remote);
-    g_mutex_clear(&priv->mutex);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
@@ -483,7 +396,6 @@ gbinder_proxy_object_init(
         THIS_TYPE, GBinderProxyObjectPriv);
 
     self->priv = priv;
-    g_mutex_init(&priv->mutex);
 }
 
 static

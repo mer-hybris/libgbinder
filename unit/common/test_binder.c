@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -55,6 +55,7 @@ static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
 static GPrivate test_looper = G_PRIVATE_INIT(NULL);
 static GPrivate test_tx_state = G_PRIVATE_INIT(NULL);
+static guint32 last_auto_handle = 0;
 
 G_LOCK_DEFINE_STATIC(test_binder);
 static GMainLoop* test_binder_exit_loop = NULL;
@@ -125,6 +126,7 @@ typedef struct test_binder_node TestBinderNode;
 struct test_binder_node {
     int fd;
     char* path;
+    const char* name;
     TestBinder* binder;
     TestBinderNode* other;
     TEST_LOOPER looper_enabled;
@@ -146,7 +148,6 @@ typedef struct test_binder {
     GHashTable* object_map; /* GBinderLocalObject* => handle */
     GHashTable* handle_map; /* handle => GBinderLocalObject* */
     TestBinderSubmitThread* submit_thread;
-    guint32 last_auto_handle;
     GMutex mutex;
     gboolean passthrough;
     TestBinderNode node[2];
@@ -437,13 +438,16 @@ test_binder_register_object_locked(
     g_assert(!g_hash_table_contains(binder->object_map, obj));
     g_assert(!g_hash_table_contains(binder->handle_map, GINT_TO_POINTER(h)));
     if (h == AUTO_HANDLE) {
-        h = ++(binder->last_auto_handle);
+        h = ++last_auto_handle;
         while (g_hash_table_contains(binder->handle_map, GINT_TO_POINTER(h)) ||
             g_hash_table_contains(binder->object_map, GINT_TO_POINTER(h))) {
-            h = ++(binder->last_auto_handle);
+            h = ++last_auto_handle;
         }
+    } else if (last_auto_handle < h) {
+        /* Avoid re-using handles, to make debugging easier */
+        last_auto_handle = h;
     }
-    GDEBUG("Object %p <=> handle %u", obj, h);
+    GDEBUG("Object %p <=> handle %u %s", obj, h, binder->node[0].name);
     g_hash_table_insert(binder->handle_map, GINT_TO_POINTER(h), obj);
     g_hash_table_insert(binder->object_map, obj, GINT_TO_POINTER(h));
     g_object_weak_ref(G_OBJECT(obj), test_binder_local_object_gone, binder);
@@ -463,10 +467,10 @@ test_io_passthough_handle_to_object(
         gpointer obj = g_hash_table_lookup(binder->handle_map, key);
 
         GDEBUG("Handle %u => object %p %s", (guint) handle, obj,
-            binder->node[0].path);
+            binder->node[0].name);
         return GPOINTER_TO_SIZE(obj);
     }
-    GDEBUG("Unexpected handle %u %s", (guint) handle, binder->node[0].path);
+    GDEBUG("Unexpected handle %u %s", (guint) handle, binder->node[0].name);
     return 0;
 }
 
@@ -484,13 +488,13 @@ test_io_passthough_object_to_handle(
         guint64 handle = GPOINTER_TO_SIZE(value);
 
         GDEBUG("Object %p => handle %u %s", key, (guint) handle,
-            binder->node[0].path);
+            binder->node[0].name);
         return handle;
     } else if (key) {
-        GDEBUG("Auto-registering object %p %s", key, binder->node[0].path);
+        GDEBUG("Auto-registering object %p %s", key, binder->node[0].name);
         return test_binder_register_object_locked(binder, key, AUTO_HANDLE);
     } else {
-        GDEBUG("Unexpected object %p %s", key, binder->node[0].path);
+        GDEBUG("Unexpected object %p %s", key, binder->node[0].name);
         return 0;
     }
 }
@@ -565,7 +569,7 @@ test_binder_node_read(
         const guint32 cmd = node->next_cmd[0];
         const guint total = 4 + _IOC_SIZE(cmd);
 
-        /* Alread have one ready */
+        /* Already have one ready */
         if (!(test_binder_cmd_read_flags(cmd) & flags)) {
             GDEBUG("Cmd 0x%08x not for %d", cmd, gettid());
             *bytes_read = 0;
@@ -667,7 +671,7 @@ test_tx_state_acquire(
     while (g_atomic_pointer_get(&node->tx_state) != my_tx_state &&
         !g_atomic_pointer_compare_and_exchange(&node->tx_state, NULL,
          my_tx_state)) {
-        GDEBUG("Thread %d is waiting to become a transacton thread",
+        GDEBUG("Thread %d is waiting to become a transaction thread",
             my_tx_state->tid);
         test_io_short_wait();
     }
@@ -696,7 +700,7 @@ test_tx_state_release(
         my_tx_state->depth--;
         my_tx_state->stack = g_renew(TEST_TX_STATE, my_tx_state->stack,
             my_tx_state->depth);
-        GDEBUG("Thread %d is still a transacton thread", my_tx_state->tid);
+        GDEBUG("Thread %d is still a transaction thread", my_tx_state->tid);
     }
 }
 
@@ -843,6 +847,8 @@ test_io_passthough_write_64(
                         buffer->buffer = GPOINTER_TO_SIZE(copy);
                         g_hash_table_replace(fd->destroy_map, copy, NULL);
                     }
+                } else {
+                    GDEBUG("Unexpected object type 0x%08x", *obj_ptr);
                 }
             }
             g_hash_table_replace(fd->destroy_map, data_offsets, NULL);
@@ -1594,6 +1600,7 @@ test_binder_fd_new(
     binder_fd->node = node;
     binder_fd->fd = dup(node->fd);
     binder_fd->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    GDEBUG("fd %d => %d", binder_fd->fd, node->fd);
     return binder_fd;
 }
 
@@ -1602,11 +1609,12 @@ gbinder_system_open(
     const char* path,
     int flags)
 {
+    static const char path_prefix[] = "/dev/";
     static const char binder_suffix[] = "binder";
     static const char binder_private_suffix[] = "binder-private";
     static const char private_suffix[] = "-private";
 
-    if (path && g_str_has_prefix(path, "/dev/") &&
+    if (path && g_str_has_prefix(path, path_prefix) &&
         (g_str_has_suffix(path, binder_suffix) ||
          g_str_has_suffix(path, binder_private_suffix))) {
         TestBinderFd* fd;
@@ -1631,7 +1639,7 @@ gbinder_system_open(
                 node = binder->node + PRIVATE;
                 node->path = g_strdup(path);
                 binder->node[PUBLIC].path = g_strndup(path,
-                    strlen(path) - strlen(private_suffix) - 1);
+                    strlen(path) - strlen(private_suffix));
             }
 
             if (!test_node_map) {
@@ -1644,6 +1652,7 @@ gbinder_system_open(
                 this_node->binder = binder;
                 this_node->fd = fds[i];
                 this_node->other = binder->node + ((i + 1) % 2);
+                this_node->name = this_node->path + strlen(path_prefix);
                 g_hash_table_replace(test_node_map, this_node->path, this_node);
             }
             binder->object_map = g_hash_table_new
@@ -1651,8 +1660,8 @@ gbinder_system_open(
             binder->handle_map = g_hash_table_new
                 (g_direct_hash, g_direct_equal);
             GDEBUG("Created %s (%d) <=> %s (%d) binder",
-                binder->node[0].path, binder->node[0].fd,
-                binder->node[1].path, binder->node[1].fd);
+                binder->node[0].name, binder->node[0].fd,
+                binder->node[1].name, binder->node[1].fd);
         }
         fd = test_binder_fd_new(node);
         if (!test_fd_map) {
