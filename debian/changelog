@@ -1,3 +1,9 @@
+libgbinder (1.1.17) unstable; urgency=low
+
+  * Don't release remote proxy handle too early (sometimes hever)
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 07 Jan 2022 14:43:51 +0200
+
 libgbinder (1.1.16) unstable; urgency=low
 
   * Make sure stale object pointers don't hang around
