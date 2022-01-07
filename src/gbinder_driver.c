@@ -82,6 +82,7 @@ struct gbinder_driver {
     void* vm;
     gsize vmsize;
     char* dev;
+    const char* name;
     const GBinderIo* io;
     const GBinderRpcProtocol* protocol;
 };
@@ -565,7 +566,8 @@ gbinder_driver_handle_transaction(
                 tx.flags, &txstatus);
         break;
     default:
-        GWARN("Unhandled transaction %s 0x%08x", iface, tx.code);
+        GWARN("Unhandled transaction %s 0x%08x from %s", iface, tx.code,
+            self->name);
         break;
     }
 
@@ -895,6 +897,9 @@ gbinder_driver_new(
                     self->vm = vm;
                     self->vmsize = vmsize;
                     self->dev = g_strdup(dev);
+                    self->name = self->dev + /* Shorter version for logging */
+                        (g_str_has_prefix(self->dev, "/dev/") ? 5 : 0);
+
                     if (gbinder_system_ioctl(fd, BINDER_SET_MAX_THREADS,
                         &max_threads) < 0) {
                         GERR("%s failed to set max threads (%u): %s", dev,
