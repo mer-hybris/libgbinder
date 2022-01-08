@@ -1,3 +1,9 @@
+libgbinder (1.1.18) unstable; urgency=low
+
+  * Disassociate auto-created proxies to stop them from piling up
+
+ -- Slava Monich <slava.monich@jolla.com>  Sat, 08 Jan 2022 15:35:56 +0200
+
 libgbinder (1.1.17) unstable; urgency=low
 
   * Don't release remote proxy handle too early (sometimes hever)
