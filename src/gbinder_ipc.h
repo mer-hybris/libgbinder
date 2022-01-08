@@ -113,6 +113,11 @@ gbinder_ipc_unref(
     GBinderIpc* ipc)
     GBINDER_INTERNAL;
 
+const char*
+gbinder_ipc_name(
+    GBinderIpc* ipc)
+    GBINDER_INTERNAL;
+
 void
 gbinder_ipc_looper_check(
     GBinderIpc* ipc)

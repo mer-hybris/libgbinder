@@ -207,9 +207,6 @@ typedef struct gbinder_ipc_tx_custom {
     GDestroyNotify fn_custom_destroy;
 } GBinderIpcTxCustom;
 
-GBINDER_INLINE_FUNC const char* gbinder_ipc_name(GBinderIpc* self)
-    { return self->priv->name; }
-
 static
 GBinderIpcLooper*
 gbinder_ipc_looper_new(
@@ -1298,10 +1295,10 @@ gbinder_ipc_priv_get_local_object(
             if (obj) {
                 gbinder_local_object_ref(obj);
             } else {
-                GWARN("Unknown local object %p", pointer);
+                GWARN("Unknown local object %p %s", pointer, priv->name);
             }
         } else {
-            GWARN("Unknown local object %p", pointer);
+            GWARN("Unknown local object %p %s", pointer, priv->name);
         }
         g_mutex_unlock(&priv->local_objects_mutex);
         /* Unlock */
@@ -1345,6 +1342,8 @@ gbinder_ipc_priv_get_remote_object(
         }
         GVERBOSE_("%p handle %u %s", obj, handle, gbinder_ipc_name(self));
         g_hash_table_replace(priv->remote_objects, key, obj);
+    } else {
+        GWARN("Unknown handle %u %s", handle, priv->name);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
@@ -1902,6 +1901,13 @@ gbinder_ipc_unref(
     if (G_LIKELY(self)) {
         g_object_unref(GBINDER_IPC(self));
     }
+}
+
+const char*
+gbinder_ipc_name(
+    GBinderIpc* self)
+{
+    return G_LIKELY(self) ? self->priv->name : NULL;
 }
 
 GBinderObjectRegistry*
