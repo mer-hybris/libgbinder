@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -193,7 +193,7 @@ gbinder_servicemanager_remove_handlers(
     gulong* ids,
     guint count); /* Since 1.0.25 */
 
-#define gbinder_servicemanager_remove_all_handlers(r,ids) \
+#define gbinder_servicemanager_remove_all_handlers(sm,ids) \
     gbinder_servicemanager_remove_handlers(sm, ids, G_N_ELEMENTS(ids))
 
 G_END_DECLS
