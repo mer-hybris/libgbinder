@@ -754,6 +754,43 @@ gbinder_writer_data_append_buffer_object(
     return index;
 }
 
+/*
+ * This is supposed to be used to write aidl parcelables, and is not
+ * guaranteed to work on any other kind of parcelable.
+ */
+void
+gbinder_writer_append_parcelable(
+    GBinderWriter* self,
+    const void* buf,
+    gsize len) /* Since 1.1.XX */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_parcelable(data, buf, len);
+    }
+}
+
+void
+gbinder_writer_data_append_parcelable(
+    GBinderWriterData* data,
+    const void* ptr,
+    gsize size)
+{
+    if (!ptr) {
+        /* Null */
+        gbinder_writer_data_append_int32(data, 0);
+        return;
+    }
+
+    /* Non-null */
+    gbinder_writer_data_append_int32(data, 1);
+    /* Write the parcelable size, taking in account the size of this integer as well */
+    gbinder_writer_data_append_int32(data, size + sizeof(gint32));
+    /* Append the parcelable data */
+    g_byte_array_append(data->bytes, ptr, size);
+}
+
 void
 gbinder_writer_append_hidl_string(
     GBinderWriter* self,
