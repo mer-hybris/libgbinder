@@ -420,6 +420,35 @@ gbinder_reader_skip_buffer(
     return gbinder_reader_read_buffer_object(reader, NULL);
 }
 
+/*
+ * This is supposed to be used to read aidl parcelables, and is not
+ * guaranteed to work on any other kind of parcelable.
+ */
+const void*
+gbinder_reader_read_parcelable(
+    GBinderReader* reader,
+    gsize* size) /* Since 1.1.XX */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    gint32 non_null, payload_size = 0;
+    const void* out = NULL;
+
+    if (gbinder_reader_read_int32(reader, &non_null) && non_null
+        && gbinder_reader_read_int32(reader, &payload_size)) {
+        /* We have already read the size integer, and we don't need it anymore */
+        payload_size -= sizeof(gint32);
+
+        if (p->ptr + payload_size <= p->end) {
+            out = p->ptr;
+            p->ptr += payload_size;
+        }
+    }
+    if (size) {
+        *size = payload_size;
+    }
+    return out;
+}
+
 /* Helper for gbinder_reader_read_hidl_struct() macro */
 const void*
 gbinder_reader_read_hidl_struct1(

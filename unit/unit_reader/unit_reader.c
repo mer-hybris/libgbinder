@@ -119,6 +119,7 @@ test_empty(
     g_assert(!gbinder_reader_read_object(&reader));
     g_assert(!gbinder_reader_read_nullable_object(&reader, NULL));
     g_assert(!gbinder_reader_read_buffer(&reader));
+    g_assert(!gbinder_reader_read_parcelable(&reader, NULL));
     g_assert(!gbinder_reader_read_hidl_struct1(&reader, 1));
     g_assert(!gbinder_reader_read_hidl_vec(&reader, NULL, NULL));
     g_assert(!gbinder_reader_read_hidl_vec(&reader, &count, &elemsize));
@@ -1693,6 +1694,64 @@ test_buffer(
 }
 
 /*==========================================================================*
+ * parcelable
+ *==========================================================================*/
+
+static
+void
+test_parcelable(
+    void)
+{
+    const guint8 input_null_header[] = {
+        TEST_INT32_BYTES(0)
+    };
+    const guint8 input_non_null_header[] = {
+        TEST_INT32_BYTES(1),
+        /* Size must be size of itself + payload */
+        TEST_INT32_BYTES(sizeof(gint32) * 3)
+    };
+    const guint8 input_non_null_payload[] = {
+        TEST_INT32_BYTES(10),
+        TEST_INT32_BYTES(20)
+    };
+    gpointer in;
+    gsize in_size, out_size;
+    const void* out = 0;
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderReader reader;
+    GBinderReaderData data;
+
+    g_assert(driver);
+    memset(&data, 0, sizeof(data));
+
+    /* Null */
+    data.buffer = gbinder_buffer_new(driver, g_memdup(&input_null_header,
+        sizeof(input_null_header)), sizeof(input_null_header), NULL);
+    gbinder_reader_init(&reader, &data, 0, sizeof(input_null_header));
+    out = gbinder_reader_read_parcelable(&reader, &out_size);
+    g_assert(out == NULL);
+    g_assert(out_size == 0);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    /* Non-null */
+    in_size = sizeof(input_non_null_header) + sizeof(input_non_null_payload);
+    in = g_malloc(in_size);
+    memcpy(in, &input_non_null_header, sizeof(input_non_null_header));
+    memcpy(in + sizeof(input_non_null_header), &input_non_null_payload,
+        sizeof(input_non_null_payload));
+    data.buffer = gbinder_buffer_new(driver, in, in_size, NULL);
+
+    gbinder_reader_init(&reader, &data, 0, in_size);
+    out = gbinder_reader_read_parcelable(&reader, &out_size);
+    g_assert(memcmp(&input_non_null_payload, out, sizeof(input_non_null_payload)) == 0);
+    g_assert(out_size == sizeof(input_non_null_payload));
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * object
  *==========================================================================*/
 
@@ -2373,6 +2432,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("hidl_string/6"), test_hidl_string6);
     g_test_add_func(TEST_("hidl_string/7"), test_hidl_string7);
     g_test_add_func(TEST_("buffer"), test_buffer);
+    g_test_add_func(TEST_("parcelable"), test_parcelable);
     g_test_add_func(TEST_("object/valid"), test_object);
     g_test_add_func(TEST_("object/invalid"), test_object_invalid);
     g_test_add_func(TEST_("object/no_reg"), test_object_no_reg);
