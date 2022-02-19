@@ -149,6 +149,12 @@ gbinder_writer_append_buffer_object(
     gsize len);
 
 void
+gbinder_writer_append_parcelable(
+    GBinderWriter* writer,
+    const void* buf,
+    gsize len); /* Since 1.1.XX */
+
+void
 gbinder_writer_append_hidl_vec(
     GBinderWriter* writer,
     const void* base,

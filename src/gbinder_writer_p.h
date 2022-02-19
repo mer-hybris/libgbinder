@@ -131,6 +131,13 @@ gbinder_writer_data_append_buffer_object(
     GBINDER_INTERNAL;
 
 void
+gbinder_writer_data_append_parcelable(
+    GBinderWriterData* data,
+    const void* ptr,
+    gsize size)
+    GBINDER_INTERNAL;
+
+void
 gbinder_writer_data_append_hidl_vec(
     GBinderWriterData* data,
     const void* base,

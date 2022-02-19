@@ -143,6 +143,11 @@ gbinder_reader_read_buffer(
     G_GNUC_WARN_UNUSED_RESULT;
 
 const void*
+gbinder_reader_read_parcelable(
+    GBinderReader* reader,
+    gsize* size); /* Since 1.1.XX */
+
+const void*
 gbinder_reader_read_hidl_struct1(
     GBinderReader* reader,
     gsize size); /* Since 1.0.9 */

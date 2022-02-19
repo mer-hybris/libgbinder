@@ -100,6 +100,7 @@ test_null(
     gbinder_writer_append_buffer_object(&writer, NULL, 0);
     gbinder_writer_append_buffer_object_with_parent(NULL, NULL, 0, NULL);
     gbinder_writer_append_buffer_object_with_parent(&writer, NULL, 0, NULL);
+    gbinder_writer_append_parcelable(NULL, NULL, 0);
     gbinder_writer_append_local_object(NULL, NULL);
     gbinder_writer_append_local_object(&writer, NULL);
     gbinder_writer_append_remote_object(NULL, NULL);
@@ -863,6 +864,53 @@ test_parent(
 }
 
 /*==========================================================================*
+ * parcelable
+ *==========================================================================*/
+
+static
+void
+test_parcelable(
+    void)
+{
+    const guint8 encoded_non_null[] = {
+        TEST_INT32_BYTES(1),
+        TEST_INT32_BYTES(sizeof(TestData) + sizeof(gint32)),
+        TEST_INT32_BYTES(10)
+    };
+    const gint32 test_null_value = 0;
+    GBinderLocalRequest* req;
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    TestData test_data;
+
+    test_data.x = 10;
+
+    /* Non-null */
+    req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_parcelable(&writer, &test_data, sizeof(test_data));
+
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(encoded_non_null));
+    g_assert(!memcmp(data->bytes->data, &encoded_non_null, data->bytes->len));
+
+    gbinder_local_request_unref(req);
+
+    /* Null */
+    req = gbinder_local_request_new(&gbinder_io_32, NULL);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_parcelable(&writer, NULL, 0);
+
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(test_null_value));
+    g_assert(!memcmp(data->bytes->data, &test_null_value, data->bytes->len));
+
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
  * fd
  * fd_invalid
  *==========================================================================*/
@@ -1177,6 +1225,7 @@ int main(int argc, char* argv[])
 
     g_test_add_func(TEST_("buffer"), test_buffer);
     g_test_add_func(TEST_("parent"), test_parent);
+    g_test_add_func(TEST_("parcelable"), test_parcelable);
     g_test_add_func(TEST_("fd"), test_fd);
     g_test_add_func(TEST_("fd_invalid"), test_fd_invalid);
     g_test_add_func(TEST_("fd_close_error"), test_fd_close_error);
