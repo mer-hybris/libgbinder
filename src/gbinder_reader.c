@@ -429,23 +429,29 @@ gbinder_reader_read_parcelable(
     GBinderReader* reader,
     gsize* size) /* Since 1.1.19 */
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
-    gint32 non_null, payload_size = 0;
-    const void* out = NULL;
+    guint32 non_null, payload_size = 0;
 
-    if (gbinder_reader_read_int32(reader, &non_null) && non_null &&
-        gbinder_reader_read_int32(reader, &payload_size)) {
-        /* We have already read the size integer */
-        payload_size -= sizeof(gint32);
+    if (gbinder_reader_read_uint32(reader, &non_null) && non_null &&
+        gbinder_reader_read_uint32(reader, &payload_size) &&
+        payload_size >= sizeof(payload_size)) {
+        GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+        payload_size -= sizeof(payload_size);
         if (p->ptr + payload_size <= p->end) {
-            out = p->ptr;
+            const void* out = p->ptr;
+
+            /* Success */
             p->ptr += payload_size;
+            if (size) {
+                *size = payload_size;
+            }
+            return out;
         }
     }
     if (size) {
-        *size = payload_size;
+        *size = 0;
     }
-    return out;
+    return NULL;
 }
 
 /* Helper for gbinder_reader_read_hidl_struct() macro */
