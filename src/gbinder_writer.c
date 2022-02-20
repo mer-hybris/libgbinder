@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -762,7 +762,7 @@ void
 gbinder_writer_append_parcelable(
     GBinderWriter* self,
     const void* buf,
-    gsize len) /* Since 1.1.XX */
+    gsize len) /* Since 1.1.19 */
 {
     GBinderWriterData* data = gbinder_writer_data(self);
 
@@ -771,24 +771,32 @@ gbinder_writer_append_parcelable(
     }
 }
 
+/*
+ * This is compatible with aidl parcelables, and is not guaranteed to work
+ * with any other kind of parcelable.
+ */
 void
 gbinder_writer_data_append_parcelable(
     GBinderWriterData* data,
     const void* ptr,
     gsize size)
 {
-    if (!ptr) {
+    if (ptr) {
+        /* Non-null */
+        gbinder_writer_data_append_int32(data, 1);
+
+        /*
+         * Write the parcelable size, taking in account the size of this
+         * integer as well.
+         */
+        gbinder_writer_data_append_int32(data, size + sizeof(gint32));
+
+        /* Append the parcelable data */
+        g_byte_array_append(data->bytes, ptr, size);
+    } else {
         /* Null */
         gbinder_writer_data_append_int32(data, 0);
-        return;
     }
-
-    /* Non-null */
-    gbinder_writer_data_append_int32(data, 1);
-    /* Write the parcelable size, taking in account the size of this integer as well */
-    gbinder_writer_data_append_int32(data, size + sizeof(gint32));
-    /* Append the parcelable data */
-    g_byte_array_append(data->bytes, ptr, size);
 }
 
 void

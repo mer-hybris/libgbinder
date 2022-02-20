@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -427,17 +427,16 @@ gbinder_reader_skip_buffer(
 const void*
 gbinder_reader_read_parcelable(
     GBinderReader* reader,
-    gsize* size) /* Since 1.1.XX */
+    gsize* size) /* Since 1.1.19 */
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
     gint32 non_null, payload_size = 0;
     const void* out = NULL;
 
-    if (gbinder_reader_read_int32(reader, &non_null) && non_null
-        && gbinder_reader_read_int32(reader, &payload_size)) {
-        /* We have already read the size integer, and we don't need it anymore */
+    if (gbinder_reader_read_int32(reader, &non_null) && non_null &&
+        gbinder_reader_read_int32(reader, &payload_size)) {
+        /* We have already read the size integer */
         payload_size -= sizeof(gint32);
-
         if (p->ptr + payload_size <= p->end) {
             out = p->ptr;
             p->ptr += payload_size;
