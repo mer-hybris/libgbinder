@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -1732,6 +1732,7 @@ test_parcelable(
     g_assert(out == NULL);
     g_assert(out_size == 0);
     g_assert(gbinder_reader_at_end(&reader));
+    gbinder_buffer_free(data.buffer);
 
     /* Non-null */
     in_size = sizeof(input_non_null_header) + sizeof(input_non_null_payload);
@@ -1743,7 +1744,8 @@ test_parcelable(
 
     gbinder_reader_init(&reader, &data, 0, in_size);
     out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(memcmp(&input_non_null_payload, out, sizeof(input_non_null_payload)) == 0);
+    g_assert(memcmp(&input_non_null_payload, out,
+        sizeof(input_non_null_payload)) == 0);
     g_assert(out_size == sizeof(input_non_null_payload));
     g_assert(gbinder_reader_at_end(&reader));
 
