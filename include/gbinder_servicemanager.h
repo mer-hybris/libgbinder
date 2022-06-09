@@ -79,6 +79,12 @@ gbinder_servicemanager_new(
     const char* dev);
 
 GBinderServiceManager*
+gbinder_servicemanager_new2(
+    const char* dev,
+    const char* sm_protocol,
+    const char* rpc_protocol); /* Since 1.1.20 */
+
+GBinderServiceManager*
 gbinder_defaultservicemanager_new(
     const char* dev)
     G_DEPRECATED_FOR(gbinder_servicemanager_new);

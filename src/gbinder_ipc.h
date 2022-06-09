@@ -104,6 +104,12 @@ gbinder_ipc_new(
     GBINDER_INTERNAL;
 
 GBinderIpc*
+gbinder_ipc_new_for_protocol(
+    const char* dev,
+    const char* protocol_name)
+    GBINDER_INTERNAL;
+
+GBinderIpc*
 gbinder_ipc_ref(
     GBinderIpc* ipc)
     GBINDER_INTERNAL;

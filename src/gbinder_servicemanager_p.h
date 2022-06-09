@@ -90,7 +90,8 @@ GType gbinder_servicemanager_get_type(void) GBINDER_INTERNAL;
 GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
     GType type,
-    const char* dev)
+    const char* dev,
+    const char* rpc_protocol)
     GBINDER_INTERNAL;
 
 void

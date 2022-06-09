@@ -519,7 +519,8 @@ gbinder_servicemanager_exit(
 GBinderServiceManager*
 gbinder_servicemanager_new_with_type(
     GType type,
-    const char* dev)
+    const char* dev,
+    const char* rpc_protocol)
 {
     GBinderServiceManager* self = NULL;
     GBinderServiceManagerClass* klass = gbinder_servicemanager_class_ref(type);
@@ -528,7 +529,8 @@ gbinder_servicemanager_new_with_type(
         GBinderIpc* ipc;
 
         if (!dev) dev = klass->default_device;
-        ipc = gbinder_ipc_new(dev);
+        ipc = rpc_protocol ? gbinder_ipc_new_for_protocol(dev, rpc_protocol) :
+                             gbinder_ipc_new(dev);
         if (ipc) {
             /* Create a (possibly) dead service manager object */
             GBinderRemoteObject* object = gbinder_ipc_get_service_manager(ipc);
@@ -617,6 +619,24 @@ gbinder_servicemanager_service_registered(
  *==========================================================================*/
 
 GBinderServiceManager*
+gbinder_servicemanager_new2(
+    const char* dev,
+    const char* sm_protocol,
+    const char* rpc_protocol)
+{
+    if (!sm_protocol || !rpc_protocol)
+        return gbinder_servicemanager_new(dev);
+
+    if (dev) {
+        const GBinderServiceManagerType* type = gbinder_servicemanager_value_map(sm_protocol);
+        if (type)
+            return gbinder_servicemanager_new_with_type(type->get_type(), dev, rpc_protocol);
+        return gbinder_servicemanager_new(dev);
+    }
+    return NULL;
+}
+
+GBinderServiceManager*
 gbinder_servicemanager_new(
     const char* dev)
 {
@@ -646,7 +666,7 @@ gbinder_servicemanager_new(
             type = gbinder_servicemanager_default;
             GDEBUG("Using default service manager %s for %s", type->name, dev);
         }
-        return gbinder_servicemanager_new_with_type(type->get_type(), dev);
+        return gbinder_servicemanager_new_with_type(type->get_type(), dev, NULL);
     }
     return NULL;
 }
@@ -1016,7 +1036,7 @@ gbinder_defaultservicemanager_new(
     const char* dev)
 {
     return gbinder_servicemanager_new_with_type
-        (gbinder_servicemanager_aidl_get_type(), dev);
+        (gbinder_servicemanager_aidl_get_type(), dev, NULL);
 }
 
 GBinderServiceManager*
@@ -1024,7 +1044,7 @@ gbinder_hwservicemanager_new(
     const char* dev)
 {
     return gbinder_servicemanager_new_with_type
-        (gbinder_servicemanager_hidl_get_type(), dev);
+        (gbinder_servicemanager_hidl_get_type(), dev, NULL);
 }
 
 /*==========================================================================*
