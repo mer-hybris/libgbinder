@@ -1,3 +1,9 @@
+libgbinder (1.1.20) unstable; urgency=low
+
+  * Made RPC protocol selectable at runtime
+
+ -- Slava Monich <slava.monich@jolla.com>  Sat, 11 Jun 2022 02:49:49 +0300
+
 libgbinder (1.1.19) unstable; urgency=low
 
   * Added reader and writer for aidl parcelables
