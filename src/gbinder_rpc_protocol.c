@@ -379,6 +379,13 @@ gbinder_rpc_protocol_for_device(
     return gbinder_rpc_protocol_default;
 }
 
+const GBinderRpcProtocol*
+gbinder_rpc_protocol_by_name(
+    const char* protocol_name)
+{
+    return gbinder_rpc_protocol_find(protocol_name);
+}
+
 /*
  * Local Variables:
  * mode: C

@@ -49,6 +49,11 @@ struct gbinder_rpc_protocol {
         char** iface);
 };
 
+const GBinderRpcProtocol*
+gbinder_rpc_protocol_by_name(
+    const char* protocol_name)
+    GBINDER_INTERNAL;
+
 /* Returns one of the above based on the device name */
 const GBinderRpcProtocol*
 gbinder_rpc_protocol_for_device(

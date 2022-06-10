@@ -409,7 +409,7 @@ test_null(
     void)
 {
     g_assert(!gbinder_servicemanager_new(NULL));
-    g_assert(!gbinder_servicemanager_new_with_type(0, NULL));
+    g_assert(!gbinder_servicemanager_new_with_type(0, NULL, NULL));
     g_assert(!gbinder_servicemanager_new_local_object(NULL, NULL, NULL, NULL));
     g_assert(!gbinder_servicemanager_ref(NULL));
     g_assert(!gbinder_servicemanager_device(NULL));
@@ -449,7 +449,7 @@ test_invalid(
     test_setup_ping(ipc);
     sm = gbinder_servicemanager_new(dev);
     g_assert(!gbinder_servicemanager_new_with_type(GBINDER_TYPE_LOCAL_OBJECT,
-        NULL));
+        NULL, NULL));
     g_assert(TEST_IS_HWSERVICEMANAGER(sm));
     g_assert(!gbinder_servicemanager_list(sm, NULL, NULL));
     g_assert(!gbinder_servicemanager_get_service(sm, "foo", NULL, NULL));
@@ -995,7 +995,7 @@ test_notify_type(
     gulong id1, id2;
 
     test_setup_ping(ipc);
-    sm = gbinder_servicemanager_new_with_type(t, NULL);
+    sm = gbinder_servicemanager_new_with_type(t, NULL, NULL);
     test = TEST_SERVICEMANAGER2(sm, t);
     id1 = gbinder_servicemanager_add_registration_handler(sm, name,
         test_registration_func_inc, &count);
