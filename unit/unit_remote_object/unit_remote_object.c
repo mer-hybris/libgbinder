@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -68,7 +68,7 @@ void
 test_basic(
     void)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     GBinderRemoteObject* obj1 = gbinder_object_registry_get_remote(reg,1,TRUE);
     GBinderRemoteObject* obj2 = gbinder_object_registry_get_remote(reg,2,TRUE);
@@ -112,7 +112,7 @@ test_dead_run(
 {
     const guint h = 1;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
     const int fd = gbinder_driver_fd(ipc->driver);
     GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, h, TRUE);

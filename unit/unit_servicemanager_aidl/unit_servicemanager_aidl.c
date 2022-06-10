@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -182,7 +182,7 @@ servicemanager_aidl_new(
 {
     ServiceManagerAidl* self = g_object_new(SERVICE_MANAGER_AIDL_TYPE, NULL);
     GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
 
     self->handle_on_looper_thread = handle_on_looper_thread;
@@ -322,7 +322,7 @@ test_get_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -404,7 +404,7 @@ test_list_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -483,7 +483,7 @@ test_notify_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     ServiceManagerAidl* svc = servicemanager_aidl_new(other_dev, FALSE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -540,7 +540,7 @@ test_notify2_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, TRUE);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);

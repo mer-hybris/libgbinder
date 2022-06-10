@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -122,7 +122,7 @@ TestServiceManagerHidl*
 test_servicemanager_impl_new(
     const char* dev)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     TestServiceManagerHidl* sm = test_servicemanager_hidl_new(ipc);
 
@@ -191,7 +191,7 @@ test_get_run()
     const char* name = "android.hidl.base@1.0::IBase/test";
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV);
+    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
     smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
@@ -286,7 +286,7 @@ test_list_run()
     test.loop = g_main_loop_new(NULL, FALSE);
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV);
+    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
     smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
@@ -414,7 +414,7 @@ test_notify_run()
     test.loop = g_main_loop_new(NULL, FALSE);
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV);
+    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
     test.smsvc = test_servicemanager_impl_new(OTHER_DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);

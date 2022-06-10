@@ -769,7 +769,7 @@ test_hidl_struct(
     gconstpointer test_data)
 {
     const TestHidlStruct* test = test_data;
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
@@ -973,7 +973,7 @@ test_hidl_vec(
     gconstpointer test_data)
 {
     const TestHidlVec* test = test_data;
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
@@ -1079,7 +1079,7 @@ test_hidl_string_err(
     gconstpointer test_data)
 {
     const TestHidlStringErr* test = test_data;
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
@@ -1113,7 +1113,7 @@ test_hidl_string_err_skip(
     gconstpointer test_data)
 {
     const TestHidlStringErr* test = test_data;
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(test->in, test->in_size), test->in_size, NULL);
     GBinderReaderData data;
@@ -1158,7 +1158,7 @@ test_fd_ok(
         TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1198,7 +1198,7 @@ test_fd_shortbuf(
         TEST_INT32_BYTES(BINDER_TYPE_FD),
         TEST_INT32_BYTES(0x7f | BINDER_FLAG_ACCEPTS_FDS)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1232,7 +1232,7 @@ test_fd_badtype(
         TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1275,7 +1275,7 @@ test_dupfd_ok(
         TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1322,7 +1322,7 @@ test_dupfd_badtype(
         TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1365,7 +1365,7 @@ test_dupfd_badfd(
         TEST_INT32_BYTES(fd), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderReaderData data;
@@ -1404,7 +1404,7 @@ test_hidl_string(
     guint bufcount,
     const char* result)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver, g_memdup(input, size),
         size, NULL);
     GBinderRemoteObject* obj = NULL;
@@ -1675,7 +1675,7 @@ test_buffer(
         TEST_INT64_BYTES(0), TEST_INT64_BYTES(0),
         TEST_INT64_BYTES(0), TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderRemoteObject* obj = NULL;
@@ -1815,7 +1815,7 @@ test_object(
         TEST_INT32_BYTES(BINDER_TYPE_HANDLE), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(1 /* handle*/), TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderRemoteObject* obj = NULL;
@@ -1873,7 +1873,7 @@ test_object_invalid(
         TEST_INT32_BYTES(42 /* invalid type */), TEST_INT32_BYTES(0),
         TEST_INT64_BYTES(1 /* handle*/), TEST_INT64_BYTES(0)
     };
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
         g_memdup(input, sizeof(input)), sizeof(input), NULL);
     GBinderRemoteObject* obj = NULL;
@@ -1907,7 +1907,7 @@ test_vec(
     void)
 {
     /* Using 64-bit I/O */
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderReaderData data;
     GBinderReader reader;
     BinderObject64 obj;
@@ -1960,7 +1960,7 @@ test_hidl_string_vec(
     gsize size,
     const char* const* result)
 {
-    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver, g_memdup(input, size),
         size, NULL);
     GBinderRemoteObject* obj = NULL;

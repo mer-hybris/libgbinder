@@ -76,13 +76,15 @@ void
 
 GBinderServiceManager*
 gbinder_servicemanager_new(
-    const char* dev);
+    const char* dev)
+    G_GNUC_WARN_UNUSED_RESULT;
 
 GBinderServiceManager*
 gbinder_servicemanager_new2(
     const char* dev,
     const char* sm_protocol,
-    const char* rpc_protocol); /* Since 1.1.20 */
+    const char* rpc_protocol) /* Since 1.1.20 */
+    G_GNUC_WARN_UNUSED_RESULT;
 
 GBinderServiceManager*
 gbinder_defaultservicemanager_new(

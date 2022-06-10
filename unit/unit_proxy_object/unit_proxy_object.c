@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -198,8 +198,8 @@ test_basic_run(
     int fd_obj, fd_proxy, n = 0;
 
     test_config_init(&config, NULL);
-    ipc_proxy = gbinder_ipc_new(DEV);
-    ipc_obj = gbinder_ipc_new(DEV_PRIV);
+    ipc_proxy = gbinder_ipc_new(DEV, NULL);
+    ipc_obj = gbinder_ipc_new(DEV_PRIV, NULL);
     fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
     fd_obj = gbinder_driver_fd(ipc_obj->driver);
     obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, test_basic_cb, &n);
@@ -362,10 +362,10 @@ test_param_run(
     int fd_obj, fd_proxy, n = 0;
 
     test_config_init(&config, NULL);
-    ipc_obj = gbinder_ipc_new(DEV);
-    ipc_remote_obj = gbinder_ipc_new(DEV_PRIV);
-    ipc_proxy = gbinder_ipc_new(DEV2);
-    ipc_remote_proxy = gbinder_ipc_new(DEV2_PRIV);
+    ipc_obj = gbinder_ipc_new(DEV, NULL);
+    ipc_remote_obj = gbinder_ipc_new(DEV_PRIV, NULL);
+    ipc_proxy = gbinder_ipc_new(DEV2, NULL);
+    ipc_remote_proxy = gbinder_ipc_new(DEV2_PRIV, NULL);
     fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
     fd_obj = gbinder_driver_fd(ipc_obj->driver);
     obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, test_param_cb, &n);
@@ -610,17 +610,18 @@ test_obj_run(
     memset(&test, 0, sizeof(test));
     test.loop = g_main_loop_new(NULL, FALSE);
 
-    ipc_remote_obj = gbinder_ipc_new(DEV_PRIV);
-    ipc_obj = gbinder_ipc_new(DEV);
-    ipc_proxy = gbinder_ipc_new(DEV2);
-    ipc_remote_proxy = gbinder_ipc_new(DEV2_PRIV);
+    ipc_remote_obj = gbinder_ipc_new(DEV_PRIV, NULL);
+    ipc_obj = gbinder_ipc_new(DEV, NULL);
+    ipc_proxy = gbinder_ipc_new(DEV2, NULL);
+    ipc_remote_proxy = gbinder_ipc_new(DEV2_PRIV, NULL);
 
     fd_remote_obj = gbinder_driver_fd(ipc_remote_obj->driver);
     fd_obj = gbinder_driver_fd(ipc_obj->driver);
     fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
     fd_remote_proxy = gbinder_driver_fd(ipc_remote_proxy->driver);
 
-    obj = gbinder_local_object_new(ipc_remote_obj, TEST_IFACES, test_obj_cb, &test);
+    obj = gbinder_local_object_new(ipc_remote_obj, TEST_IFACES,
+        test_obj_cb, &test);
     GDEBUG("obj %p", obj);
     remote_obj = gbinder_remote_object_new(ipc_obj,
         test_binder_register_object(fd_obj, obj, AUTO_HANDLE),

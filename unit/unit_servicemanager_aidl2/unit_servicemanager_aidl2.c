@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -175,7 +175,7 @@ servicemanager_aidl2_new(
 {
     ServiceManagerAidl2* self = g_object_new(SERVICE_MANAGER_AIDL2_TYPE, NULL);
     GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
-    GBinderIpc* ipc = gbinder_ipc_new(dev);
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
 
     self->handle_on_looper_thread = handle_on_looper_thread;
@@ -305,7 +305,7 @@ test_context_init(
     gbinder_config_dir = test->config_subdir; /* Doesn't exist */
     gbinder_config_file = test->config_file;
 
-    ipc = gbinder_ipc_new(dev);
+    ipc = gbinder_ipc_new(dev, NULL);
     test->fd = gbinder_driver_fd(ipc->driver);
     test->object = gbinder_local_object_new(ipc, NULL, NULL, NULL);
 

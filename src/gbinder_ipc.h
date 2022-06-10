@@ -100,13 +100,8 @@ extern const GBinderIpcSyncApi gbinder_ipc_sync_worker GBINDER_INTERNAL;
 
 GBinderIpc*
 gbinder_ipc_new(
-    const char* dev)
-    GBINDER_INTERNAL;
-
-GBinderIpc*
-gbinder_ipc_new_for_protocol(
     const char* dev,
-    const char* protocol_name)
+    const char* protocol)
     GBINDER_INTERNAL;
 
 GBinderIpc*

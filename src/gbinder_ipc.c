@@ -1840,18 +1840,16 @@ const GBinderIpcSyncApi gbinder_ipc_sync_main = {
  *==========================================================================*/
 
 GBinderIpc*
-gbinder_ipc_new_for_protocol(
+gbinder_ipc_new(
     const char* dev,
     const char* protocol_name)
 {
     GBinderIpc* self = NULL;
-    const GBinderRpcProtocol* protocol;
+    const GBinderRpcProtocol* protocol = (protocol_name ?
+        gbinder_rpc_protocol_by_name(protocol_name) : NULL);
 
     if (!dev || !dev[0]) dev = GBINDER_DEFAULT_BINDER;
-    if (protocol_name)
-        protocol = gbinder_rpc_protocol_by_name(protocol_name);
-    if (!protocol_name || !protocol)
-        protocol = gbinder_rpc_protocol_for_device(dev); /* Never returns NULL */
+    if (!protocol) protocol = gbinder_rpc_protocol_for_device(dev);
 
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
@@ -1884,13 +1882,6 @@ gbinder_ipc_new_for_protocol(
     pthread_mutex_unlock(&gbinder_ipc_mutex);
     /* Unlock */
     return self;
-}
-
-GBinderIpc*
-gbinder_ipc_new(
-    const char* dev)
-{
-    return gbinder_ipc_new_for_protocol(dev, NULL /* pick from config, or default */);
 }
 
 GBinderIpc*

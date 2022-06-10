@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -529,8 +529,7 @@ gbinder_servicemanager_new_with_type(
         GBinderIpc* ipc;
 
         if (!dev) dev = klass->default_device;
-        ipc = rpc_protocol ? gbinder_ipc_new_for_protocol(dev, rpc_protocol) :
-                             gbinder_ipc_new(dev);
+        ipc = gbinder_ipc_new(dev, rpc_protocol);
         if (ipc) {
             /* Create a (possibly) dead service manager object */
             GBinderRemoteObject* object = gbinder_ipc_get_service_manager(ipc);
@@ -619,46 +618,39 @@ gbinder_servicemanager_service_registered(
  *==========================================================================*/
 
 GBinderServiceManager*
-gbinder_servicemanager_new2(
-    const char* dev,
-    const char* sm_protocol,
-    const char* rpc_protocol)
-{
-    if (!sm_protocol || !rpc_protocol)
-        return gbinder_servicemanager_new(dev);
-
-    if (dev) {
-        const GBinderServiceManagerType* type = gbinder_servicemanager_value_map(sm_protocol);
-        if (type)
-            return gbinder_servicemanager_new_with_type(type->get_type(), dev, rpc_protocol);
-        return gbinder_servicemanager_new(dev);
-    }
-    return NULL;
-}
-
-GBinderServiceManager*
 gbinder_servicemanager_new(
     const char* dev)
 {
-    if (dev) {
-        const GBinderServiceManagerType* type = NULL;
+    return gbinder_servicemanager_new2(dev, NULL, NULL);
+}
 
+GBinderServiceManager*
+gbinder_servicemanager_new2(
+    const char* dev,
+    const char* sm_protocol,
+    const char* rpc_protocol) /* Since 1.1.20 */
+{
+    if (!dev) {
+        return NULL;
+    } else if (!sm_protocol) {
+        const GBinderServiceManagerType* type;
+
+        /* One-time initialization */
         if (!gbinder_servicemanager_map) {
-            const GBinderServiceManagerType* t;
-
-            /* One-time initialization */
             gbinder_servicemanager_map = gbinder_servicemanager_load_config();
 
             /* "Default" is a special value stored in a special variable */
-            t = g_hash_table_lookup(gbinder_servicemanager_map, CONF_DEFAULT);
-            if (t) {
+            type = g_hash_table_lookup(gbinder_servicemanager_map,
+                CONF_DEFAULT);
+            if (type) {
                 g_hash_table_remove(gbinder_servicemanager_map, CONF_DEFAULT);
-                gbinder_servicemanager_default = t;
+                gbinder_servicemanager_default = type;
             } else {
                 gbinder_servicemanager_default = SERVICEMANAGER_TYPE_DEFAULT;
             }
         }
 
+        /* If no protocol is specified, pick one up based on the device name */
         type = g_hash_table_lookup(gbinder_servicemanager_map, dev);
         if (type) {
             GDEBUG("Using %s service manager for %s", type->name, dev);
@@ -666,9 +658,21 @@ gbinder_servicemanager_new(
             type = gbinder_servicemanager_default;
             GDEBUG("Using default service manager %s for %s", type->name, dev);
         }
-        return gbinder_servicemanager_new_with_type(type->get_type(), dev, NULL);
+        return gbinder_servicemanager_new_with_type(type->get_type(), dev,
+            rpc_protocol);
+    } else {
+        /* If protocol name is specified, it must be a valid one */
+        const GBinderServiceManagerType* type =
+            gbinder_servicemanager_value_map(sm_protocol);
+
+        if (type) {
+            return gbinder_servicemanager_new_with_type(type->get_type(), dev,
+                rpc_protocol);
+        } else {
+            GWARN("Unknown servicemanager protocol %s", sm_protocol);
+            return NULL;
+        }
     }
-    return NULL;
 }
 
 GBinderLocalObject*
