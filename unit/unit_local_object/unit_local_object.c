@@ -33,6 +33,7 @@
 #include "test_binder.h"
 
 #include "gbinder_buffer_p.h"
+#include "gbinder_config.h"
 #include "gbinder_driver.h"
 #include "gbinder_ipc.h"
 #include "gbinder_local_object_p.h"
@@ -815,6 +816,18 @@ test_release(
 
 int main(int argc, char* argv[])
 {
+    const char* default_config_dir;
+    const char* default_config_file;
+    char* config_dir = g_dir_make_tmp("gbinder-test-local-object-XXXXXX", NULL);
+    char* config_file = g_build_filename(config_dir, "test.conf", NULL);
+    int result;
+
+    /* Point gbinder_config_file to a non-existent file */
+    default_config_dir = gbinder_config_dir;
+    default_config_file = gbinder_config_file;
+    gbinder_config_dir = config_dir;
+    gbinder_config_file = config_file;
+
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
@@ -833,7 +846,14 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "acquire", test_acquire);
     g_test_add_func(TEST_PREFIX "release", test_release);
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    result = g_test_run();
+
+    gbinder_config_dir = default_config_dir;
+    gbinder_config_file = default_config_file;
+    remove(config_dir);
+    g_free(config_dir);
+    g_free(config_file);
+    return result;
 }
 
 /*

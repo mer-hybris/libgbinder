@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -32,6 +32,7 @@
 
 #include "test_binder.h"
 
+#include "gbinder_config.h"
 #include "gbinder_driver.h"
 #include "gbinder_handler.h"
 #include "gbinder_local_request_p.h"
@@ -140,12 +141,31 @@ test_local_request(
 
 int main(int argc, char* argv[])
 {
+    const char* default_config_dir;
+    const char* default_config_file;
+    char* config_dir = g_dir_make_tmp("gbinder-test-driver-XXXXXX", NULL);
+    char* config_file = g_build_filename(config_dir, "test.conf", NULL);
+    int result;
+
+    /* Point gbinder_config_file to a non-existent file */
+    default_config_dir = gbinder_config_dir;
+    default_config_file = gbinder_config_file;
+    gbinder_config_dir = config_dir;
+    gbinder_config_file = config_file;
+
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "noop", test_noop);
     g_test_add_func(TEST_PREFIX "local_request", test_local_request);
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    result = g_test_run();
+
+    gbinder_config_dir = default_config_dir;
+    gbinder_config_file = default_config_file;
+    remove(config_dir);
+    g_free(config_dir);
+    g_free(config_file);
+    return result;
 }
 
 /*
