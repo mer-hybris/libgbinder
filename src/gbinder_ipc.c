@@ -2114,7 +2114,7 @@ gbinder_ipc_dispose(
     /* Unlock */
 
     gbinder_ipc_stop_loopers(self);
-    G_OBJECT_CLASS(gbinder_ipc_parent_class)->finalize(object);
+    G_OBJECT_CLASS(gbinder_ipc_parent_class)->dispose(object);
 }
 
 static
