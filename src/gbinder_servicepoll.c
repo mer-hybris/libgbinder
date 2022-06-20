@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -50,10 +50,12 @@ struct gbinder_servicepoll {
     GBinderEventLoopTimeout* timer;
 };
 
+#define PARENT_CLASS gbinder_servicepoll_parent_class
+#define THIS_TYPE gbinder_servicepoll_get_type()
+#define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, THIS_TYPE, GBinderServicePoll)
+
+GType THIS_TYPE GBINDER_INTERNAL;
 G_DEFINE_TYPE(GBinderServicePoll, gbinder_servicepoll, G_TYPE_OBJECT)
-#define GBINDER_TYPE_SERVICEPOLL (gbinder_servicepoll_get_type())
-#define GBINDER_SERVICEPOLL(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        GBINDER_TYPE_SERVICEPOLL, GBinderServicePoll))
 
 enum gbinder_servicepoll_signal {
     SIGNAL_NAME_ADDED,
@@ -76,7 +78,7 @@ gbinder_servicepoll_list(
     char** services,
     void* user_data)
 {
-    GBinderServicePoll* self = GBINDER_SERVICEPOLL(user_data);
+    GBinderServicePoll* self = THIS(user_data);
 
     gbinder_servicepoll_ref(self);
     self->list_id = 0;
@@ -122,7 +124,7 @@ gboolean
 gbinder_servicepoll_timer(
     gpointer user_data)
 {
-    GBinderServicePoll* self = GBINDER_SERVICEPOLL(user_data);
+    GBinderServicePoll* self = THIS(user_data);
 
     if (!self->list_id) {
         self->list_id = gbinder_servicemanager_list(self->manager,
@@ -136,7 +138,7 @@ GBinderServicePoll*
 gbinder_servicepoll_create(
     GBinderServiceManager* manager)
 {
-    GBinderServicePoll* self = g_object_new(GBINDER_TYPE_SERVICEPOLL, NULL);
+    GBinderServicePoll* self = g_object_new(THIS_TYPE, NULL);
 
     self->manager = gbinder_servicemanager_ref(manager);
     self->list_id = gbinder_servicemanager_list(manager,
@@ -171,7 +173,7 @@ gbinder_servicepoll_ref(
     GBinderServicePoll* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(GBINDER_SERVICEPOLL(self));
+        g_object_ref(THIS(self));
         return self;
     } else {
         return NULL;
@@ -183,7 +185,7 @@ gbinder_servicepoll_unref(
     GBinderServicePoll* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(GBINDER_SERVICEPOLL(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -240,12 +242,13 @@ void
 gbinder_servicepoll_finalize(
     GObject* object)
 {
-    GBinderServicePoll* self = GBINDER_SERVICEPOLL(object);
+    GBinderServicePoll* self = THIS(object);
 
     gbinder_timeout_remove(self->timer);
     gbinder_servicemanager_cancel(self->manager, self->list_id);
     gbinder_servicemanager_unref(self->manager);
     g_strfreev(self->list);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
