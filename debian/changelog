@@ -1,3 +1,10 @@
+libgbinder (1.1.22) unstable; urgency=low
+
+  * Added support for Android 12 (API level 31)
+  * Made binder device configurable for binder-dump
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 22 Jun 2022 17:02:20 +0300
+
 libgbinder (1.1.21) unstable; urgency=low
 
   * Made Properly finalize GBinderIpc and GBinderServicePoll
