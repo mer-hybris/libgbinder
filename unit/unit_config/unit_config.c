@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -327,11 +327,21 @@ test_dirs(
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder3",b),==,"aidl3");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
 
-    /* Delete the remaining files and try again */
+    /* Leave only one file (file4) in the subdirectory */
     gbinder_config_exit();
     g_assert_cmpint(remove(file1), == ,0);
     g_assert_cmpint(remove(file2), == ,0);
     g_assert_cmpint(remove(file3), == ,0);
+    k = gbinder_config_get();
+    g_assert(k);
+    g_assert(!test_value(k,"Protocol","/dev/hbinder",b));
+    g_assert(!test_value(k,"Protocol","/dev/hwbinder",b));
+    g_assert(!test_value(k,"Protocol","/dev/binder3",b));
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder4",b),==,"aidl3");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
+
+    /* Delete the remaining file and try again */
+    gbinder_config_exit();
     g_assert_cmpint(remove(file4), == ,0);
     g_assert(!gbinder_config_get());
 
