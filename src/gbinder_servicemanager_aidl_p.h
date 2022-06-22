@@ -1,6 +1,7 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,53 +31,26 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_SERVICEMANAGER_AIDL_H
-#define GBINDER_SERVICEMANAGER_AIDL_H
+#ifndef GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H
+#define GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H
 
-#include "gbinder_servicemanager_p.h"
+#include "gbinder_servicemanager_aidl.h"
 
-typedef struct gbinder_servicemanager_aidl_priv GBinderServiceManagerAidlPriv;
-typedef struct gbinder_servicemanager_aidl {
-    GBinderServiceManager manager;
-    GBinderServiceManagerAidlPriv* priv;
-} GBinderServiceManagerAidl;
+char**
+gbinder_servicemanager_aidl3_list(
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
+    GBINDER_INTERNAL;
 
-typedef struct gbinder_servicemanager_aidl_class {
-    GBinderServiceManagerClass parent;
-    GBinderLocalRequest* (*list_services_req)
-        (GBinderClient* client, gint32 index);
-    GBinderLocalRequest* (*add_service_req)
-        (GBinderClient* client, const char* name, GBinderLocalObject* obj);
-} GBinderServiceManagerAidlClass;
+GBinderRemoteObject*
+gbinder_servicemanager_aidl3_get_service(
+    GBinderServiceManager* manager,
+    const char* name,
+    int* status,
+    const GBinderIpcSyncApi* api)
+    GBINDER_INTERNAL;
 
-#define GBINDER_TYPE_SERVICEMANAGER_AIDL \
-    gbinder_servicemanager_aidl_get_type()
-#define GBINDER_SERVICEMANAGER_AIDL_CLASS(klass) \
-    G_TYPE_CHECK_CLASS_CAST((klass), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
-    GBinderServiceManagerAidlClass)
-
-#define GBINDER_SERVICEMANAGER_AIDL_GET_CLASS(obj) \
-    G_TYPE_INSTANCE_GET_CLASS((obj), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
-    GBinderServiceManagerAidlClass)
-
-enum gbinder_servicemanager_aidl_calls {
-    GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
-    CHECK_SERVICE_TRANSACTION,
-    ADD_SERVICE_TRANSACTION,
-    LIST_SERVICES_TRANSACTION
-};
-
-enum gbinder_stability_level {
-    UNDECLARED = 0,
-    VENDOR = 0b000011,
-    SYSTEM = 0b001100,
-    VINTF = 0b111111
-};
-
-#define DUMP_FLAG_PRIORITY_DEFAULT (0x08)
-#define DUMP_FLAG_PRIORITY_ALL     (0x0f)
-
-#endif /* GBINDER_SERVICEMANAGER_AIDL_H */
+#endif /* GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H */
 
 /*
  * Local Variables:
@@ -85,4 +59,3 @@ enum gbinder_stability_level {
  * indent-tabs-mode: nil
  * End:
  */
-

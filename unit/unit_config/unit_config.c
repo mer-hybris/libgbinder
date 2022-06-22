@@ -231,6 +231,7 @@ test_dirs(
     char* file1 = g_build_filename(subdir, "a.conf", NULL);
     char* file2 = g_build_filename(subdir, "b.conf", NULL);
     char* file3 = g_build_filename(subdir, "c.conf", NULL);
+    char* file4 = g_build_filename(subdir, "d.conf", NULL);
     char* random_file = g_build_filename(subdir, "foo", NULL);
     static const char garbage[] = "foo";
     static const char config[] =
@@ -252,6 +253,11 @@ test_dirs(
         "/dev/binder3 = aidl3\n"
         "[ServiceManager]\n"
         "/dev/binder3 = aidl3\n";
+    static const char config4[] =
+        "[Protocol]\n"
+        "/dev/binder4 = aidl3\n"
+        "[ServiceManager]\n"
+        "/dev/binder4 = aidl4\n";
 
     g_assert_cmpint(mkdir(subdir, 0700), == ,0);
     g_assert_cmpint(mkdir(notafile, 0700), == ,0);
@@ -259,6 +265,7 @@ test_dirs(
     g_assert(g_file_set_contents(file1, config1, -1, NULL));
     g_assert(g_file_set_contents(file2, config2, -1, NULL));
     g_assert(g_file_set_contents(file3, config3, -1, NULL));
+    g_assert(g_file_set_contents(file4, config4, -1, NULL));
     g_assert(g_file_set_contents(random_file, garbage, -1, NULL));
 
     /* Reset the state */
@@ -271,10 +278,12 @@ test_dirs(
     g_assert(k);
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder3",b), == ,"aidl3");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder4",b), == ,"aidl3");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/hbinder",b), == ,"hidl");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/hwbinder",b), == ,"hidl");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder3",b),==,"aidl3");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
 
     /* Remove the default file and try again */
     gbinder_config_exit();
@@ -284,9 +293,11 @@ test_dirs(
     g_assert(!test_value(k,"Protocol","/dev/hbinder",b));
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder3",b), == ,"aidl3");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder4",b), == ,"aidl3");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/hwbinder",b), == ,"hidl");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder3",b),==,"aidl3");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
 
     /* Damage one of the files and try again */
     gbinder_config_exit();
@@ -297,8 +308,10 @@ test_dirs(
     g_assert(!test_value(k,"Protocol","/dev/hwbinder",b));
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder3",b), == ,"aidl3");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder4",b), == ,"aidl3");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder3",b),==,"aidl3");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
 
     /* Disallow access to one of the files and try again */
     gbinder_config_exit();
@@ -309,14 +322,17 @@ test_dirs(
     g_assert(!test_value(k,"Protocol","/dev/hwbinder",b));
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder",b), == ,"aidl2");
     g_assert_cmpstr(test_value(k,"Protocol","/dev/binder3",b), == ,"aidl3");
+    g_assert_cmpstr(test_value(k,"Protocol","/dev/binder4",b), == ,"aidl3");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder",b),==,"aidl2");
     g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder3",b),==,"aidl3");
+    g_assert_cmpstr(test_value(k,"ServiceManager","/dev/binder4",b),==,"aidl4");
 
     /* Delete the remaining files and try again */
     gbinder_config_exit();
     g_assert_cmpint(remove(file1), == ,0);
     g_assert_cmpint(remove(file2), == ,0);
     g_assert_cmpint(remove(file3), == ,0);
+    g_assert_cmpint(remove(file4), == ,0);
     g_assert(!gbinder_config_get());
 
     /* Undo all the damage */
@@ -329,6 +345,7 @@ test_dirs(
     g_free(file1);
     g_free(file2);
     g_free(file3);
+    g_free(file4);
     g_free(random_file);
 
     remove(notafile);
@@ -495,6 +512,20 @@ static const TestPresetsData test_presets_data [] = {
         "[ServiceManager]\n"
         "/dev/binder = aidl3\n"
         "/dev/vndbinder = aidl3\n"
+    },{
+        "31",
+
+        "[General]\n"
+        "ApiLevel = 31",
+
+        "[General]\n"
+        "ApiLevel = 31\n"
+        "[Protocol]\n"
+        "/dev/binder = aidl3\n"
+        "/dev/vndbinder = aidl3\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl4\n"
+        "/dev/vndbinder = aidl4\n"
     }
 };
 
