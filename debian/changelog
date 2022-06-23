@@ -1,3 +1,9 @@
+libgbinder (1.1.23) unstable; urgency=low
+
+  * Fixed Debian build dependencies
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 23 Jun 2022 20:09:35 +0300
+
 libgbinder (1.1.22) unstable; urgency=low
 
   * Added support for Android 12 (API level 31)
@@ -7,7 +13,7 @@ libgbinder (1.1.22) unstable; urgency=low
 
 libgbinder (1.1.21) unstable; urgency=low
 
-  * Made Properly finalize GBinderIpc and GBinderServicePoll
+  * Properly finalize GBinderIpc and GBinderServicePoll
 
  -- Slava Monich <slava.monich@jolla.com>  Mon, 20 Jun 2022 18:53:26 +0300
 
