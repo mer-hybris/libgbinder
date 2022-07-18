@@ -1,3 +1,9 @@
+libgbinder (1.1.25) unstable; urgency=low
+
+  * Handle RPC protocol change at run time
+
+ -- Slava Monich <slava.monich@jolla.com>  Tue, 19 Jul 2022 02:02:41 +0300
+
 libgbinder (1.1.24) unstable; urgency=low
 
   * Bumped debhelper compat level to 7
