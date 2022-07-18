@@ -1715,6 +1715,15 @@ gbinder_ipc_tx_proc(
     gbinder_idle_callback_schedule(tx->completion);
 }
 
+static
+char*
+gbinder_ipc_make_key(
+    const char* dev,
+    const char* protocol)
+{
+    return g_strdup_printf("%s:%s", protocol, dev);
+}
+
 /*==========================================================================*
  * GBinderIpcSyncApi for worker threads
  *==========================================================================*/
@@ -1852,13 +1861,15 @@ gbinder_ipc_new(
 
     if (!dev || !dev[0]) dev = GBINDER_DEFAULT_BINDER;
     if (!protocol) protocol = gbinder_rpc_protocol_for_device(dev);
+    char* key = gbinder_ipc_make_key(dev, protocol->name);
 
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
     if (gbinder_ipc_table) {
-        self = g_hash_table_lookup(gbinder_ipc_table, dev);
+        self = g_hash_table_lookup(gbinder_ipc_table, key);
     }
     if (self) {
+        g_free(key);
         gbinder_ipc_ref(self);
     } else {
         GBinderDriver* driver = gbinder_driver_new(dev, protocol);
@@ -1869,7 +1880,8 @@ gbinder_ipc_new(
             self = g_object_new(THIS_TYPE, NULL);
             priv = self->priv;
             self->driver = driver;
-            self->dev = priv->key = g_strdup(dev);
+            self->dev = g_strdup(dev);
+            priv->key = key;
             self->priv->object_registry.io = gbinder_driver_io(driver);
             /* gbinder_ipc_dispose will remove iself from the table */
             if (!gbinder_ipc_table) {
@@ -1877,8 +1889,10 @@ gbinder_ipc_new(
             }
             g_hash_table_replace(gbinder_ipc_table, priv->key, self);
             /* With "/dev/" prefix, it may be too long to be a thread name */
-            priv->name = priv->key +
+            priv->name = self->dev +
                 (g_str_has_prefix(priv->key, "/dev/") ? 5 : 0);
+        } else {
+            g_free(key);
         }
     }
     pthread_mutex_unlock(&gbinder_ipc_mutex);
@@ -2138,6 +2152,7 @@ gbinder_ipc_finalize(
     GASSERT(!g_hash_table_size(priv->tx_table));
     g_hash_table_unref(priv->tx_table);
     gbinder_driver_unref(self->driver);
+    g_free((char*)self->dev);
     g_free(priv->key);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
