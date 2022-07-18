@@ -64,6 +64,7 @@ struct gbinder_ipc_priv {
     GBinderIpc* self;
     GThreadPool* tx_pool;
     GHashTable* tx_table;
+    char* dev;
     char* key;
     const char* name;
     GBinderObjectRegistry object_registry;
@@ -263,6 +264,15 @@ gbinder_ipc_wait(
         }
     }
     return FALSE;
+}
+
+static
+char*
+gbinder_ipc_make_key(
+    const char* dev,
+    const char* protocol)
+{
+    return g_strdup_printf("%s:%s", protocol, dev);
 }
 
 /*==========================================================================*
@@ -1715,15 +1725,6 @@ gbinder_ipc_tx_proc(
     gbinder_idle_callback_schedule(tx->completion);
 }
 
-static
-char*
-gbinder_ipc_make_key(
-    const char* dev,
-    const char* protocol)
-{
-    return g_strdup_printf("%s:%s", protocol, dev);
-}
-
 /*==========================================================================*
  * GBinderIpcSyncApi for worker threads
  *==========================================================================*/
@@ -1856,12 +1857,13 @@ gbinder_ipc_new(
     const char* protocol_name)
 {
     GBinderIpc* self = NULL;
+    char* key;
     const GBinderRpcProtocol* protocol = (protocol_name ?
         gbinder_rpc_protocol_by_name(protocol_name) : NULL);
 
     if (!dev || !dev[0]) dev = GBINDER_DEFAULT_BINDER;
     if (!protocol) protocol = gbinder_rpc_protocol_for_device(dev);
-    char* key = gbinder_ipc_make_key(dev, protocol->name);
+    key = gbinder_ipc_make_key(dev, protocol->name);
 
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
@@ -1880,7 +1882,7 @@ gbinder_ipc_new(
             self = g_object_new(THIS_TYPE, NULL);
             priv = self->priv;
             self->driver = driver;
-            self->dev = g_strdup(dev);
+            self->dev = priv->dev = g_strdup(dev);
             priv->key = key;
             self->priv->object_registry.io = gbinder_driver_io(driver);
             /* gbinder_ipc_dispose will remove iself from the table */
@@ -1890,7 +1892,7 @@ gbinder_ipc_new(
             g_hash_table_replace(gbinder_ipc_table, priv->key, self);
             /* With "/dev/" prefix, it may be too long to be a thread name */
             priv->name = self->dev +
-                (g_str_has_prefix(priv->key, "/dev/") ? 5 : 0);
+                (g_str_has_prefix(priv->dev, "/dev/") ? 5 : 0);
         } else {
             g_free(key);
         }
@@ -2152,7 +2154,7 @@ gbinder_ipc_finalize(
     GASSERT(!g_hash_table_size(priv->tx_table));
     g_hash_table_unref(priv->tx_table);
     gbinder_driver_unref(self->driver);
-    g_free((char*)self->dev);
+    g_free(priv->dev);
     g_free(priv->key);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
