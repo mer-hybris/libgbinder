@@ -79,26 +79,25 @@ void
 test_null(
     void)
 {
-    GBinderIpc* null = NULL;
     int status = INT_MAX;
 
-    g_assert(!gbinder_ipc_ref(null));
-    gbinder_ipc_unref(null);
-    g_assert(!gbinder_ipc_sync_main.sync_reply(null, 0, 0, NULL, NULL));
-    g_assert(!gbinder_ipc_sync_main.sync_reply(null, 0, 0, NULL, &status));
+    g_assert(!gbinder_ipc_ref(NULL));
+    gbinder_ipc_unref(NULL);
+    g_assert(!gbinder_ipc_sync_main.sync_reply(NULL, 0, 0, NULL, NULL));
+    g_assert(!gbinder_ipc_sync_main.sync_reply(NULL, 0, 0, NULL, &status));
     g_assert_cmpint(status, == ,-EINVAL);
-    g_assert(!gbinder_ipc_sync_worker.sync_reply(null, 0, 0, NULL, NULL));
-    g_assert(!gbinder_ipc_sync_worker.sync_reply(null, 0, 0, NULL, &status));
+    g_assert(!gbinder_ipc_sync_worker.sync_reply(NULL, 0, 0, NULL, NULL));
+    g_assert(!gbinder_ipc_sync_worker.sync_reply(NULL, 0, 0, NULL, &status));
     g_assert_cmpint(status, == ,-EINVAL);
-    g_assert_cmpint(gbinder_ipc_sync_main.sync_oneway(null, 0, 0, NULL), == ,
+    g_assert_cmpint(gbinder_ipc_sync_main.sync_oneway(NULL, 0, 0, NULL), == ,
         -EINVAL);
-    g_assert_cmpint(gbinder_ipc_sync_worker.sync_oneway(null, 0, 0, NULL), == ,
+    g_assert_cmpint(gbinder_ipc_sync_worker.sync_oneway(NULL, 0, 0, NULL), == ,
         -EINVAL);
-    g_assert(!gbinder_ipc_transact(null, 0, 0, 0, NULL, NULL, NULL, NULL));
-    g_assert(!gbinder_ipc_transact_custom(null, NULL, NULL, NULL, NULL));
-    g_assert(!gbinder_ipc_object_registry(null));
-    gbinder_ipc_looper_check(null);
-    gbinder_ipc_cancel(null, 0);
+    g_assert(!gbinder_ipc_transact(NULL, 0, 0, 0, NULL, NULL, NULL, NULL));
+    g_assert(!gbinder_ipc_transact_custom(NULL, NULL, NULL, NULL, NULL));
+    g_assert(!gbinder_ipc_object_registry(NULL));
+    gbinder_ipc_looper_check(NULL);
+    gbinder_ipc_cancel(NULL, 0);
 
     g_assert(!gbinder_object_registry_ref(NULL));
     gbinder_object_registry_unref(NULL);
@@ -162,6 +161,29 @@ test_basic(
 
     /* Invalid path */
     g_assert(!gbinder_ipc_new("invalid path", NULL));
+
+    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
+ * protocol
+ *==========================================================================*/
+
+static
+void
+test_protocol(
+    void)
+{
+    /* GBinderIpc objects are identified by device + protocol combination */
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, "aidl");
+    GBinderIpc* ipc2 = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, "hidl");
+
+    g_assert(ipc);
+    g_assert(ipc2);
+    g_assert(ipc != ipc2);
+    gbinder_ipc_unref(ipc);
+    gbinder_ipc_unref(ipc2);
 
     gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, NULL);
@@ -1350,6 +1372,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("protocol"), test_protocol);
     g_test_add_func(TEST_("async_oneway"), test_async_oneway);
     g_test_add_func(TEST_("sync_oneway"), test_sync_oneway);
     g_test_add_func(TEST_("sync_reply_ok"), test_sync_reply_ok);
