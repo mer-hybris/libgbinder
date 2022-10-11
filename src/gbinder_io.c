@@ -176,7 +176,7 @@ GBINDER_IO_FN(encode_local_object)(
         dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
         dest->binder = (uintptr_t)obj;
     } else {
-        dest->hdr.type = BINDER_TYPE_WEAK_BINDER;
+        dest->hdr.type = BINDER_TYPE_HANDLE;
     }
     return sizeof(*dest);
 }
