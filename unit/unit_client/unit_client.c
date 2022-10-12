@@ -277,7 +277,8 @@ test_sync_reply_tx(
     GBinderDriver* driver = gbinder_client_ipc(client)->driver;
     int fd = gbinder_driver_fd(driver);
     const GBinderIo* io = gbinder_driver_io(driver);
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    const GBinderRpcProtocol* protocol = gbinder_driver_protocol(driver);
+    GBinderLocalReply* reply = gbinder_local_reply_new(io, protocol);
     GBinderRemoteReply* tx_reply;
     GBinderOutputData* data;
     const guint32 handle = 0;
@@ -380,7 +381,8 @@ test_reply_tx(
     GBinderDriver* driver = gbinder_client_ipc(client)->driver;
     int fd = gbinder_driver_fd(driver);
     const GBinderIo* io = gbinder_driver_io(driver);
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    const GBinderRpcProtocol* protocol = gbinder_driver_protocol(driver);
+    GBinderLocalReply* reply = gbinder_local_reply_new(io, protocol);
     GBinderOutputData* data;
     const guint32 handle = 0;
     const guint32 code = 1;

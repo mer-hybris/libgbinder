@@ -92,6 +92,7 @@ gbinder_writer_data_append_contents(
             gbinder_buffer_contents_ref(contents));
         if (objects && *objects) {
             const GBinderIo* io = gbinder_buffer_io(buffer);
+            const GBinderRpcProtocol* proto = gbinder_buffer_protocol(buffer);
 
             /* GBinderIo must be the same because it's defined by the kernel */
             GASSERT(io == data->io);
@@ -114,21 +115,22 @@ gbinder_writer_data_append_contents(
                 gutil_int_array_append(data->offsets, dest->len);
 
                 /* Convert remote object into local if necessary */
-                if (convert && io->decode_binder_handle(obj, &handle) &&
+                if (convert && io->decode_binder_handle(obj, &handle, proto) &&
                     (local = gbinder_object_converter_handle_to_local
                     (convert, handle))) {
                     const guint pos = dest->len;
 
                     g_byte_array_set_size(dest, pos +
                         GBINDER_MAX_BINDER_OBJECT_SIZE);
-                    objsize = io->encode_local_object(dest->data + pos, local);
+                    objsize = io->encode_local_object(dest->data + pos,
+                        local, proto);
                     g_byte_array_set_size(dest, pos + objsize);
 
                     /* Keep the reference */
                     data->cleanup = gbinder_cleanup_add(data->cleanup,
                         (GDestroyNotify) gbinder_local_object_unref, local);
                 } else {
-                    objsize = io->object_size(obj);
+                    objsize = io->object_size(obj, proto);
                     g_byte_array_append(dest, obj, objsize);
                 }
 
@@ -1012,7 +1014,7 @@ gbinder_writer_data_append_local_object(
     /* Preallocate enough space */
     g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
     /* Write the object */
-    n = data->io->encode_local_object(buf->data + offset, obj);
+    n = data->io->encode_local_object(buf->data + offset, obj, data->protocol);
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + n);
     /* Record the offset */

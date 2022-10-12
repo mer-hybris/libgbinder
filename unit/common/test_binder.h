@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,6 +34,16 @@
 #define TEST_BINDER_H
 
 #include "test_common.h"
+
+#define B_TYPE_LARGE 0x85
+#define BINDER_TYPE_BINDER  GBINDER_FOURCC('s', 'b', '*', B_TYPE_LARGE)
+#define BINDER_TYPE_HANDLE  GBINDER_FOURCC('s', 'h', '*', B_TYPE_LARGE)
+#define BINDER_TYPE_PTR     GBINDER_FOURCC('p', 't', '*', B_TYPE_LARGE)
+
+#define BUFFER_OBJECT_SIZE_32 (24)
+#define BUFFER_OBJECT_SIZE_64 (40)
+#define BINDER_OBJECT_SIZE_32 (16)
+#define BINDER_OBJECT_SIZE_64 (24)
 
 typedef struct test_binder TestBinder;
 

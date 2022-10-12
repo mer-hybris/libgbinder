@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -51,13 +51,6 @@ static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] =
     "gbinder-test-servicemanager_aidl4-XXXXXX";
 
-enum gbinder_stability_level {
-    UNDECLARED = 0,
-    VENDOR = 0b000011,
-    SYSTEM = 0b001100,
-    VINTF = 0b111111
-};
-
 GType
 gbinder_servicemanager_hidl_get_type()
 {
@@ -94,7 +87,7 @@ typedef struct service_manager_aidl4 {
 G_DEFINE_TYPE(ServiceManagerAidl4, service_manager_aidl4, \
         GBINDER_TYPE_LOCAL_OBJECT)
 
-/* This is the format of stability passed on the wire. */
+/* This should be eventually handled at lower level. */
 typedef struct category {
     /*
      * This is the version of the wire protocol associated with the host
@@ -137,18 +130,22 @@ servicemanager_aidl4_handler(
         if (str) {
             reply = gbinder_local_object_new_reply(obj);
             remote_obj = g_hash_table_lookup(self->objects, str);
-            if (remote_obj) {
+            if (str) {
                 GBinderWriter writer;
 
-                GDEBUG("Found name '%s' => %p", str, remote_obj);
+                remote_obj = g_hash_table_lookup(self->objects, str);
+                reply = gbinder_local_object_new_reply(obj);
+
                 gbinder_local_reply_init_writer(reply, &writer);
-                gbinder_writer_append_int32(&writer, UNDECLARED);
+                gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
                 gbinder_writer_append_remote_object(&writer, remote_obj);
-            } else {
-                GDEBUG("Name '%s' not found", str);
-                gbinder_local_reply_append_int32(reply, GBINDER_STATUS_OK);
+                if (remote_obj) {
+                    GDEBUG("Found name '%s' => %p", str, remote_obj);
+                } else {
+                    GDEBUG("Name '%s' not found", str);
+                }
+                g_free(str);
             }
-            g_free(str);
         }
         break;
     case ADD_SERVICE_TRANSACTION:
@@ -157,7 +154,7 @@ servicemanager_aidl4_handler(
         remote_obj = gbinder_reader_read_object(&reader);
         gbinder_reader_read_uint32(&reader, (guint32*)&category);
         if (str && remote_obj &&
-            category.level == SYSTEM &&
+            category.level == GBINDER_STABILITY_SYSTEM &&
             category.version == 1 &&
             gbinder_reader_read_uint32(&reader, &allow_isolated) &&
             gbinder_reader_read_uint32(&reader, &dumpsys_priority)) {

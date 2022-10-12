@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,6 +35,7 @@
 #include "gbinder_local_object_p.h"
 #include "gbinder_remote_object_p.h"
 #include "gbinder_object_registry.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_writer.h"
 #include "gbinder_system.h"
 #include "gbinder_log.h"
@@ -94,7 +95,8 @@ GBINDER_IO_FN(write_read)(
 static
 gsize
 GBINDER_IO_FN(object_size)(
-    const void* obj)
+    const void* obj,
+    const GBinderRpcProtocol* protocol)
 {
     if (obj) {
         const struct binder_object_header* hdr = obj;
@@ -104,7 +106,8 @@ GBINDER_IO_FN(object_size)(
         case BINDER_TYPE_WEAK_BINDER:
         case BINDER_TYPE_HANDLE:
         case BINDER_TYPE_WEAK_HANDLE:
-            return sizeof(struct flat_binder_object);
+            return sizeof(struct flat_binder_object) +
+                protocol->flat_binder_object_extra;
         case BINDER_TYPE_FD:
             return sizeof(struct binder_fd_object);
         case BINDER_TYPE_FDA:
@@ -166,7 +169,8 @@ static
 guint
 GBINDER_IO_FN(encode_local_object)(
     void* out,
-    GBinderLocalObject* obj)
+    GBinderLocalObject* obj,
+    const GBinderRpcProtocol* protocol)
 {
     struct flat_binder_object* dest = out;
 
@@ -178,7 +182,12 @@ GBINDER_IO_FN(encode_local_object)(
     } else {
         dest->hdr.type = BINDER_TYPE_HANDLE;
     }
-    return sizeof(*dest);
+    if (protocol->finish_flatten_binder) {
+        protocol->finish_flatten_binder(dest + 1, obj);
+    } else if (protocol->flat_binder_object_extra) {
+        memset(dest + 1, 0, protocol->flat_binder_object_extra);
+    }
+    return sizeof(*dest) + protocol->flat_binder_object_extra;
 }
 
 static
@@ -500,7 +509,8 @@ static
 guint
 GBINDER_IO_FN(decode_binder_handle)(
     const void* data,
-    guint32* handle)
+    guint32* handle,
+    const GBinderRpcProtocol* protocol)
 {
     const struct flat_binder_object* obj = data;
 
@@ -509,7 +519,7 @@ GBINDER_IO_FN(decode_binder_handle)(
         if (handle) {
             *handle = obj->handle;
         }
-        return sizeof(*obj);
+        return sizeof(*obj) + protocol->flat_binder_object_extra;
     }
     return 0;
 }
@@ -520,7 +530,8 @@ GBINDER_IO_FN(decode_binder_object)(
     const void* data,
     gsize size,
     GBinderObjectRegistry* reg,
-    GBinderRemoteObject** out)
+    GBinderRemoteObject** out,
+    const GBinderRpcProtocol* protocol)
 {
     const struct flat_binder_object* obj = data;
 
@@ -530,15 +541,18 @@ GBINDER_IO_FN(decode_binder_object)(
             if (out) {
                 *out = gbinder_object_registry_get_remote(reg, obj->handle,
                     REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE);
+                if (*out && protocol->finish_unflatten_binder) {
+                    protocol->finish_unflatten_binder(obj + 1, *out);
+                }
             }
-            return sizeof(*obj);
+            return sizeof(*obj) + protocol->flat_binder_object_extra;
         case BINDER_TYPE_BINDER:
             if (!obj->binder) {
                 /* That's a NULL reference */
                 if (out) {
                     *out = NULL;
                 }
-                return sizeof(*obj);
+                return sizeof(*obj) + protocol->flat_binder_object_extra;
             }
             /* fallthrough */
         default:

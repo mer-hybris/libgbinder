@@ -352,7 +352,8 @@ gbinder_reader_read_nullable_object(
     if (gbinder_reader_can_read_object(p)) {
         const GBinderReaderData* data = p->data;
         const guint eaten = data->reg->io->decode_binder_object(p->ptr,
-            gbinder_reader_bytes_remaining(reader), data->reg, out);
+            gbinder_reader_bytes_remaining(reader), data->reg, out,
+            gbinder_buffer_protocol(data->buffer));
 
         if (eaten) {
             p->ptr += eaten;

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
  * Copyright (C) 2021 Madhushan Nishantha <jlmadushan@gmail.com>
  *
@@ -35,7 +35,6 @@
 #include "gbinder_servicemanager_aidl_p.h"
 #include "gbinder_client_p.h"
 #include "gbinder_reader_p.h"
-#include "binder.h"
 
 #include <gbinder_local_request.h>
 #include <gbinder_remote_reply.h>
@@ -64,18 +63,24 @@ gbinder_servicemanager_aidl4_add_service_req(
 
     gbinder_local_request_append_string16(req, name);
     gbinder_local_request_append_local_object(req, obj);
+
     /*
      * When reading nullable strong binder, from Android 12, the format of
      * the `stability` field passed on the wire was changed and evolved to
-     * `struct Category`, which consists of the following members with 4 bytes long.
+     * `struct Category`, which consists of the following members with 4 bytes
+     * long.
      *
      * struct Category {
      *   uint8_t version;
      *   uint8_t reserved[2];
      *   Level level;        <- bitmask of Stability::Level
      * }
+     *
+     * Hmmm, is that ^ really true?
      */
-    gbinder_local_request_append_int32(req, B_PACK_CHARS(SYSTEM, 0, 0, BINDER_WIRE_FORMAT_VERSION));
+    gbinder_local_request_append_int32(req,
+        GBINDER_FOURCC(GBINDER_STABILITY_SYSTEM, 0, 0,
+            BINDER_WIRE_FORMAT_VERSION));
     gbinder_local_request_append_int32(req, 0);
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
 
