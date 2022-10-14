@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -212,12 +212,23 @@ gbinder_rpc_protocol_aidl3_read_rpc_header(
     return *iface;
 }
 
+static
+void
+gbinder_rpc_protocol_aidl3_finish_flatten_binder(
+    void* out,
+    GBinderLocalObject* obj)
+{
+    *(guint32*)out = GBINDER_STABILITY_SYSTEM;
+}
+
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .name = "aidl3",
     .ping_tx = GBINDER_PING_TRANSACTION,
     .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
     .write_rpc_header = gbinder_rpc_protocol_aidl3_write_rpc_header,
-    .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header
+    .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
+    .flat_binder_object_extra = 4,
+    .finish_flatten_binder = gbinder_rpc_protocol_aidl3_finish_flatten_binder
 };
 
 /*==========================================================================*

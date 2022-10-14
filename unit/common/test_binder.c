@@ -69,11 +69,6 @@ static GMainLoop* test_binder_exit_loop = NULL;
 #define BINDER_SET_MAX_THREADS _IOW('b', 5, guint32)
 #define BINDER_BUFFER_FLAG_HAS_PARENT 0x01
 
-#define B_TYPE_LARGE 0x85
-#define BINDER_TYPE_BINDER  GBINDER_FOURCC('s', 'b', '*', B_TYPE_LARGE)
-#define BINDER_TYPE_HANDLE  GBINDER_FOURCC('s', 'h', '*', B_TYPE_LARGE)
-#define BINDER_TYPE_PTR     GBINDER_FOURCC('p', 't', '*', B_TYPE_LARGE)
-
 #define TF_ONE_WAY     0x01
 #define TF_ROOT_OBJECT 0x04
 #define TF_STATUS_CODE 0x08

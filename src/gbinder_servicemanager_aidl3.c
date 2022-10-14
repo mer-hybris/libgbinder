@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
  * Copyright (C) 2021 Madhushan Nishantha <jlmadushan@gmail.com>
  *
@@ -68,7 +68,7 @@ gbinder_servicemanager_aidl3_get_service(
         CHECK_SERVICE_TRANSACTION, req, status, api);
 
     gbinder_remote_reply_init_reader(reply, &reader);
-    gbinder_reader_read_int32(&reader, NULL /* stability */);
+    gbinder_reader_read_int32(&reader, NULL /* status? */);
     obj = gbinder_reader_read_object(&reader);
 
     gbinder_remote_reply_unref(reply);
@@ -129,11 +129,6 @@ gbinder_servicemanager_aidl3_add_service_req(
 
     gbinder_local_request_append_string16(req, name);
     gbinder_local_request_append_local_object(req, obj);
-    /*
-     * Starting from Android 11, to add a service, Android framework requires
-     * an additional field `stability` when reading a strong binder.
-     */
-    gbinder_local_request_append_int32(req, SYSTEM);
     gbinder_local_request_append_int32(req, 0);
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
     return req;

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -47,6 +47,17 @@ struct gbinder_rpc_protocol {
     void (*write_rpc_header)(GBinderWriter* writer, const char* iface);
     const char* (*read_rpc_header)(GBinderReader* reader, guint32 txcode,
         char** iface);
+
+    /*
+     * For the sake of simplicity, let's assume that the trailer has a
+     * fixed size and that size is the same on both 32 and 64 bit platforms.
+     * Also note that finish_unflatten_binder() is only invoked for the
+     * remote objects that are not NULL, otherwise flat_binder_object_extra
+     * bytes are just skipped.
+     */
+    gsize flat_binder_object_extra;
+    void (*finish_flatten_binder)(void* out, GBinderLocalObject* obj);
+    void (*finish_unflatten_binder)(const void* in, GBinderRemoteObject* obj);
 };
 
 const GBinderRpcProtocol*

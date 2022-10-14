@@ -45,8 +45,6 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl2,
     GBINDER_TYPE_SERVICEMANAGER_AIDL)
 
 #define PARENT_CLASS gbinder_servicemanager_aidl2_parent_class
-#define DUMP_FLAG_PRIORITY_DEFAULT (0x08)
-#define DUMP_FLAG_PRIORITY_ALL     (0x0f)
 
 static
 GBinderLocalRequest*

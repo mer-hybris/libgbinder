@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -74,10 +74,12 @@ gbinder_local_request_output_buffers_size(
 GBinderLocalRequest*
 gbinder_local_request_new(
     const GBinderIo* io,
+    const GBinderRpcProtocol* protocol,
     GBytes* init)
 {
     GASSERT(io);
-    if (io) {
+    GASSERT(protocol);
+    if (io && protocol) {
         GBinderLocalRequest* self = g_slice_new0(GBinderLocalRequest);
         GBinderWriterData* writer = &self->data;
         GBinderOutputData* out = &self->out;
@@ -89,6 +91,7 @@ gbinder_local_request_new(
 
         g_atomic_int_set(&self->refcount, 1);
         writer->io = io;
+        writer->protocol = protocol;
         if (init) {
             gsize size;
             gconstpointer data = g_bytes_get_data(init, &size);
@@ -111,9 +114,10 @@ gbinder_local_request_new_iface(
     const GBinderRpcProtocol* protocol,
     const char* iface)
 {
-    GBinderLocalRequest* self = gbinder_local_request_new(io, NULL);
+    GBinderLocalRequest* self = gbinder_local_request_new(io, protocol, NULL);
 
-    if (self && G_LIKELY(protocol) && G_LIKELY(iface)) {
+    /* gbinder_local_request_new() fails if protocol is NULL */
+    if (self && G_LIKELY(iface)) {
         GBinderWriter writer;
 
         gbinder_local_request_init_writer(self, &writer);
@@ -128,7 +132,7 @@ gbinder_local_request_new_from_data(
     GBinderObjectConverter* convert)
 {
     GBinderLocalRequest* self = gbinder_local_request_new
-        (gbinder_buffer_io(buffer), NULL);
+        (gbinder_buffer_io(buffer), gbinder_buffer_protocol(buffer), NULL);
 
     if (self) {
         gbinder_writer_data_append_contents(&self->data, buffer, 0, convert);

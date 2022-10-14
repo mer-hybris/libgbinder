@@ -90,6 +90,15 @@ static const char hidl_base_interface[] = "android.hidl.base@1.0::IBase";
  *==========================================================================*/
 
 static
+GBinderLocalReply*
+gbinder_local_object_create_reply(
+    GBinderLocalObject* self)
+{
+    return gbinder_local_reply_new(gbinder_local_object_io(self),
+        gbinder_local_object_protocol(self));
+}
+
+static
 GBINDER_LOCAL_TRANSACTION_SUPPORT
 gbinder_local_object_default_can_handle_transaction(
     GBinderLocalObject* self,
@@ -139,8 +148,7 @@ gbinder_local_object_ping_transaction(
     GBinderRemoteRequest* req,
     int* status)
 {
-    const GBinderIo* io = gbinder_local_object_io(self);
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    GBinderLocalReply* reply = gbinder_local_object_create_reply(self);
 
     GVERBOSE("  PING_TRANSACTION");
     gbinder_local_reply_append_int32(reply, GBINDER_STATUS_OK);
@@ -155,9 +163,8 @@ gbinder_local_object_interface_transaction(
     GBinderRemoteRequest* req,
     int* status)
 {
-    const GBinderIo* io = gbinder_local_object_io(self);
     GBinderLocalObjectPriv* priv = self->priv;
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    GBinderLocalReply* reply = gbinder_local_object_create_reply(self);
 
     GVERBOSE("  INTERFACE_TRANSACTION");
     gbinder_local_reply_append_string16(reply, priv->ifaces[0]);
@@ -173,8 +180,7 @@ gbinder_local_object_hidl_ping_transaction(
     int* status)
 {
     /*android.hidl.base@1.0::IBase interfaceDescriptor() */
-    const GBinderIo* io = gbinder_local_object_io(self);
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    GBinderLocalReply* reply = gbinder_local_object_create_reply(self);
 
     GVERBOSE("  HIDL_PING_TRANSACTION \"%s\"",
         gbinder_remote_request_interface(req));
@@ -191,9 +197,8 @@ gbinder_local_object_hidl_get_descriptor_transaction(
     int* status)
 {
     /*android.hidl.base@1.0::IBase interfaceDescriptor() */
-    const GBinderIo* io = gbinder_local_object_io(self);
     GBinderLocalObjectPriv* priv = self->priv;
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    GBinderLocalReply* reply = gbinder_local_object_create_reply(self);
     GBinderWriter writer;
 
     GVERBOSE("  HIDL_GET_DESCRIPTOR_TRANSACTION \"%s\"",
@@ -213,8 +218,7 @@ gbinder_local_object_hidl_descriptor_chain_transaction(
     int* status)
 {
     /*android.hidl.base@1.0::IBase interfaceChain() */
-    const GBinderIo* io = gbinder_local_object_io(self);
-    GBinderLocalReply* reply = gbinder_local_reply_new(io);
+    GBinderLocalReply* reply = gbinder_local_object_create_reply(self);
     GBinderWriter writer;
 
     GVERBOSE("  HIDL_DESCRIPTOR_CHAIN_TRANSACTION \"%s\"",
@@ -480,7 +484,7 @@ gbinder_local_object_new_reply(
     GBinderLocalObject* self)
 {
     if (G_LIKELY(self)) {
-        return gbinder_local_reply_new(gbinder_local_object_io(self));
+        return gbinder_local_object_create_reply(self);
     }
     return NULL;
 }

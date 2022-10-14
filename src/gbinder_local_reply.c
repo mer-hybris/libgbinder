@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -72,10 +72,12 @@ gbinder_local_reply_output_buffers_size(
 
 GBinderLocalReply*
 gbinder_local_reply_new(
-    const GBinderIo* io)
+    const GBinderIo* io,
+    const GBinderRpcProtocol* protocol)
 {
     GASSERT(io);
-    if (io) {
+    GASSERT(protocol);
+    if (io && protocol) {
         GBinderLocalReply* self = g_slice_new0(GBinderLocalReply);
         GBinderWriterData* data = &self->data;
         GBinderOutputData* out = &self->out;
@@ -87,6 +89,7 @@ gbinder_local_reply_new(
 
         g_atomic_int_set(&self->refcount, 1);
         data->io = io;
+        data->protocol = protocol;
         out->bytes = data->bytes = g_byte_array_new();
         out->f = &local_reply_output_fn;
         return self;

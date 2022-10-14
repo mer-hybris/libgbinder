@@ -1324,8 +1324,9 @@ GBinderLocalRequest*
 gbinder_driver_local_request_new_ping(
     GBinderDriver* self)
 {
-    GBinderLocalRequest* req = gbinder_local_request_new(self->io, NULL);
     GBinderWriter writer;
+    GBinderLocalRequest* req = gbinder_local_request_new(self->io,
+        self->protocol, NULL);
 
     gbinder_local_request_init_writer(req, &writer);
     self->protocol->write_ping(&writer);

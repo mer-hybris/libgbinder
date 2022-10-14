@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -126,7 +126,7 @@ struct gbinder_io {
     } br;
 
     /* Size of the object and its extra data */
-    gsize (*object_size)(const void* obj);
+    gsize (*object_size)(const void* obj, const GBinderRpcProtocol* protocol);
     gsize (*object_data_size)(const void* obj);
 
     /* Writes pointer to the buffer. The destination buffer must have
@@ -142,8 +142,9 @@ struct gbinder_io {
     guint (*encode_cookie)(void* out, guint64 cookie);
 
     /* Encode flat_buffer_object */
-#define GBINDER_MAX_BINDER_OBJECT_SIZE (24)
-    guint (*encode_local_object)(void* out, GBinderLocalObject* obj);
+#define GBINDER_MAX_BINDER_OBJECT_SIZE (28)
+    guint (*encode_local_object)(void* out, GBinderLocalObject* obj,
+        const GBinderRpcProtocol* protocol);
     guint (*encode_remote_object)(void* out, GBinderRemoteObject* obj);
     guint (*encode_fd_object)(void* out, int fd);
     guint (*encode_fda_object)(void* out, const GBinderFds *fds,
@@ -189,9 +190,11 @@ struct gbinder_io {
     void (*decode_transaction_data)(const void* data, GBinderIoTxData* tx);
     void* (*decode_ptr_cookie)(const void* data);
     guint (*decode_cookie)(const void* data, guint64* cookie);
-    guint (*decode_binder_handle)(const void* obj, guint32* handle);
+    guint (*decode_binder_handle)(const void* obj, guint32* handle,
+        const GBinderRpcProtocol* protocol);
     guint (*decode_binder_object)(const void* data, gsize size,
-        GBinderObjectRegistry* reg, GBinderRemoteObject** obj);
+        GBinderObjectRegistry* reg, GBinderRemoteObject** obj,
+        const GBinderRpcProtocol* protocol);
     guint (*decode_buffer_object)(GBinderBuffer* buf, gsize offset,
         GBinderIoBufferObject* out);
     guint (*decode_fd_object)(const void* data, gsize size, int* fd);

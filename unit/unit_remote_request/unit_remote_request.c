@@ -31,6 +31,7 @@
  */
 
 #include "test_common.h"
+#include "test_binder.h"
 
 #include "gbinder_buffer_p.h"
 #include "gbinder_config.h"
@@ -58,9 +59,6 @@ static TestOpt test_opt;
     TEST_INT16_BYTES('o'), 0x00, 0x00
 #define HIDL_RPC_HEADER \
     'f', 'o', 'o', 0x00
-
-#define BINDER_TYPE_BINDER GBINDER_FOURCC('s', 'b', '*', 0x85)
-#define BINDER_OBJECT_SIZE_64 (GBINDER_MAX_BINDER_OBJECT_SIZE)
 
 /*==========================================================================*
  * null

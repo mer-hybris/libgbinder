@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -282,7 +282,8 @@ gbinder_client_new2(
             priv->ranges = g_new0(GBinderClientIfaceRange, 1);
             priv->ranges[0].last_code = UINT_MAX;
             priv->ranges[0].basic_req = gbinder_local_request_new
-                (gbinder_driver_io(driver), NULL);
+                (gbinder_driver_io(driver), gbinder_driver_protocol(driver),
+                    NULL);
         }
         return self;
     }
@@ -373,9 +374,10 @@ gbinder_client_new_request(
 {
     if (G_LIKELY(self)) {
         GBinderClientPriv* priv = gbinder_client_cast(self);
-        const GBinderIo* io = gbinder_driver_io(self->remote->ipc->driver);
+        GBinderDriver* driver = self->remote->ipc->driver;
 
-        return gbinder_local_request_new(io, priv->ranges->rpc_header);
+        return gbinder_local_request_new(gbinder_driver_io(driver),
+            gbinder_driver_protocol(driver), priv->ranges->rpc_header);
     }
     return NULL;
 }
@@ -387,13 +389,14 @@ gbinder_client_new_request2(
 {
     if (G_LIKELY(self)) {
         GBinderClientPriv* priv = gbinder_client_cast(self);
-        const GBinderClientIfaceRange* r = gbinder_client_find_range
+        const GBinderClientIfaceRange* range = gbinder_client_find_range
             (priv, code);
 
-        if (r) {
-            const GBinderIo* io = gbinder_driver_io(self->remote->ipc->driver);
+        if (range) {
+            GBinderDriver* driver = self->remote->ipc->driver;
 
-            return gbinder_local_request_new(io, r->rpc_header);
+            return gbinder_local_request_new(gbinder_driver_io(driver),
+                gbinder_driver_protocol(driver), range->rpc_header);
         }
     }
     return NULL;

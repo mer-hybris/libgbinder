@@ -36,6 +36,7 @@
 #include "gbinder_local_object.h"
 #include "gbinder_local_reply_p.h"
 #include "gbinder_output_data.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_buffer_p.h"
 #include "gbinder_driver.h"
 #include "gbinder_writer.h"
@@ -45,11 +46,6 @@
 #include <gutil_intarray.h>
 
 static TestOpt test_opt;
-
-#define BUFFER_OBJECT_SIZE_32 (24)
-#define BUFFER_OBJECT_SIZE_64 (GBINDER_MAX_BUFFER_OBJECT_SIZE)
-#define BINDER_OBJECT_SIZE_32 (16)
-#define BINDER_OBJECT_SIZE_64 (GBINDER_MAX_BINDER_OBJECT_SIZE)
 
 static
 void
@@ -70,6 +66,14 @@ test_buffer_from_bytes(
     return gbinder_buffer_new(driver, bytes->data, bytes->len, NULL);
 }
 
+static
+GBinderLocalReply*
+test_local_reply_new()
+{
+    return gbinder_local_reply_new(&gbinder_io_32,
+        gbinder_rpc_protocol_for_device(NULL));
+}
+
 /*==========================================================================*
  * null
  *==========================================================================*/
@@ -82,7 +86,10 @@ test_null(
     GBinderWriter writer;
     int count = 0;
 
-    g_assert(!gbinder_local_reply_new(NULL));
+    g_assert(!gbinder_local_reply_new(NULL, NULL));
+    g_assert(!gbinder_local_reply_new(&gbinder_io_32, NULL));
+    g_assert(!gbinder_local_reply_new(NULL,
+        gbinder_rpc_protocol_for_device(NULL)));
     g_assert(!gbinder_local_reply_ref(NULL));
     gbinder_local_reply_unref(NULL);
     gbinder_local_reply_init_writer(NULL, NULL);
@@ -118,7 +125,7 @@ void
 test_cleanup(
     void)
 {
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     int count = 0;
 
     gbinder_local_reply_cleanup(reply, NULL, &count);
@@ -141,7 +148,7 @@ test_bool(
 {
     static const guint8 output_true[] = { 0x01, 0x00, 0x00, 0x00 };
     static const guint8 output_false[] = { 0x00, 0x00, 0x00, 0x00 };
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_bool(reply, FALSE);
@@ -152,7 +159,7 @@ test_bool(
     g_assert(!memcmp(data->bytes->data, output_false, data->bytes->len));
     gbinder_local_reply_unref(reply);
 
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_append_bool(reply, TRUE);
     data = gbinder_local_reply_data(reply);
     g_assert(!gbinder_output_data_offsets(data));
@@ -161,7 +168,7 @@ test_bool(
     g_assert(!memcmp(data->bytes->data, output_true, data->bytes->len));
     gbinder_local_reply_unref(reply);
 
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_append_bool(reply, 42);
     data = gbinder_local_reply_data(reply);
     g_assert(!gbinder_output_data_offsets(data));
@@ -181,7 +188,7 @@ test_fd(
     void)
 {
     const gint32 fd = 1;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
     GUtilIntArray* offsets;
 
@@ -206,7 +213,7 @@ test_int32(
     void)
 {
     const guint32 value = 1234567;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
     GBinderWriter writer;
 
@@ -221,7 +228,7 @@ test_int32(
     gbinder_local_reply_unref(reply);
 
     /* Same with writer */
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_init_writer(reply, &writer);
     gbinder_writer_append_int32(&writer, value);
     data = gbinder_local_reply_data(reply);
@@ -242,7 +249,7 @@ test_int64(
     void)
 {
     const guint64 value = 123456789;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_int64(reply, value);
@@ -264,7 +271,7 @@ test_float(
     void)
 {
     const gfloat value = 123456789;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_float(reply, value);
@@ -286,7 +293,7 @@ test_double(
     void)
 {
     const gdouble value = 123456789;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_double(reply, value);
@@ -310,7 +317,7 @@ test_string8(
     /* The size of the string gets aligned at 4-byte boundary */
     static const char input[] = "test";
     static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_string8(reply, input);
@@ -322,7 +329,7 @@ test_string8(
     gbinder_local_reply_unref(reply);
 
     /* NULL string doesn't get encoded at all (should it be?) */
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_append_string8(reply, NULL);
     data = gbinder_local_reply_data(reply);
     g_assert(!gbinder_output_data_offsets(data));
@@ -346,7 +353,7 @@ test_string16(
         TEST_INT16_BYTES('x'), 0x00, 0x00
     };
     const gint32 null_output = -1;
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
 
     gbinder_local_reply_append_string16(reply, input);
@@ -358,7 +365,7 @@ test_string16(
     gbinder_local_reply_unref(reply);
 
     /* NULL string gets encoded as -1 */
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_append_string16(reply, NULL);
     data = gbinder_local_reply_data(reply);
     g_assert(!gbinder_output_data_offsets(data));
@@ -377,7 +384,7 @@ void
 test_hidl_string(
     void)
 {
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
     GUtilIntArray* offsets;
 
@@ -400,7 +407,7 @@ void
 test_hidl_string_vec(
     void)
 {
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
     GUtilIntArray* offsets;
 
@@ -436,22 +443,22 @@ test_local_object(
     data = gbinder_local_reply_data(reply);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
-    g_assert(!gbinder_output_data_buffers_size(data));
-    g_assert(data->bytes->len == BINDER_OBJECT_SIZE_64);
+    g_assert_cmpuint(offsets->count, == ,1);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
+    g_assert_cmpuint(data->bytes->len, == ,BINDER_OBJECT_SIZE_64);
     gbinder_local_reply_unref(reply);
 
     /* Append NULL object (with 32-bit I/O module) */
-    reply = gbinder_local_reply_new(&gbinder_io_32);
+    reply = test_local_reply_new();
     gbinder_local_reply_append_local_object(reply, NULL);
     data = gbinder_local_reply_data(reply);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
-    g_assert(!gbinder_output_data_buffers_size(data));
-    g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
+    g_assert_cmpuint(offsets->count, == ,1);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
+    g_assert_cmpuint(data->bytes->len, == ,BINDER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
     gbinder_ipc_unref(ipc);
 }
@@ -465,7 +472,7 @@ void
 test_remote_object(
     void)
 {
-    GBinderLocalReply* reply = gbinder_local_reply_new(&gbinder_io_32);
+    GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
     GUtilIntArray* offsets;
 
@@ -494,7 +501,8 @@ test_remote_reply(
     static const guint8 output[] = { 't', 'e', 's', 't', 0, 0, 0, 0 };
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     const GBinderIo* io = gbinder_driver_io(driver);
-    GBinderLocalReply* req = gbinder_local_reply_new(io);
+    GBinderLocalReply* req = gbinder_local_reply_new(io,
+        gbinder_rpc_protocol_for_device(NULL));
     GBinderLocalReply* req2;
     GBinderOutputData* data2;
     const GByteArray* bytes;
@@ -506,7 +514,7 @@ test_remote_reply(
 
     /* Copy flat structures (no binder objects) */
     buffer = test_buffer_from_bytes(driver, bytes);
-    req2 = gbinder_local_reply_new(io);
+    req2 = gbinder_local_reply_new(io, gbinder_rpc_protocol_for_device(NULL));
     g_assert(gbinder_local_reply_set_contents(req2, buffer, NULL) == req2);
     gbinder_buffer_free(buffer);
 
