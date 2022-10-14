@@ -1,3 +1,10 @@
+libgbinder (1.1.26) unstable; urgency=low
+
+  * Use BINDER_TYPE_HANDLE for NULL binders
+  * Fixed binder object encoding in aidl3 protocol
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 14 Oct 2022 16:48:29 +0300
+
 libgbinder (1.1.25) unstable; urgency=low
 
   * Handle RPC protocol change at run time
