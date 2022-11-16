@@ -55,6 +55,102 @@ struct gbinder_parent {
     guint32 offset;
 };
 
+/*
+ * Note that gbinder_writer_append_struct() doesn't copy the data, it writes
+ * buffer objects pointing to whatever was passed in. The caller must make
+ * sure that those pointers outlive the transaction. That's most commonly
+ * done with by using gbinder_writer_malloc() and friends for allocating
+ * memory for the transaction.
+ *
+ * Below is an example of initializing GBinderWriterType which can then
+ * be passed to gbinder_writer_append_struct(). Fields have to be listed
+ * in the order in which they appear in the structure.
+ *
+ *    typedef struct data {
+ *        int x;
+ *    } Data;
+ *
+ *    typedef struct data2 {
+ *        int y;
+ *        GBinderHidlString str;
+ *        GBinderHidlVec vec; // vec<Data>
+ *    } Data2;
+ *
+ *    static const GBinderWriterType data_t = {
+ *        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(Data), NULL
+ *    };
+ *
+ *    static const GBinderWriterField data2_f[] = {
+ *        GBINDER_WRITER_FIELD_HIDL_STRING(Data2,str),
+ *        GBINDER_WRITER_FIELD_HIDL_VEC(Data2, vec, &data_t),
+ *        GBINDER_WRITER_FIELD_END()
+ *    };
+ *
+ *    static const GBinderWriterType data2_t = {
+ *        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(Data2), data2_f
+ *    };
+ */
+
+typedef struct gbinder_writer_type {
+    const char* name;
+    gsize size;
+    const struct gbinder_writer_field* fields;
+} GBinderWriterType; /* Since 1.1.27 */
+
+typedef struct gbinder_writer_field {
+    const char* name;
+    gsize offset;
+    const GBinderWriterType* type;
+    void (*write_buf)(GBinderWriter* writer, const void* ptr,
+      const struct gbinder_writer_field* field, const GBinderParent* parent);
+    gpointer reserved;
+} GBinderWriterField; /* Since 1.1.27 */
+
+#define GBINDER_WRITER_STRUCT_NAME_AND_SIZE(type) \
+    #type, sizeof(type)
+#define GBINDER_WRITER_FIELD_NAME_AND_OFFSET(type,field) \
+    #type "." #field, G_STRUCT_OFFSET(type,field)
+#define GBINDER_WRITER_FIELD_POINTER(type,field,field_type) { \
+    GBINDER_WRITER_FIELD_NAME_AND_OFFSET(type,field), field_type, NULL, NULL }
+#define GBINDER_WRITER_FIELD_HIDL_VEC(type,field,elem) { \
+    GBINDER_WRITER_FIELD_NAME_AND_OFFSET(type,field), elem, \
+    gbinder_writer_field_hidl_vec_write_buf, NULL }
+#define GBINDER_WRITER_FIELD_HIDL_VEC_INT32(type,field) \
+    GBINDER_WRITER_FIELD_HIDL_VEC(type,field, &gbinder_writer_type_int32)
+#define GBINDER_WRITER_FIELD_HIDL_VEC_BYTE(type,field) \
+    GBINDER_WRITER_FIELD_HIDL_VEC(type,field, &gbinder_writer_type_byte)
+#define GBINDER_WRITER_FIELD_HIDL_VEC_STRING(type,field) \
+    GBINDER_WRITER_FIELD_HIDL_VEC(type,field, &gbinder_writer_type_hidl_string)
+#define GBINDER_WRITER_FIELD_HIDL_STRING(type,field) { \
+    GBINDER_WRITER_FIELD_NAME_AND_OFFSET(type,field), NULL, \
+    gbinder_writer_field_hidl_string_write_buf, NULL }
+#define GBINDER_WRITER_FIELD_END() { NULL, 0, NULL, NULL, NULL }
+
+extern const GBinderWriterType gbinder_writer_type_byte; /* Since 1.1.27 */
+extern const GBinderWriterType gbinder_writer_type_int32; /* Since 1.1.27 */
+extern const GBinderWriterType gbinder_writer_type_hidl_string; /* 1.1.27 */
+
+void
+gbinder_writer_append_struct(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterType* type,
+    const GBinderParent* parent); /* Since 1.1.27 */
+
+void
+gbinder_writer_field_hidl_vec_write_buf(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterField* field,
+    const GBinderParent* parent); /* Since 1.1.27 */
+
+void
+gbinder_writer_field_hidl_string_write_buf(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterField* field,
+    const GBinderParent* parent); /* Since 1.1.27 */
+
 void
 gbinder_writer_append_int8(
     GBinderWriter* writer,

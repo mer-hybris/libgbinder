@@ -52,6 +52,20 @@ typedef struct gbinder_writer_priv {
     GBinderWriterData* data;
 } GBinderWriterPriv;
 
+const GBinderWriterType gbinder_writer_type_byte = { "int32", 4, NULL };
+const GBinderWriterType gbinder_writer_type_int32 = { "byte", 1, NULL };
+static const GBinderWriterField gbinder_writer_type_hidl_string_f[] = {
+    {
+        "hidl_string.data.str", 0, NULL,
+        gbinder_writer_field_hidl_string_write_buf, NULL
+    },
+    GBINDER_WRITER_FIELD_END()
+};
+const GBinderWriterType gbinder_writer_type_hidl_string = {
+    "hidl_string", sizeof(GBinderHidlString),
+    gbinder_writer_type_hidl_string_f
+};
+
 G_STATIC_ASSERT(sizeof(GBinderWriter) >= sizeof(GBinderWriterPriv));
 
 GBINDER_INLINE_FUNC GBinderWriterPriv* gbinder_writer_cast(GBinderWriter* pub)
@@ -729,6 +743,102 @@ gbinder_writer_append_buffer_object(
         return gbinder_writer_data_append_buffer_object(data, buf, len, NULL);
     }
     return 0;
+}
+
+static
+void
+gbinder_writer_append_fields(
+    GBinderWriter* writer,
+    const void* obj,
+    const GBinderWriterField* fields,
+    const GBinderParent* parent) /* Since 1.1.27 */
+{
+    if (fields) {
+        const GBinderWriterField* field = fields;
+        const guint8* base_ptr = obj;
+        GBinderParent parent2;
+
+        parent2.index = parent->index;
+        for (field = fields; field->type || field->write_buf; field++) {
+            const void* field_ptr = base_ptr + field->offset;
+
+            parent2.offset = parent->offset + field->offset;
+            if (field->write_buf) {
+                field->write_buf(writer, field_ptr, field, &parent2);
+            } else {
+                gbinder_writer_append_buffer_object_with_parent(writer,
+                    *(void**)field_ptr, field->type->size, &parent2);
+            }
+        }
+    }
+}
+
+/*
+ * Note that gbinder_writer_append_struct doesn't copy the data, it writes
+ * buffer objects pointing to whatever was passed in. The caller must make
+ * sure that those pointers outlive the transaction. That's most commonly
+ * done with by using gbinder_writer_malloc() and friends for allocating
+ * memory for the transaction.
+ */
+void
+gbinder_writer_append_struct(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterType* type,
+    const GBinderParent* parent) /* Since 1.1.27 */
+{
+    if (type) {
+        GBinderParent child;
+
+        child.offset = 0;
+        child.index = gbinder_writer_append_buffer_object_with_parent(writer,
+            ptr, type->size, parent);
+        gbinder_writer_append_fields(writer, ptr, type->fields, &child);
+    } else {
+        /* No type - no fields */
+        gbinder_writer_append_buffer_object_with_parent(writer, ptr, 0, parent);
+    }
+}
+
+void
+gbinder_writer_field_hidl_vec_write_buf(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterField* field,
+    const GBinderParent* parent) /* Since 1.1.27 */
+{
+    const GBinderHidlVec* vec = ptr;
+    const guint8* buf = vec->data.ptr;
+    const GBinderWriterType* elem_type = field->type;
+
+    if (elem_type) {
+        GBinderParent child;
+        guint i;
+
+        child.index = gbinder_writer_append_buffer_object_with_parent
+            (writer, buf, vec->count * elem_type->size, parent);
+        for (i = 0; i < vec->count; i++) {
+            child.offset = elem_type->size * i;
+            gbinder_writer_append_fields(writer, buf + child.offset,
+                elem_type->fields, &child);
+        }
+    } else {
+        /* Probably a programming error but write an empty buffer anyway */
+        gbinder_writer_append_buffer_object_with_parent(writer, buf, 0, parent);
+    }
+}
+
+void
+gbinder_writer_field_hidl_string_write_buf(
+    GBinderWriter* writer,
+    const void* ptr,
+    const GBinderWriterField* field,
+    const GBinderParent* parent) /* Since 1.1.27 */
+{
+    const GBinderHidlString* str = ptr;
+
+    gbinder_writer_append_buffer_object_with_parent(writer, str->data.str,
+        str->data.str ? (str->len + 1) : 0, parent);
 }
 
 guint
