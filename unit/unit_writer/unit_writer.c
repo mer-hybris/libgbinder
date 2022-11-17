@@ -861,10 +861,6 @@ test_hidl_string_vec(
  * buffer
  *==========================================================================*/
 
-typedef struct test_data {
-    guint32 x;
-} TestData;
-
 static
 void
 test_buffer(
@@ -896,6 +892,10 @@ test_buffer(
 /*==========================================================================*
  * parent
  *==========================================================================*/
+
+typedef struct test_data {
+    guint32 x;
+} TestData;
 
 typedef struct test_data_pointer {
     TestData* ptr;
@@ -981,6 +981,160 @@ test_parcelable(
     g_assert(data->bytes->len == sizeof(test_null_value));
     g_assert(!memcmp(data->bytes->data, &test_null_value, data->bytes->len));
 
+    gbinder_local_request_unref(req);
+}
+
+/*==========================================================================*
+ * struct
+ *==========================================================================*/
+
+typedef struct test_struct_data {
+    int x;
+    GBinderHidlString str1;
+    GBinderHidlString str2;
+    GBinderHidlVec vec; /* vec<TestData> */
+} TestStruct;
+
+static
+void
+test_struct(
+    void)
+{
+    static const GBinderWriterType test_data_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(TestData), NULL
+    };
+    static const GBinderWriterField test_data_pointer_f[] = {
+        GBINDER_WRITER_FIELD_POINTER(TestDataPointer,ptr, &test_data_t),
+        GBINDER_WRITER_FIELD_END()
+    };
+    static const GBinderWriterField test_struct_f[] = {
+        GBINDER_WRITER_FIELD_HIDL_STRING(TestStruct,str1),
+        GBINDER_WRITER_FIELD_HIDL_STRING(TestStruct,str2),
+        GBINDER_WRITER_FIELD_HIDL_VEC(TestStruct, vec, &test_data_t),
+        GBINDER_WRITER_FIELD_END()
+    };
+    static const GBinderWriterType test_struct_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(TestStruct), test_struct_f
+    };
+    static const GBinderWriterType test_data_pointer_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(TestDataPointer),
+        test_data_pointer_f
+    };
+    static const GBinderWriterField test_struct_vec_f[] = {
+        {
+            "vec", GBINDER_HIDL_VEC_BUFFER_OFFSET, &test_struct_t,
+            gbinder_writer_field_hidl_vec_write_buf, NULL
+        },
+        GBINDER_WRITER_FIELD_END()
+    };
+    static const GBinderWriterType test_struct_vec_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(GBinderHidlVec), test_struct_vec_f
+    };
+    /* Vector with no type information is handled as empty vector */
+    static const GBinderWriterField test_struct_vec2_f[] = {
+        {
+            "vec", GBINDER_HIDL_VEC_BUFFER_OFFSET, NULL,
+            gbinder_writer_field_hidl_vec_write_buf, NULL
+        },
+        GBINDER_WRITER_FIELD_END()
+    };
+    static const GBinderWriterType test_struct_vec2_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(GBinderHidlVec), test_struct_vec2_f
+    };
+    GBinderLocalRequest* req = test_local_request_new();
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    GUtilIntArray* offsets;
+    TestData test_data;
+    TestDataPointer test_data_ptr;
+    TestStruct test_struct;
+    GBinderHidlVec vec;
+
+    test_data.x = 42;
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &test_data, &test_data_t, NULL);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,1);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    /* Buffers are aligned at 8 bytes boundary */
+    g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,8);
+    gbinder_local_request_unref(req);
+
+    /* Write TestStruct */
+    memset(&test_struct, 0, sizeof(test_struct));
+    test_struct.x = 42;
+    test_struct.str1.data.str = "test";
+    test_struct.str1.len = strlen(test_struct.str1.data.str);
+    test_struct.vec.data.ptr = &test_data;
+    test_struct.vec.count = 1;
+
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &test_struct, &test_struct_t, NULL);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,4);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    gbinder_local_request_unref(req);
+
+    /* Write TestDataPointer */
+    test_data_ptr.ptr = &test_data;
+
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &test_data_ptr,
+        &test_data_pointer_t, NULL);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,2);
+    gbinder_local_request_unref(req);
+
+    /* Write vec<TestStruct> */
+    memset(&vec, 0, sizeof(vec));
+    vec.data.ptr = &test_struct;
+    vec.count = 1;
+
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &vec, &test_struct_vec_t, NULL);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,5);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    gbinder_local_request_unref(req);
+
+    /* Corner cases */
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &vec, NULL, NULL);
+
+    /* Without the type information, an empty buffer is written */
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,1);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    gbinder_local_request_unref(req);
+
+    /* Vector without type information */
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &vec, &test_struct_vec2_t, NULL);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,2);
+    g_assert_cmpuint(offsets->data[0], == ,0);
     gbinder_local_request_unref(req);
 }
 
@@ -1179,7 +1333,6 @@ test_byte_array(
     gbinder_local_request_unref(req);
 }
 
-
 /*==========================================================================*
  * fmq descriptor
  *==========================================================================*/
@@ -1321,6 +1474,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("buffer"), test_buffer);
     g_test_add_func(TEST_("parent"), test_parent);
     g_test_add_func(TEST_("parcelable"), test_parcelable);
+    g_test_add_func(TEST_("struct"), test_struct);
     g_test_add_func(TEST_("fd"), test_fd);
     g_test_add_func(TEST_("fd_invalid"), test_fd_invalid);
     g_test_add_func(TEST_("fd_close_error"), test_fd_close_error);
