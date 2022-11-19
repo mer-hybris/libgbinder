@@ -80,9 +80,11 @@ go_through_transaction_ast(
 
         switch(v->type) {
         case INT8_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("int8");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("int8 %u", (guint)(*((guint8*)v->value)));
+            }
             if (parent_idx == -1) {
-                gbinder_writer_append_int32(&app->writer, *((int*)v->value));
+                gbinder_writer_append_int8(&app->writer, *((guint8*)v->value));
             } else if (cur_pass == FILL_BUFFERS) {
                 *((unsigned char*)(((char*)buf)+offset)) =
                     *((unsigned char*)v->value);
@@ -91,7 +93,9 @@ go_through_transaction_ast(
             break;
 
         case INT32_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("int32");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("int32 %d", *((int*)v->value));
+            }
             if (parent_idx == -1) {
                 gbinder_writer_append_int32(&app->writer, *((int*)v->value));
             } else if (cur_pass == FILL_BUFFERS) {
@@ -101,7 +105,9 @@ go_through_transaction_ast(
             break;
 
         case INT64_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("int64");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("int64 %" G_GINT64_MODIFIER "d", *((gint64*)v->value));
+            }
             if (parent_idx == -1) {
                 gbinder_writer_append_int64(&app->writer, *((gint64*)v->value));
             } else if (cur_pass == FILL_BUFFERS) {
@@ -111,7 +117,9 @@ go_through_transaction_ast(
             break;
 
         case FLOAT_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("float");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("float %g", (double)*((float*)v->value));
+            }
             if (parent_idx == -1) {
                 gbinder_writer_append_float(&app->writer, *((float*)v->value));
             } else if (cur_pass == FILL_BUFFERS) {
@@ -120,7 +128,9 @@ go_through_transaction_ast(
             offset += sizeof(float);
             break;
         case DOUBLE_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("double");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("double %g", *((double*)v->value));
+            }
             if (parent_idx == -1) {
                 gbinder_writer_append_double(&app->writer,*((double*)v->value));
             } else if (cur_pass == FILL_BUFFERS) {
@@ -130,7 +140,9 @@ go_through_transaction_ast(
             break;
 
         case STRING8_TYPE:
-            if (cur_pass == BUILD_TRANSACTION) GDEBUG("string8");
+            if (cur_pass == BUILD_TRANSACTION) {
+                GDEBUG("string8 %s", (char*)v->value);
+            }
             gbinder_writer_append_string8(&app->writer, v->value);
             /* offset not incremented since it only makes sense for hidl */
             break;
@@ -763,14 +775,34 @@ app_init(
     gutil_log_default.level = GLOG_LEVEL_DEFAULT;
 
     if (g_option_context_parse(options, &argc, &argv, &error)) {
-        char* help;
+        int i;
 
+        /*
+         * Remove the "--" argument. If any of our arguments is a negative
+         * number, the user will have to add the "--" flag to stop the parser.
+         * But "--" is still passed to us and we have to ignore it.
+         */
+	for (i = 1; i < argc; i++) {
+            if (!strcmp(argv[i], "--")) {
+                if (i < (argc - 1)) {
+                    memmove(argv + i, argv + (i + 1),
+                        sizeof(char*) * (argc - i - 1));
+                }
+                i--;
+                argc--;
+
+                /*
+                 * There's no need to have more than one "--", but let's
+                 * remove any number of those.
+                 */
+            }
+        }
         if (argc > 2) {
             opt->argc = argc;
             opt->argv = argv;
             ok = TRUE;
         } else {
-            help = g_option_context_get_help(options, TRUE, NULL);
+            char* help = g_option_context_get_help(options, TRUE, NULL);
             fprintf(stderr, "%s", help);
             g_free(help);
         }
