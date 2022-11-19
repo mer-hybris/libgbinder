@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -36,7 +36,6 @@
 
 typedef struct app_options {
     char* dev;
-    char* iface;
     gboolean oneway;
     gboolean aidl;
     gint transaction;

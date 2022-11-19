@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
+ * Copyright (C) 2021-2022 Jolla Ltd.
  * Copyright (C) 2021 Franz-Josef Haider <franz.haider@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -579,7 +579,7 @@ app_run(
     App* app)
 {
     const AppOptions* opt = app->opt;
-    char* iface = opt->iface ? g_strdup(opt->iface) : NULL;
+    char* iface;
     int status = 0;
     int rargc = 1;
     char* service = opt->argv[rargc++];
@@ -598,7 +598,6 @@ app_run(
         service, &status);
     if (!obj) {
         GERR("No such service: %s", service);
-        g_free(iface);
         return;
     }
 
@@ -800,7 +799,6 @@ int main(int argc, char* argv[])
             GERR("servicemanager seems to be missing");
         }
     }
-    g_free(opt.iface);
     g_free(opt.dev);
     return app.ret;
 }
