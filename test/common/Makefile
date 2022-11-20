@@ -4,6 +4,14 @@
 .PHONY: libgbinder-release libgbinder-debug
 
 #
+# Executable must be defined
+#
+
+ifndef EXE
+${error EXE not defined}
+endif
+
+#
 # Required packages
 #
 
@@ -16,19 +24,10 @@ PKGS = glib-2.0 gio-2.0 gio-unix-2.0 libglibutil
 all: debug release
 
 #
-# Executable
-#
-
-EXE = binder-call
-
-#
 # Sources
 #
 
-SRC = $(EXE).c
-GEN_SRC = \
-  cmdline.tab.c \
-  lex.cmdline.c
+SRC ?= $(EXE).c
 
 #
 # Directories
@@ -36,7 +35,6 @@ GEN_SRC = \
 
 SRC_DIR = .
 BUILD_DIR = build
-GEN_DIR = $(BUILD_DIR)
 LIB_DIR = ../..
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
@@ -48,7 +46,7 @@ RELEASE_BUILD_DIR = $(BUILD_DIR)/release
 CC ?= $(CROSS_COMPILE)gcc
 LD = $(CC)
 WARNINGS = -Wall
-INCLUDES = -I$(LIB_DIR)/include -I$(GEN_DIR) -I$(SRC_DIR)
+INCLUDES = -I$(LIB_DIR)/include
 CFLAGS += -fPIC $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += -pie $(shell pkg-config --libs $(PKGS))
@@ -71,21 +69,14 @@ RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -O2
 # Files
 #
 
-DEBUG_OBJS = \
-  $(GEN_SRC:%.c=$(DEBUG_BUILD_DIR)/%.o) \
-  $(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
-RELEASE_OBJS = \
-  $(GEN_SRC:%.c=$(RELEASE_BUILD_DIR)/%.o) \
-  $(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
-
+DEBUG_OBJS = $(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
+RELEASE_OBJS = $(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
 DEBUG_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_so)
 RELEASE_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_so)
 DEBUG_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_link)
 RELEASE_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_link)
 DEBUG_SO = $(LIB_DIR)/$(DEBUG_SO_FILE)
 RELEASE_SO = $(LIB_DIR)/$(RELEASE_SO_FILE)
-GEN_FILES = $(GEN_SRC:%=$(GEN_DIR)/%)
-.PRECIOUS: $(GEN_FILES)
 
 #
 # Dependencies
@@ -98,7 +89,6 @@ ifneq ($(strip $(DEPS)),)
 endif
 endif
 
-$(GEN_FILES): | $(GEN_DIR)
 $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
 $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 
@@ -125,21 +115,6 @@ $(DEBUG_BUILD_DIR):
 
 $(RELEASE_BUILD_DIR):
 	mkdir -p $@
-
-$(GEN_DIR):
-	mkdir -p $@
-
-$(GEN_DIR)/%.tab.c : $(SRC_DIR)/%.y
-	bison -pcmdline -bcmdline -d -o $@ $<
-
-$(GEN_DIR)/lex.%.c : $(SRC_DIR)/%.l
-	flex -o $@ $<
-
-$(DEBUG_BUILD_DIR)/%.o : $(GEN_DIR)/%.c
-	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
-
-$(RELEASE_BUILD_DIR)/%.o : $(GEN_DIR)/%.c
-	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
 $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
