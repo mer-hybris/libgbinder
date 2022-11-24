@@ -1,3 +1,9 @@
+libgbinder (1.1.29) unstable; urgency=low
+
+  * Added gbinder_writer_append_struct_vec
+
+ -- Slava Monich <slava.monich@jolla.com>  Fri, 25 Nov 2022 00:01:41 +0200
+
 libgbinder (1.1.28) unstable; urgency=low
 
   * Allow to pass negative number as a parameter to binder-call
