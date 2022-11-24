@@ -1112,6 +1112,18 @@ test_struct(
     g_assert_cmpuint(offsets->data[0], == ,0);
     gbinder_local_request_unref(req);
 
+    /* Write vec<TestStruct> in a different way */
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct_vec(&writer, &test_struct, 1, &test_struct_t);
+
+    data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,5);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    gbinder_local_request_unref(req);
+
     /* Corner cases */
     req = test_local_request_new();
     gbinder_local_request_init_writer(req, &writer);

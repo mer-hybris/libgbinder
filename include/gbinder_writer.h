@@ -138,6 +138,13 @@ gbinder_writer_append_struct(
     const GBinderParent* parent); /* Since 1.1.27 */
 
 void
+gbinder_writer_append_struct_vec(
+    GBinderWriter* writer,
+    const void* ptr,
+    guint count,
+    const GBinderWriterType* type); /* Since 1.1.29 */
+
+void
 gbinder_writer_field_hidl_vec_write_buf(
     GBinderWriter* writer,
     const void* ptr,

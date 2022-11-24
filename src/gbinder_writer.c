@@ -800,6 +800,39 @@ gbinder_writer_append_struct(
     }
 }
 
+/*
+ * Appends top-level vec<type>. Allocates GBinderHidlVec for that, but
+ * unlike gbinder_writer_append_hidl_vec(), doesn't copy the contents
+ * of the vector.
+ */
+void
+gbinder_writer_append_struct_vec(
+    GBinderWriter* writer,
+    const void* ptr,
+    guint count,
+    const GBinderWriterType* type) /* Since 1.1.29 */
+{
+    GBinderHidlVec* vec = gbinder_writer_new0(writer, GBinderHidlVec);
+    GBinderWriterField vec_f[2];
+    GBinderWriterType vec_t;
+
+    memset(vec_f, 0, sizeof(vec_f));
+    vec_f->name = "hidl_vec.data.ptr";
+    vec_f->type = type;
+    vec_f->write_buf = gbinder_writer_field_hidl_vec_write_buf;
+
+    memset(&vec_t, 0, sizeof(vec_t));
+    vec_t.name = "hidl_vec";
+    vec_t.size = sizeof(GBinderHidlVec);
+    vec_t.fields = vec_f;
+
+    vec->owns_buffer = TRUE;
+    vec->data.ptr = ptr;
+    vec->count = count;
+
+    gbinder_writer_append_struct(writer, vec, &vec_t, NULL);
+}
+
 void
 gbinder_writer_field_hidl_vec_write_buf(
     GBinderWriter* writer,
