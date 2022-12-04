@@ -289,7 +289,7 @@ GBINDER_IO_FN(encode_ptr_cookie)(
     /* We never send these cookies and don't expect them back */
     dest->ptr = (uintptr_t)obj;
     dest->cookie = 0;
-    return sizeof(dest);
+    return sizeof(*dest);
 }
 
 /* Fills binder_transaction_data for BC_TRANSACTION/REPLY */
