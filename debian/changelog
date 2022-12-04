@@ -1,3 +1,9 @@
+libgbinder (1.1.30) unstable; urgency=low
+
+  * Fixed BC_ACQUIRE_DONE encoding
+
+ -- Slava Monich <slava.monich@jolla.com>  Sun, 04 Dec 2022 19:50:10 +0200
+
 libgbinder (1.1.29) unstable; urgency=low
 
   * Added gbinder_writer_append_struct_vec
