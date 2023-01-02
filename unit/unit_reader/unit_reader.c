@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -176,7 +176,7 @@ test_byte(
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_byte(&reader, &out));
     g_assert(gbinder_reader_at_end(&reader));
-    g_assert(in == out);
+    g_assert_cmpuint(in, == ,out);
 
     gbinder_reader_init(&reader, &data, 0, sizeof(in));
     g_assert(gbinder_reader_read_byte(&reader, NULL));
@@ -215,7 +215,7 @@ test_bool(
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
     g_assert(gbinder_reader_read_bool(&reader, &out));
     g_assert(gbinder_reader_at_end(&reader));
-    g_assert(out == TRUE);
+    g_assert_cmpuint(out, == ,TRUE);
 
     /* false */
     gbinder_buffer_free(data.buffer);
@@ -244,8 +244,8 @@ void
 test_int8(
     void)
 {
-    const guint8 in = 42;
-    const guint8 in4[] = { TEST_INT8_BYTES_4(42) };
+    const guint8 in = 0x2a;
+    const guint8 in4[] = { 0x2a, 0x00, 0x00, 0x00 };
     guint8 out1 = 0;
     gint8 out2 = 0;
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
@@ -296,7 +296,7 @@ test_int16(
     void)
 {
     const guint16 in = 42;
-    const guint8 in4[] = { TEST_INT16_BYTES_4(42) };
+    const guint8 in4[] = { TEST_INT16_BYTES(42), 0x00, 0x00 };
     guint16 out1 = 0;
     gint16 out2 = 0;
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
@@ -1813,7 +1813,8 @@ test_object(
     /* Using 64-bit I/O */
     static const guint8 input[] = {
         TEST_INT32_BYTES(BINDER_TYPE_HANDLE), TEST_INT32_BYTES(0),
-        TEST_INT64_BYTES(1 /* handle*/), TEST_INT64_BYTES(0)
+        TEST_INT32_BYTES(1 /* handle*/), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0)
     };
     GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
     GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
@@ -1833,7 +1834,7 @@ test_object(
 
     g_assert(gbinder_reader_read_nullable_object(&reader, &obj));
     g_assert(obj);
-    g_assert(obj->handle == 1);
+    g_assert_cmpuint(obj->handle, == ,1);
 
     g_free(data.objects);
     gbinder_remote_object_unref(obj);
