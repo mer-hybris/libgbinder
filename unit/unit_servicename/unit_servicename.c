@@ -62,9 +62,9 @@ test_setup_ping(
 {
     const int fd = gbinder_driver_fd(ipc->driver);
 
-    test_binder_br_noop(fd);
-    test_binder_br_transaction_complete(fd);
-    test_binder_br_reply(fd, 0, 0, NULL);
+    test_binder_br_noop(fd, THIS_THREAD);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
+    test_binder_br_reply(fd, THIS_THREAD, 0, 0, NULL);
 }
 
 /*==========================================================================*
@@ -145,7 +145,7 @@ test_servicemanager_add_service(
                 }
             } else {
                 test_binder_br_dead_binder(gbinder_driver_fd(obj->ipc->driver),
-                    GBINDER_SERVICEMANAGER_HANDLE);
+                    ANY_THREAD, GBINDER_SERVICEMANAGER_HANDLE);
             }
         }
     }
@@ -311,7 +311,7 @@ test_basic(
     gbinder_local_object_unref(obj);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -345,8 +345,7 @@ test_present(
     g_assert_cmpstr(sn->name, == ,obj_name);
 
     /* Immediately generate death notification (need looper for that) */
-    test_binder_br_dead_binder(fd, GBINDER_SERVICEMANAGER_HANDLE);
-    test_binder_set_looper_enabled(fd, TRUE);
+    test_binder_br_dead_binder(fd, ANY_THREAD, GBINDER_SERVICEMANAGER_HANDLE);
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
 
@@ -355,7 +354,6 @@ test_present(
     gbinder_servicemanager_remove_handler(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
@@ -397,7 +395,7 @@ test_not_present(
     gulong id;
 
     /* This makes presence detection PING fail */
-    test_binder_br_reply_status(fd, -1);
+    test_binder_br_reply_status(fd, THIS_THREAD, -1);
     sm = gbinder_servicemanager_new(dev);
     g_assert(!gbinder_servicemanager_is_present(sm));
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
@@ -408,8 +406,8 @@ test_not_present(
     g_assert_cmpstr(sn->name, == ,obj_name);
 
     /* Make the next presence detection PING succeed */
-    test_binder_br_transaction_complete_later(fd);
-    test_binder_br_reply_later(fd, 0, 0, NULL);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
+    test_binder_br_reply(fd, THIS_THREAD, 0, 0, NULL);
     test_run(&test_opt, loop);
 
     gbinder_servicename_unref(sn);
@@ -417,7 +415,7 @@ test_not_present(
     gbinder_servicemanager_remove_handler(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -434,7 +432,6 @@ test_retry(
     const char* const ifaces[] = { "interface", NULL };
     const char* dev = GBINDER_DEFAULT_BINDER;
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
-    const int fd = gbinder_driver_fd(ipc->driver);
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     GBinderLocalObject* obj;
     GBinderServiceManager* sm;
@@ -450,8 +447,6 @@ test_retry(
     g_assert(sn);
     g_assert_cmpstr(sn->name, == ,obj_name);
 
-    /* Need looper for death notifications */
-    test_binder_set_looper_enabled(fd, TRUE);
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
 
@@ -460,7 +455,7 @@ test_retry(
     gbinder_servicemanager_remove_handler(sm, id);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -500,9 +495,8 @@ test_cancel(
     g_assert(sn);
     g_assert_cmpstr(sn->name, == ,obj_name);
 
-    /* Immediately generate death notification (need looper for that) */
-    test_binder_br_dead_binder(fd, GBINDER_SERVICEMANAGER_HANDLE);
-    test_binder_set_looper_enabled(fd, TRUE);
+    /* Immediately generate death notification */
+    test_binder_br_dead_binder(fd, ANY_THREAD, GBINDER_SERVICEMANAGER_HANDLE);
     id = gbinder_servicemanager_add_presence_handler(sm, test_quit, loop);
     test_run(&test_opt, loop);
 
@@ -519,7 +513,6 @@ test_cancel(
     g_mutex_unlock(&test->mutex);
 
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }

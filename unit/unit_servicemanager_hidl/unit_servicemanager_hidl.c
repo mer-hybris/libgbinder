@@ -43,15 +43,13 @@
 #include <gutil_strv.h>
 
 static TestOpt test_opt;
-#define MAIN_DEV GBINDER_DEFAULT_HWBINDER
-#define OTHER_DEV GBINDER_DEFAULT_HWBINDER "-private"
+#define DEV GBINDER_DEFAULT_HWBINDER
 static const char TMP_DIR_TEMPLATE[] = "gbinder-test-svcmgr-hidl-XXXXXX";
 static const char DEFAULT_CONFIG_DATA[] =
     "[Protocol]\n"
-    MAIN_DEV " = hidl\n"
-    OTHER_DEV " = hidl\n"
+    DEV " = hidl\n"
     "[ServiceManager]\n"
-    MAIN_DEV " = hidl\n";
+    DEV " = hidl\n";
 
 typedef struct test_config {
     char* dir;
@@ -134,7 +132,6 @@ test_servicemanager_impl_new(
     const int fd = gbinder_driver_fd(ipc->driver);
     TestServiceManagerHidl* sm = test_servicemanager_hidl_new(ipc);
 
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_binder_register_object(fd, GBINDER_LOCAL_OBJECT(sm),
         GBINDER_SERVICEMANAGER_HANDLE);
     gbinder_ipc_unref(ipc);
@@ -199,16 +196,14 @@ test_get_run()
     const char* name = "android.hidl.base@1.0::IBase/test";
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
-    smsvc = test_servicemanager_impl_new(OTHER_DEV);
+    ipc = gbinder_ipc_new(DEV, NULL);
+    smsvc = test_servicemanager_impl_new(DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
-    sm = gbinder_servicemanager_new(MAIN_DEV);
+    sm = gbinder_servicemanager_new(DEV);
 
     /* This one fails because of unexpected name format */
     g_assert(!gbinder_servicemanager_get_service_sync(sm, "test", NULL));
@@ -233,13 +228,11 @@ test_get_run()
     g_assert(gbinder_servicemanager_get_service(sm, name, test_get_cb, loop));
     test_run(&test_opt, loop);
 
-    test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
@@ -294,16 +287,14 @@ test_list_run()
     test.loop = g_main_loop_new(NULL, FALSE);
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
-    smsvc = test_servicemanager_impl_new(OTHER_DEV);
+    ipc = gbinder_ipc_new(DEV, NULL);
+    smsvc = test_servicemanager_impl_new(DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
-    sm = gbinder_servicemanager_new(MAIN_DEV);
+    sm = gbinder_servicemanager_new(DEV);
 
     /* Request the list and wait for completion */
     g_assert(gbinder_servicemanager_list(sm, test_list_cb, &test));
@@ -326,13 +317,11 @@ test_list_run()
     g_assert_cmpuint(gutil_strv_length(test.list), == ,1);
     g_assert_cmpstr(test.list[0], == ,name);
 
-    test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
 
@@ -422,16 +411,14 @@ test_notify_run()
     test.loop = g_main_loop_new(NULL, FALSE);
 
     test_config_init(&config, NULL);
-    ipc = gbinder_ipc_new(MAIN_DEV, NULL);
-    test.smsvc = test_servicemanager_impl_new(OTHER_DEV);
+    ipc = gbinder_ipc_new(DEV, NULL);
+    test.smsvc = test_servicemanager_impl_new(DEV);
     obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     fd = gbinder_driver_fd(ipc->driver);
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
-    sm = gbinder_servicemanager_new(MAIN_DEV);
+    sm = gbinder_servicemanager_new(DEV);
 
     /* This one fails because of invalid names */
     g_assert(!gbinder_servicemanager_add_registration_handler(sm, NULL,
@@ -455,13 +442,11 @@ test_notify_run()
     test_run(&test_opt, test.loop);
     gbinder_servicemanager_remove_handler(sm, id);
 
-    test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
     test_servicemanager_hidl_free(test.smsvc);
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
     test_config_deinit(&config);
     g_main_loop_unref(test.loop);

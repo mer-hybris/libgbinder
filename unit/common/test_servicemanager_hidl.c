@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -277,9 +277,10 @@ test_servicemanager_hidl_add(
         const char* sep = strrchr(instance, '/');
 
         GDEBUG("Adding '%s'", instance);
+        /* Transfer remote_obj reference to the hashtable */
         g_hash_table_replace(self->objects, g_strdup(instance), remote_obj);
         if (sep) {
-            /* Alread know the interface */
+            /* Already know the interface */
             char* iface = g_strndup(instance, sep - instance);
 
             test_servicemanager_hidl_notify_all(self, iface, sep + 1, FALSE);
@@ -350,7 +351,7 @@ test_servicemanager_hidl_register_for_notifications(
     iface = gbinder_reader_read_hidl_string_c(&reader);
     instance = gbinder_reader_read_hidl_string_c(&reader);
     watcher = gbinder_reader_read_object(&reader);
- 
+
     if (watcher) {
         GBinderClient* wc = gbinder_client_new(watcher, NOTIFICATION_IFACE);
         GHashTableIter it;
@@ -479,6 +480,38 @@ test_servicemanager_hidl_lookup(
         g_mutex_unlock(&self->mutex);
     }
     return object;
+}
+
+gboolean
+test_servicemanager_hidl_remove(
+    TestServiceManagerHidl* self,
+    const char* fqname)
+{
+    gboolean removed = FALSE;
+
+    if (self) {
+        GBinderRemoteObject* obj;
+
+        /* Lock */
+        g_mutex_lock(&self->mutex);
+        obj = g_hash_table_lookup(self->objects, fqname);
+        if (obj) {
+            GHashTableIter it;
+            gpointer key, value;
+
+            g_hash_table_iter_init(&it, self->objects);
+            while (g_hash_table_iter_next(&it, &key, &value)) {
+                if (value == obj) {
+                    GDEBUG("Removed name '%s' => %p", (char*) key, value);
+                    g_hash_table_iter_remove(&it);
+                    removed = TRUE;
+                }
+            }
+        }
+        g_mutex_unlock(&self->mutex);
+        /* Unlock */
+    }
+    return removed;
 }
 
 /*==========================================================================*

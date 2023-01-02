@@ -98,7 +98,6 @@ typedef GBinderLocalObjectClass ServiceManagerAidlClass;
 typedef struct service_manager_aidl {
     GBinderLocalObject parent;
     GHashTable* objects;
-    gboolean handle_on_looper_thread;
 } ServiceManagerAidl;
 
 #define SERVICE_MANAGER_AIDL_TYPE (service_manager_aidl_get_type())
@@ -185,18 +184,15 @@ servicemanager_aidl_handler(
 static
 ServiceManagerAidl*
 servicemanager_aidl_new(
-    const char* dev,
-    gboolean handle_on_looper_thread)
+    const char* dev)
 {
     ServiceManagerAidl* self = g_object_new(SERVICE_MANAGER_AIDL_TYPE, NULL);
     GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
 
-    self->handle_on_looper_thread = handle_on_looper_thread;
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
         servicemanager_aidl_handler, self);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
     gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
@@ -209,41 +205,6 @@ servicemanager_aidl_free(
     ServiceManagerAidl* self)
 {
     gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(self));
-}
-
-static
-GBINDER_LOCAL_TRANSACTION_SUPPORT
-service_manager_aidl_can_handle_transaction(
-    GBinderLocalObject* object,
-    const char* iface,
-    guint code)
-{
-    ServiceManagerAidl* self = SERVICE_MANAGER_AIDL(object);
-
-    if (self->handle_on_looper_thread && !g_strcmp0(SVCMGR_IFACE, iface)) {
-        return GBINDER_LOCAL_TRANSACTION_LOOPER;
-    } else {
-        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
-            can_handle_transaction(object, iface, code);
-    }
-}
-
-static
-GBinderLocalReply*
-service_manager_aidl_handle_looper_transaction(
-    GBinderLocalObject* object,
-    GBinderRemoteRequest* req,
-    guint code,
-    guint flags,
-    int* status)
-{
-    if (!g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE)) {
-        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
-            handle_transaction(object, req, code, flags, status);
-    } else {
-        return GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
-            handle_looper_transaction(object, req, code, flags, status);
-    }
 }
 
 static
@@ -271,14 +232,7 @@ void
 service_manager_aidl_class_init(
     ServiceManagerAidlClass* klass)
 {
-    GObjectClass* object = G_OBJECT_CLASS(klass);
-    GBinderLocalObjectClass* local_object = GBINDER_LOCAL_OBJECT_CLASS(klass);
-
-    object->finalize = service_manager_aidl_finalize;
-    local_object->can_handle_transaction =
-        service_manager_aidl_can_handle_transaction;
-    local_object->handle_looper_transaction =
-        service_manager_aidl_handle_looper_transaction;
+    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl_finalize;
 }
 
 /*==========================================================================*
@@ -329,9 +283,8 @@ void
 test_get_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
-    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(dev);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -340,7 +293,6 @@ test_get_run()
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
     sm = gbinder_servicemanager_new(dev);
 
     /* Query the object (it's not there yet) and wait for completion */
@@ -369,7 +321,6 @@ test_get_run()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
@@ -411,9 +362,8 @@ void
 test_list_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
-    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, FALSE);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(dev);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -425,7 +375,6 @@ test_list_run()
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
     sm = gbinder_servicemanager_new(dev);
 
     /* Request the list and wait for completion */
@@ -455,7 +404,6 @@ test_list_run()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, test.loop);
 
     g_strfreev(test.list);
@@ -490,9 +438,8 @@ void
 test_notify_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
-    ServiceManagerAidl* svc = servicemanager_aidl_new(other_dev, FALSE);
+    ServiceManagerAidl* svc = servicemanager_aidl_new(dev);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     const char* name = "name";
@@ -502,7 +449,6 @@ test_notify_run()
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
     sm = gbinder_servicemanager_new(dev);
     gbinder_ipc_set_max_threads(ipc, 1);
 
@@ -526,7 +472,6 @@ test_notify_run()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
@@ -547,9 +492,8 @@ void
 test_notify2_run()
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
-    const char* other_dev = GBINDER_DEFAULT_BINDER "-private";
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
-    ServiceManagerAidl* smsvc = servicemanager_aidl_new(other_dev, TRUE);
+    ServiceManagerAidl* smsvc = servicemanager_aidl_new(dev);
     GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
     GBinderServiceManager* sm;
@@ -560,7 +504,6 @@ test_notify2_run()
 
     /* Set up binder simulator */
     test_binder_register_object(fd, obj, AUTO_HANDLE);
-    test_binder_set_passthrough(fd, TRUE);
     sm = gbinder_servicemanager_new(dev);
     gbinder_ipc_set_max_threads(ipc, 1);
 
@@ -593,7 +536,6 @@ test_notify2_run()
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }

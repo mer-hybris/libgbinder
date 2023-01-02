@@ -188,6 +188,7 @@ test_basic(
     g_assert(gbinder_local_object_ref(bar) == bar);
     gbinder_local_object_drop(bar);
     gbinder_local_object_unref(bar);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -233,6 +234,7 @@ test_ping(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -282,6 +284,7 @@ test_interface(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -332,6 +335,7 @@ test_hidl_ping(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -385,6 +389,7 @@ test_get_descriptor(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -436,6 +441,7 @@ test_descriptor_chain(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -546,6 +552,7 @@ test_custom_iface(
     gbinder_local_object_unref(obj);
     gbinder_local_reply_unref(reply);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -603,6 +610,7 @@ test_reply_status(
     gbinder_ipc_unref(ipc);
     gbinder_local_object_unref(obj);
     gbinder_remote_request_unref(req);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -634,16 +642,15 @@ test_increfs_run(
         test_increfs_cb, loop);
 
     /* ipc is not an object, will be ignored */
-    test_binder_br_increfs(fd, ipc);
-    test_binder_br_increfs(fd, obj);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    test_binder_br_increfs(fd, ANY_THREAD, ipc);
+    test_binder_br_increfs(fd, ANY_THREAD, obj);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 1);
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -685,17 +692,16 @@ test_decrefs_run(
         test_decrefs_cb, loop);
 
     /* ipc is not an object, will be ignored */
-    test_binder_br_decrefs(fd, ipc);
-    test_binder_br_increfs(fd, obj);
-    test_binder_br_decrefs(fd, obj);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    test_binder_br_decrefs(fd, ANY_THREAD, ipc);
+    test_binder_br_increfs(fd, ANY_THREAD, obj);
+    test_binder_br_decrefs(fd, ANY_THREAD, obj);
     test_run(&test_opt, loop);
 
     g_assert(obj->weak_refs == 0);
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -736,16 +742,15 @@ test_acquire_run(
         test_acquire_cb, loop);
 
     /* ipc is not an object, will be ignored */
-    test_binder_br_acquire(fd, ipc);
-    test_binder_br_acquire(fd, obj);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    test_binder_br_acquire(fd, ANY_THREAD, ipc);
+    test_binder_br_acquire(fd, ANY_THREAD, obj);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 1);
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -786,17 +791,16 @@ test_release_run(
         test_release_cb, loop);
 
     /* ipc is not an object, will be ignored */
-    test_binder_br_release(fd, ipc);
-    test_binder_br_acquire(fd, obj);
-    test_binder_br_release(fd, obj);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    test_binder_br_release(fd, ANY_THREAD, ipc);
+    test_binder_br_acquire(fd, ANY_THREAD, obj);
+    test_binder_br_release(fd, ANY_THREAD, obj);
     test_run(&test_opt, loop);
 
     g_assert(obj->strong_refs == 0);
     gbinder_local_object_remove_handler(obj, id);
     gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
