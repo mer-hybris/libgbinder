@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -212,6 +212,23 @@ gbinder_writer_bytes_written(
     return G_LIKELY(data) ? data->bytes->len : 0;
 }
 
+static
+void
+gbinder_writer_data_append_padded(
+    GByteArray* buf,
+    const void* data,
+    guint size)
+{
+    /* Primitive values are padded to 4-byte boundary */
+    const guint padded_size = 4;
+    guint8* ptr;
+
+    g_byte_array_set_size(buf, buf->len + padded_size);
+    ptr = buf->data + (buf->len - padded_size);
+    memcpy(ptr, data, size);
+    memset(ptr + size, 0, padded_size - size);
+}
+
 void
 gbinder_writer_append_bool(
     GBinderWriter* self,
@@ -229,8 +246,9 @@ gbinder_writer_data_append_bool(
     GBinderWriterData* data,
     gboolean value)
 {
-    /* Primitive values are padded to 4-byte boundary */
-    gbinder_writer_data_append_int32(data, value != FALSE);
+    const guint8 b = (value != FALSE);
+
+    gbinder_writer_data_append_padded(data->bytes, &b, sizeof(b));
 }
 
 void
@@ -241,8 +259,7 @@ gbinder_writer_append_int8(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data)) {
-        /* Primitive values are padded to 4-byte boundary */
-        gbinder_writer_data_append_int32(data, value);
+        gbinder_writer_data_append_padded(data->bytes, &value, sizeof(value));
     }
 }
 
@@ -254,8 +271,7 @@ gbinder_writer_append_int16(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data)) {
-        /* Primitive values are padded to 4-byte boundary */
-        gbinder_writer_data_append_int32(data, value);
+        gbinder_writer_data_append_padded(data->bytes, &value, sizeof(value));
     }
 }
 

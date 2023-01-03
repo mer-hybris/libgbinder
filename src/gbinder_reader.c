@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -124,17 +124,24 @@ gbinder_reader_read_bool(
     GBinderReader* reader,
     gboolean* value)
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    /*
+     * Android's libhwbinder writes bool as a single byte and pads it
+     * with zeros, but libbinder writes bool as int32 in native byte
+     * order. The latter becomes either [0x01, 0x00, 0x00, 0x00] or
+     * [0x00, 0x00, 0x00, 0x01] depending on the byte order. Reading
+     * uint32 and comparing it with zero works in either case.
+     */
+    if (value) {
+        guint32 padded;
 
-    /* Boolean values are supposed to be padded to 4-byte boundary */
-    if (gbinder_reader_can_read(p, 4)) {
-        if (value) {
-            *value = (p->ptr[0] != 0);
+        if (gbinder_reader_read_uint32(reader, &padded)) {
+            *value = (padded != 0);
+            return TRUE;
+        } else {
+            return FALSE;
         }
-        p->ptr += 4;
-        return TRUE;
     } else {
-        return FALSE;
+        return gbinder_reader_read_uint32(reader, NULL);
     }
 }
 
@@ -151,18 +158,17 @@ gbinder_reader_read_uint8(
     GBinderReader* reader,
     guint8* value) /* Since 1.1.15 */
 {
-    /* Primitive values are supposed to be padded to 4-byte boundary */
-    if (value) {
-        guint32 padded;
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
-        if (gbinder_reader_read_uint32(reader, &padded)) {
-            *value = (guint8)padded;
-            return TRUE;
-        } else {
-            return FALSE;
+    /* Primitive values are supposed to be padded to 4-byte boundary */
+    if (gbinder_reader_can_read(p, 4)) {
+        if (value) {
+            *value = p->ptr[0];
         }
+        p->ptr += 4;
+        return TRUE;
     } else {
-        return gbinder_reader_read_uint32(reader, NULL);
+        return FALSE;
     }
 }
 
@@ -179,18 +185,17 @@ gbinder_reader_read_uint16(
     GBinderReader* reader,
     guint16* value) /* Since 1.1.15 */
 {
-    /* Primitive values are supposed to be padded to 4-byte boundary */
-    if (value) {
-        guint32 padded;
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
-        if (gbinder_reader_read_uint32(reader, &padded)) {
-            *value = (guint16)padded;
-            return TRUE;
-        } else {
-            return FALSE;
+    /* Primitive values are supposed to be padded to 4-byte boundary */
+    if (gbinder_reader_can_read(p, 4)) {
+        if (value) {
+            *value = *(guint16*)p->ptr;
         }
+        p->ptr += 4;
+        return TRUE;
     } else {
-        return gbinder_reader_read_uint32(reader, NULL);
+        return FALSE;
     }
 }
 
