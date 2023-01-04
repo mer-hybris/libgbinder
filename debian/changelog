@@ -1,3 +1,10 @@
+libgbinder (1.1.31) unstable; urgency=low
+
+  * Fixed serialization issues on big-endian
+  * Refactored binder simulation for unit tests
+
+ -- Slava Monich <slava@monich.com>  Wed, 04 Jan 2023 19:10:37 +0200
+
 libgbinder (1.1.30) unstable; urgency=low
 
   * Fixed BC_ACQUIRE_DONE encoding
