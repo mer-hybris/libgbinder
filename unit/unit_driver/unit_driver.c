@@ -82,6 +82,7 @@ test_basic(
 
     g_assert(!gbinder_handler_transact(NULL, NULL, NULL, 0, 0, NULL));
     g_assert(!gbinder_handler_can_loop(NULL));
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -98,11 +99,12 @@ test_noop(
 
     g_assert(driver);
     g_assert(fd >= 0);
-    test_binder_br_noop(fd);
+    test_binder_br_noop(fd, THIS_THREAD);
     g_assert(gbinder_driver_poll(driver, NULL) == POLLIN);
     g_assert(gbinder_driver_read(driver, NULL, NULL) == 0);
 
     gbinder_driver_unref(driver);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -131,6 +133,7 @@ test_local_request(
     g_assert(!memcmp(data->bytes->data, rpc_header, sizeof(rpc_header)));
     gbinder_local_request_unref(req);
     gbinder_driver_unref(driver);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*

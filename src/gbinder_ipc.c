@@ -2194,7 +2194,6 @@ gbinder_ipc_exit()
     for (i = ipcs; i; i = i->next) {
         GBinderIpc* ipc = THIS(i->data);
         GBinderIpcPriv* priv = ipc->priv;
-        GThreadPool* pool = priv->tx_pool;
         GSList* local_objs = NULL;
         GSList* tx_keys = NULL;
         GSList* k;
@@ -2205,8 +2204,12 @@ gbinder_ipc_exit()
         gbinder_ipc_stop_loopers(ipc);
 
         /* Make sure pooled transaction complete too */
-        priv->tx_pool = NULL;
-        g_thread_pool_free(pool, FALSE, TRUE);
+        if (priv->tx_pool) {
+            GThreadPool* pool = priv->tx_pool;
+
+            priv->tx_pool = NULL;
+            g_thread_pool_free(pool, FALSE, TRUE);
+        }
 
         /*
          * Since this function is supposed to be invoked on the main thread,

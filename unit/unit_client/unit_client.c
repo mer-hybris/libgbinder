@@ -114,6 +114,7 @@ test_basic(
     gbinder_client_unref(client);
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -175,6 +176,7 @@ test_interfaces(
 
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -189,11 +191,12 @@ test_no_header(
     GBinderClient* client = test_client_new(0, NULL);
     int fd = gbinder_driver_fd(gbinder_client_ipc(client)->driver);
 
-    test_binder_br_transaction_complete(fd);
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
     g_assert(gbinder_client_transact_sync_oneway(client, 0, NULL) ==
         GBINDER_STATUS_OK);
-
     gbinder_client_unref(client);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -220,10 +223,9 @@ test_dead(
     GBinderRemoteObject* obj = client->remote;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     const int fd = gbinder_driver_fd(gbinder_client_ipc(client)->driver);
-    gbinder_remote_object_add_death_handler(obj, test_dead_done, loop);
 
-    test_binder_br_dead_binder(fd, handle);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    gbinder_remote_object_add_death_handler(obj, test_dead_done, loop);
+    test_binder_br_dead_binder(fd, ANY_THREAD, handle);
     test_run(&test_opt, loop);
     g_assert(gbinder_remote_object_is_dead(obj));
 
@@ -232,7 +234,6 @@ test_dead(
     g_assert(!gbinder_client_transact(client, 0, 0, NULL, NULL, NULL, NULL));
 
     gbinder_client_unref(client);
-    gbinder_ipc_exit();
     test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
@@ -251,17 +252,18 @@ test_sync_oneway(
     int fd = gbinder_driver_fd(gbinder_client_ipc(client)->driver);
 
     g_assert(req);
-    test_binder_br_transaction_complete(fd);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
     g_assert(gbinder_client_transact_sync_oneway(client, 0, req) ==
         GBINDER_STATUS_OK);
     gbinder_local_request_unref(req);
 
     /* Same but using the internal (empty) request */
-    test_binder_br_transaction_complete(fd);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
     g_assert(gbinder_client_transact_sync_oneway(client, 0, NULL) ==
         GBINDER_STATUS_OK);
 
     gbinder_client_unref(client);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -291,10 +293,11 @@ test_sync_reply_tx(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    test_binder_br_noop(fd);
-    test_binder_br_transaction_complete(fd);
-    test_binder_br_noop(fd);
-    test_binder_br_reply(fd, handle, code, data->bytes);
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, THIS_THREAD);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
+    test_binder_br_noop(fd, THIS_THREAD);
+    test_binder_br_reply(fd, THIS_THREAD, handle, code, data->bytes);
 
     tx_reply = gbinder_client_transact_sync_reply(client, 0, req, &status);
     g_assert(tx_reply);
@@ -323,6 +326,7 @@ test_sync_reply(
     test_sync_reply_tx(client, NULL);
 
     gbinder_client_unref(client);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -393,10 +397,11 @@ test_reply_tx(
     data = gbinder_local_reply_data(reply);
     g_assert(data);
 
-    test_binder_br_noop(fd);
-    test_binder_br_transaction_complete(fd);
-    test_binder_br_noop(fd);
-    test_binder_br_reply(fd, handle, code, data->bytes);
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_transaction_complete(fd, TX_THREAD);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_reply(fd, TX_THREAD, handle, code, data->bytes);
 
     id = gbinder_client_transact(client, 0, 0, req, done, destroy, loop);
     g_assert(id);
@@ -424,6 +429,7 @@ test_reply(
     test_reply_tx(client, NULL, done, destroy);
 
     gbinder_client_unref(client);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 static

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -57,6 +57,11 @@ GBinderRemoteObject*
 test_servicemanager_hidl_lookup(
     TestServiceManagerHidl* self,
     const char* name);
+
+gboolean
+test_servicemanager_hidl_remove(
+    TestServiceManagerHidl* self,
+    const char* fqname);
 
 #endif /* TEST_SERVICEMANAGER_HIDL_H */
 

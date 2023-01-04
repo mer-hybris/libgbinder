@@ -89,6 +89,7 @@ test_basic(
     gbinder_remote_object_unref(obj1);
     gbinder_remote_object_unref(obj2);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -119,8 +120,7 @@ test_dead_run(
     gulong id = gbinder_remote_object_add_death_handler
         (obj, test_dead_done, loop);
 
-    test_binder_br_dead_binder(fd, h);
-    test_binder_set_looper_enabled(fd, TEST_LOOPER_ENABLE);
+    test_binder_br_dead_binder(fd, ANY_THREAD, h);
     test_run(&test_opt, loop);
     g_assert(gbinder_remote_object_is_dead(obj));
 
@@ -128,7 +128,7 @@ test_dead_run(
     gbinder_remote_object_remove_handler(obj, 0); /* has no effect */
     gbinder_remote_object_unref(obj);
     gbinder_ipc_unref(ipc);
-    gbinder_ipc_exit();
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 

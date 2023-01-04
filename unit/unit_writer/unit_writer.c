@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -252,9 +253,7 @@ void
 test_int8(
     void)
 {
-    const char encoded[] = {
-        TEST_INT8_BYTES_4(0x80)
-    };
+    const char encoded[] = { 0x80, 0x00, 0x00, 0x00 };
     GBinderLocalRequest* req = test_local_request_new();
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -279,9 +278,7 @@ void
 test_int16(
     void)
 {
-    const char encoded[] = {
-        TEST_INT16_BYTES_4(0x80ff)
-    };
+    const char encoded[] = { TEST_INT16_BYTES(0x80ff), 0x00, 0x00 };
     GBinderLocalRequest* req = test_local_request_new();
     GBinderOutputData* data;
     GBinderWriter writer;
@@ -417,8 +414,8 @@ test_bool(
 {
     const char encoded[] = {
         TEST_INT8_BYTES_4(0),
-        TEST_INT8_BYTES_4(1),
-        TEST_INT8_BYTES_4(1)
+        0x01, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00
     };
     GBinderLocalRequest* req = test_local_request_new();
     GBinderOutputData* data;

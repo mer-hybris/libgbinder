@@ -52,9 +52,9 @@ test_setup_ping(
 {
     const int fd = gbinder_driver_fd(ipc->driver);
 
-    test_binder_br_noop(fd);
-    test_binder_br_transaction_complete(fd);
-    test_binder_br_reply(fd, 0, 0, NULL);
+    test_binder_br_noop(fd, THIS_THREAD);
+    test_binder_br_transaction_complete(fd, THIS_THREAD);
+    test_binder_br_reply(fd, THIS_THREAD, 0, 0, NULL);
 }
 
 /*==========================================================================*
@@ -268,6 +268,7 @@ test_basic(
 
     gbinder_servicemanager_unref(manager);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
 }
 
 /*==========================================================================*
@@ -352,6 +353,7 @@ test_notify1(
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -430,6 +432,7 @@ test_notify2(
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
@@ -478,6 +481,7 @@ test_already_there(
     g_assert(!weakptr);
     gbinder_servicemanager_unref(manager);
     gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
     g_main_loop_unref(loop);
 }
 
