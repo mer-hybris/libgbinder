@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2021-2022 Jolla Ltd.
- * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -246,6 +245,7 @@ gboolean
 test_param_cancel(
     gpointer req)
 {
+    GDEBUG("Cancelling request");
     gbinder_remote_request_complete(req, NULL, -ECANCELED);
     return G_SOURCE_REMOVE;
 }
@@ -296,11 +296,12 @@ test_param_canceled(
     GBinderClient* client,
     GBinderRemoteReply* reply,
     int status,
-    void* unused)
+    void* loop)
 {
     g_assert(!reply);
     g_assert_cmpint(status, == ,-ECANCELED);
     GDEBUG("Transaction cancelled");
+    g_main_loop_quit((GMainLoop*)loop);
 }
 
 static
@@ -340,6 +341,7 @@ test_param_run(
     GBinderIpc* ipc_obj;
     GBinderIpc* ipc_proxy;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GMainLoop* loop2 = g_main_loop_new(NULL, FALSE);
     int fd_obj, fd_proxy, n = 0;
 
     test_config_init(&config, NULL);
@@ -363,7 +365,7 @@ test_param_run(
     req = gbinder_client_new_request(client);
     gbinder_local_request_append_int32(req, TX_PARAM_DONT_REPLY);
     gbinder_client_transact(client, TX_CODE, 0, req, test_param_canceled,
-        NULL, NULL);
+        NULL, loop2);
     gbinder_local_request_unref(req);
 
     req = gbinder_client_new_request(client);
@@ -373,9 +375,8 @@ test_param_run(
     gbinder_local_request_unref(req);
 
     test_run(&test_opt, loop);
-
-    /* Depending on how callbacks are scheduled, n could be 1 or 2 */
-    g_assert_cmpint(n, > ,0);
+    test_run(&test_opt, loop2);
+    g_assert_cmpint(n, == ,2);
 
     test_binder_unregister_objects(fd_obj);
     test_binder_unregister_objects(fd_proxy);
@@ -388,6 +389,7 @@ test_param_run(
     test_binder_exit_wait(&test_opt, loop);
     test_config_deinit(&config);
     g_main_loop_unref(loop);
+    g_main_loop_unref(loop2);
 }
 
 static
