@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Jolla Ltd.
- * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -98,6 +98,7 @@ typedef GBinderLocalObjectClass ServiceManagerAidlClass;
 typedef struct service_manager_aidl {
     GBinderLocalObject parent;
     GHashTable* objects;
+    GMutex mutex;
 } ServiceManagerAidl;
 
 #define SERVICE_MANAGER_AIDL_TYPE (service_manager_aidl_get_type())
@@ -109,23 +110,23 @@ G_DEFINE_TYPE(ServiceManagerAidl, service_manager_aidl, \
 static
 GBinderLocalReply*
 servicemanager_aidl_handler(
-    GBinderLocalObject* obj,
+    ServiceManagerAidl* self,
     GBinderRemoteRequest* req,
     guint code,
-    guint flags,
-    int* status,
-    void* user_data)
+    int* status)
 {
-    ServiceManagerAidl* self = user_data;
+    GBinderLocalObject* obj = &self->parent;
     GBinderLocalReply* reply = NULL;
     GBinderReader reader;
     GBinderRemoteObject* remote_obj;
     guint32 num;
     char* str;
 
-    g_assert(!flags);
-    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,SVCMGR_IFACE);
+    GDEBUG("%s %u", gbinder_remote_request_interface(req), code);
     *status = -1;
+
+    /* Lock */
+    g_mutex_lock(&self->mutex);
     switch (code) {
     case GET_SERVICE_TRANSACTION:
     case CHECK_SERVICE_TRANSACTION:
@@ -178,7 +179,73 @@ servicemanager_aidl_handler(
         GDEBUG("Unhandled command %u", code);
         break;
     }
+    g_mutex_unlock(&self->mutex);
+    /* Unlock */
+
     return reply;
+}
+
+static
+GBinderLocalReply*
+servicemanager_aidl_handle_looper_transaction(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status)
+{
+    return !g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE) ?
+        servicemanager_aidl_handler(SERVICE_MANAGER_AIDL(obj),
+            req, code, status) :
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
+            handle_looper_transaction(obj, req, code, flags, status);
+}
+
+static
+GBINDER_LOCAL_TRANSACTION_SUPPORT
+servicemanager_aidl_can_handle_transaction(
+    GBinderLocalObject* self,
+    const char* iface,
+    guint code)
+{
+    /* Handle servicemanager transactions on the looper thread */
+    return !g_strcmp0(iface, SVCMGR_IFACE) ? GBINDER_LOCAL_TRANSACTION_LOOPER :
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl_parent_class)->
+            can_handle_transaction(self, iface, code);
+}
+
+static
+void
+service_manager_aidl_finalize(
+    GObject* object)
+{
+    ServiceManagerAidl* self = SERVICE_MANAGER_AIDL(object);
+
+    g_mutex_clear(&self->mutex);
+    g_hash_table_destroy(self->objects);
+    G_OBJECT_CLASS(service_manager_aidl_parent_class)->finalize(object);
+}
+
+static
+void
+service_manager_aidl_init(
+    ServiceManagerAidl* self)
+{
+    g_mutex_init(&self->mutex);
+    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+        (GDestroyNotify) gbinder_remote_object_unref);
+}
+
+static
+void
+service_manager_aidl_class_init(
+    ServiceManagerAidlClass* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl_finalize;
+    klass->can_handle_transaction =
+        servicemanager_aidl_can_handle_transaction;
+    klass->handle_looper_transaction =
+        servicemanager_aidl_handle_looper_transaction;
 }
 
 static
@@ -192,47 +259,11 @@ servicemanager_aidl_new(
     const int fd = gbinder_driver_fd(ipc->driver);
 
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
-        servicemanager_aidl_handler, self);
+        NULL, NULL);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
     gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
     return self;
-}
-
-static
-void
-servicemanager_aidl_free(
-    ServiceManagerAidl* self)
-{
-    gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(self));
-}
-
-static
-void
-service_manager_aidl_finalize(
-    GObject* object)
-{
-    ServiceManagerAidl* self = SERVICE_MANAGER_AIDL(object);
-
-    g_hash_table_destroy(self->objects);
-    G_OBJECT_CLASS(service_manager_aidl_parent_class)->finalize(object);
-}
-
-static
-void
-service_manager_aidl_init(
-    ServiceManagerAidl* self)
-{
-    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-        (GDestroyNotify) gbinder_remote_object_unref);
-}
-
-static
-void
-service_manager_aidl_class_init(
-    ServiceManagerAidlClass* klass)
-{
-    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl_finalize;
 }
 
 /*==========================================================================*
@@ -317,7 +348,7 @@ test_get_run()
 
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
-    servicemanager_aidl_free(smsvc);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(smsvc));
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
@@ -400,7 +431,7 @@ test_list_run()
 
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
-    servicemanager_aidl_free(smsvc);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(smsvc));
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
@@ -468,7 +499,7 @@ test_notify_run()
 
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
-    servicemanager_aidl_free(svc);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(svc));
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 
@@ -532,7 +563,7 @@ test_notify2_run()
 
     test_binder_unregister_objects(fd);
     gbinder_local_object_unref(obj);
-    servicemanager_aidl_free(smsvc);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(smsvc));
     gbinder_servicemanager_unref(sm);
     gbinder_ipc_unref(ipc);
 

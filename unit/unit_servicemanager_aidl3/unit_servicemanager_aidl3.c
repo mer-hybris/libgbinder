@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Jolla Ltd.
- * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -59,6 +59,22 @@ gbinder_servicemanager_hidl_get_type()
     return 0;
 }
 
+GType
+gbinder_servicemanager_aidl2_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
+    g_assert_not_reached();
+    return 0;
+}
+
+GType
+gbinder_servicemanager_aidl4_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl4 */
+    g_assert_not_reached();
+    return 0;
+}
+
 /*==========================================================================*
  * Test service manager
  *==========================================================================*/
@@ -78,6 +94,7 @@ typedef GBinderLocalObjectClass ServiceManagerAidl3Class;
 typedef struct service_manager_aidl3 {
     GBinderLocalObject parent;
     GHashTable* objects;
+    GMutex mutex;
 } ServiceManagerAidl3;
 
 #define SERVICE_MANAGER_AIDL3_TYPE (service_manager_aidl3_get_type())
@@ -89,24 +106,23 @@ G_DEFINE_TYPE(ServiceManagerAidl3, service_manager_aidl3, \
 static
 GBinderLocalReply*
 servicemanager_aidl3_handler(
-    GBinderLocalObject* obj,
+    ServiceManagerAidl3* self,
     GBinderRemoteRequest* req,
     guint code,
-    guint flags,
-    int* status,
-    void* user_data)
+    int* status)
 {
-    ServiceManagerAidl3* self = user_data;
+    GBinderLocalObject* obj = &self->parent;
     GBinderLocalReply* reply = NULL;
     GBinderReader reader;
     GBinderRemoteObject* remote_obj;
     guint32 allow_isolated, dumpsys_priority;
     char* str;
 
-    g_assert(!flags);
     GDEBUG("%s %u", gbinder_remote_request_interface(req), code);
-    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,SVCMGR_IFACE);
     *status = -1;
+
+    /* Lock */
+    g_mutex_lock(&self->mutex);
     switch (code) {
     case GET_SERVICE_TRANSACTION:
     case CHECK_SERVICE_TRANSACTION:
@@ -172,7 +188,73 @@ servicemanager_aidl3_handler(
         GDEBUG("Unhandled command %u", code);
         break;
     }
+    g_mutex_unlock(&self->mutex);
+    /* Unlock */
+
     return reply;
+}
+
+static
+GBinderLocalReply*
+servicemanager_aidl3_handle_looper_transaction(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status)
+{
+    return !g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE) ?
+        servicemanager_aidl3_handler(SERVICE_MANAGER_AIDL3(obj),
+            req, code, status) :
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl3_parent_class)->
+            handle_looper_transaction(obj, req, code, flags, status);
+}
+
+static
+GBINDER_LOCAL_TRANSACTION_SUPPORT
+servicemanager_aidl3_can_handle_transaction(
+    GBinderLocalObject* self,
+    const char* iface,
+    guint code)
+{
+    /* Handle servicemanager transactions on the looper thread */
+    return !g_strcmp0(iface, SVCMGR_IFACE) ? GBINDER_LOCAL_TRANSACTION_LOOPER :
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl3_parent_class)->
+            can_handle_transaction(self, iface, code);
+}
+
+static
+void
+service_manager_aidl3_finalize(
+    GObject* object)
+{
+    ServiceManagerAidl3* self = SERVICE_MANAGER_AIDL3(object);
+
+    g_mutex_clear(&self->mutex);
+    g_hash_table_destroy(self->objects);
+    G_OBJECT_CLASS(service_manager_aidl3_parent_class)->finalize(object);
+}
+
+static
+void
+service_manager_aidl3_init(
+    ServiceManagerAidl3* self)
+{
+    g_mutex_init(&self->mutex);
+    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+        (GDestroyNotify) gbinder_remote_object_unref);
+}
+
+static
+void
+service_manager_aidl3_class_init(
+    ServiceManagerAidl3Class* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl3_finalize;
+    klass->can_handle_transaction =
+        servicemanager_aidl3_can_handle_transaction;
+    klass->handle_looper_transaction =
+        servicemanager_aidl3_handle_looper_transaction;
 }
 
 static
@@ -186,39 +268,11 @@ servicemanager_aidl3_new(
     const int fd = gbinder_driver_fd(ipc->driver);
 
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
-        servicemanager_aidl3_handler, self);
+        NULL, NULL);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
     gbinder_ipc_register_local_object(ipc, obj);
     gbinder_ipc_unref(ipc);
     return self;
-}
-
-static
-void
-service_manager_aidl3_finalize(
-    GObject* object)
-{
-    ServiceManagerAidl3* self = SERVICE_MANAGER_AIDL3(object);
-
-    g_hash_table_destroy(self->objects);
-    G_OBJECT_CLASS(service_manager_aidl3_parent_class)->finalize(object);
-}
-
-static
-void
-service_manager_aidl3_init(
-    ServiceManagerAidl3* self)
-{
-    self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-        (GDestroyNotify) gbinder_remote_object_unref);
-}
-
-static
-void
-service_manager_aidl3_class_init(
-    ServiceManagerAidl3Class* klass)
-{
-    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl3_finalize;
 }
 
 /*==========================================================================*
@@ -281,7 +335,7 @@ test_context_deinit(
 {
     test_binder_br_dead_binder_obj(test->fd, test->object);
     gbinder_local_object_unref(test->object);
-    gbinder_local_object_drop(GBINDER_LOCAL_OBJECT(test->service));
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(test->service));
     gbinder_servicemanager_unref(test->client);
     test_binder_exit_wait(&test_opt, test->loop);
     remove(test->config_file);
