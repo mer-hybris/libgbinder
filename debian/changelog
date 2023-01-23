@@ -1,3 +1,9 @@
+libgbinder (1.1.32) unstable; urgency=low
+
+  * Improved reliability of unit tests
+
+ -- Slava Monich <slava@monich.com>  Mon, 23 Jan 2023 11:48:00 +0200
+
 libgbinder (1.1.31) unstable; urgency=low
 
   * Fixed serialization issues on big-endian
