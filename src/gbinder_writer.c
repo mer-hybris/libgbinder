@@ -52,8 +52,8 @@ typedef struct gbinder_writer_priv {
     GBinderWriterData* data;
 } GBinderWriterPriv;
 
-const GBinderWriterType gbinder_writer_type_byte = { "int32", 4, NULL };
-const GBinderWriterType gbinder_writer_type_int32 = { "byte", 1, NULL };
+const GBinderWriterType gbinder_writer_type_byte = { "byte", 1, NULL };
+const GBinderWriterType gbinder_writer_type_int32 = { "int32", 4, NULL };
 static const GBinderWriterField gbinder_writer_type_hidl_string_f[] = {
     {
         "hidl_string.data.str", 0, NULL,
