@@ -34,15 +34,19 @@
 #include "test_common.h"
 #include "test_binder.h"
 
+#include "gbinder_buffer_p.h"
 #include "gbinder_config.h"
 #include "gbinder_fmq_p.h"
 #include "gbinder_local_request_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_output_data.h"
+#include "gbinder_reader_p.h"
 #include "gbinder_writer_p.h"
+#include "gbinder_ipc.h"
 #include "gbinder_io.h"
 
 #include <gutil_intarray.h>
+#include <gutil_misc.h>
 #include <gutil_log.h>
 
 #include <unistd.h>
@@ -1148,6 +1152,108 @@ test_struct(
 }
 
 /*==========================================================================*
+ * struct_vec
+ *==========================================================================*/
+
+static
+void
+test_struct_vec(
+    void)
+{
+    /* vec<byte> */
+    static const GBinderWriterField vec_byte_ptr_f[] = {
+        {
+            "ptr", GBINDER_HIDL_VEC_BUFFER_OFFSET, &gbinder_writer_type_byte,
+            gbinder_writer_field_hidl_vec_write_buf, NULL
+        },
+        GBINDER_WRITER_FIELD_END()
+    };
+
+    static const GBinderWriterType vec_byte_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(GBinderHidlVec), vec_byte_ptr_f
+    };
+
+    /* vec<int32> */
+    static const GBinderWriterField vec_int32_ptr_f[] = {
+        {
+            "ptr", GBINDER_HIDL_VEC_BUFFER_OFFSET, &gbinder_writer_type_int32,
+            gbinder_writer_field_hidl_vec_write_buf, NULL
+        },
+        GBINDER_WRITER_FIELD_END()
+    };
+
+    static const GBinderWriterType vec_int32_t = {
+        GBINDER_WRITER_STRUCT_NAME_AND_SIZE(GBinderHidlVec), vec_int32_ptr_f
+    };
+
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req =  gbinder_local_request_new(gbinder_ipc_io(ipc),
+          gbinder_ipc_protocol(ipc), NULL);
+    GBinderOutputData* writer_data;
+    GBinderReaderData reader_data;
+    GBinderWriter writer;
+    GBinderReader reader;
+    GUtilIntArray* offsets;
+    GBinderHidlVec vec_byte, vec_int32;
+    gsize count, elemsize;
+    const void* vec_data;
+    guint i;
+
+    static const guint8 vec_byte_data[] = { 0x01, 0x02 };
+    static const guint32 vec_int32_data[] = { 42 };
+
+    memset(&vec_byte, 0, sizeof(vec_byte));
+    vec_byte.data.ptr = vec_byte_data;
+    vec_byte.count = G_N_ELEMENTS(vec_byte_data);
+
+    memset(&vec_int32, 0, sizeof(vec_int32));
+    vec_int32.data.ptr = vec_int32_data;
+    vec_int32.count = G_N_ELEMENTS(vec_int32_data);
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &vec_byte, &vec_byte_t, NULL);
+    gbinder_writer_append_struct(&writer, &vec_int32, &vec_int32_t, NULL);
+
+    writer_data = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(writer_data);
+    g_assert(offsets);
+    g_assert_cmpuint(offsets->count, == ,4);
+
+    /* Set up the reader */
+    memset(&reader_data, 0, sizeof(reader_data));
+    reader_data.reg = gbinder_ipc_object_registry(ipc);
+    reader_data.objects = g_new0(void*, offsets->count + 1);
+    reader_data.buffer = gbinder_buffer_new(ipc->driver,
+        gutil_memdup(writer_data->bytes->data, writer_data->bytes->len),
+        writer_data->bytes->len, reader_data.objects);
+    for (i = 0; i < offsets->count; i++) {
+        reader_data.objects[i] =  reader_data.buffer->data + offsets->data[i];
+    }
+
+    /* Read those vectors back */
+    gbinder_reader_init(&reader, &reader_data, 0, writer_data->bytes->len);
+
+    /* vec<byte> */
+    vec_data = gbinder_reader_read_hidl_vec(&reader, &count, &elemsize);
+    g_assert(vec_data);
+    g_assert_cmpuint(count, == ,G_N_ELEMENTS(vec_byte_data));
+    g_assert_cmpuint(elemsize, == ,sizeof(vec_byte_data[0]));
+    g_assert(!memcmp(vec_data, vec_byte_data, sizeof(vec_byte_data)));
+
+    /* vec<int32> */
+    vec_data = gbinder_reader_read_hidl_vec(&reader, &count, &elemsize);
+    g_assert(vec_data);
+    g_assert_cmpuint(count, == ,G_N_ELEMENTS(vec_int32_data));
+    g_assert_cmpuint(elemsize, == ,sizeof(vec_int32_data[0]));
+    g_assert(!memcmp(vec_data, vec_int32_data, sizeof(vec_int32_data)));
+
+    gbinder_buffer_free(reader_data.buffer);
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
  * fd
  * fd_invalid
  *==========================================================================*/
@@ -1484,6 +1590,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("parent"), test_parent);
     g_test_add_func(TEST_("parcelable"), test_parcelable);
     g_test_add_func(TEST_("struct"), test_struct);
+    g_test_add_func(TEST_("struct_vec"), test_struct_vec);
     g_test_add_func(TEST_("fd"), test_fd);
     g_test_add_func(TEST_("fd_invalid"), test_fd_invalid);
     g_test_add_func(TEST_("fd_close_error"), test_fd_close_error);
