@@ -742,7 +742,7 @@ app_init(
     "\t[0-9]*.[0-9]* for a 32-bit float\n"
     "\t[0-9]*.[0-9]*L for a 64-bit double\n"
     "\t\"[.*]\" for an 8-bit aidl string\n"
-    "\t\"[.*]\"L for an utf16 aidl string\n"
+    "\t\"[.*]\"u for an utf16 aidl string\n"
     "\t\"[.*]\"h for an 8-bit hidl string\n"
     "\t{ VALUE1 VALUE2 ... VALUEN } for a struct containing VALUE1, VALUE2, etc., where\n"
     "\t all of these values can be any of the possible values described here.\n"
