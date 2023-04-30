@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,7 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 #define _GNU_SOURCE  /* pthread_*_np */
 
 #include "gbinder_ipc.h"

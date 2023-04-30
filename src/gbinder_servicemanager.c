@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "gbinder_servicemanager_p.h"
 #include "gbinder_client_p.h"
