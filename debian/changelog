@@ -1,3 +1,10 @@
+libgbinder (1.1.34) unstable; urgency=low
+
+  * Fixed binder-call help message
+  * Require glib 2.32
+
+ -- Slava Monich <slava@monich.com>  Sun, 30 Apr 2023 06:04:38 +0300
+
 libgbinder (1.1.33) unstable; urgency=low
 
   * Fixed GBinderWriterType for byte and int32
