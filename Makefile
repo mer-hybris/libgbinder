@@ -50,10 +50,10 @@ RELEASE_DEPS = libglibutil_release
 .PHONY: libglibutil_debug libglibutil_release
 
 libglibutil_debug:
-	make -C $(LIBGLIBUTIL_PATH) debug
+	$(MAKE) -C $(LIBGLIBUTIL_PATH) debug
 
 libglibutil_release:
-	make -C $(LIBGLIBUTIL_PATH) release
+	$(MAKE) -C $(LIBGLIBUTIL_PATH) release
 
 endif
 
@@ -237,8 +237,8 @@ print_release_path:
 	@echo $(RELEASE_BUILD_DIR)
 
 clean:
-	make -C test clean
-	make -C unit clean
+	$(MAKE) -C test clean
+	$(MAKE) -C unit clean
 	rm -fr test/coverage/results test/coverage/*.gcov
 	rm -f *~ $(SRC_DIR)/*~ $(INCLUDE_DIR)/*~
 	rm -fr $(BUILD_DIR) RPMS installroot
@@ -248,7 +248,7 @@ clean:
 	rm -f debian/libgbinder.install debian/libgbinder-dev.install
 
 test:
-	make -C unit test
+	$(MAKE) -C unit test
 
 $(BUILD_DIR):
 	mkdir -p $@

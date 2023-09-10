@@ -52,7 +52,7 @@ INCLUDES = -I$(LIB_DIR)/include
 CFLAGS += -fPIC $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += -pie $(shell pkg-config --libs $(PKGS))
-QUIET_MAKE = make --no-print-directory
+QUIET_MAKE = $(MAKE) --no-print-directory
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =
 
@@ -110,7 +110,7 @@ clean:
 	rm -fr $(BUILD_DIR)
 
 cleaner: clean
-	@make -C $(LIB_DIR) clean
+	@$(MAKE) -C $(LIB_DIR) clean
 
 $(DEBUG_BUILD_DIR):
 	mkdir -p $@
