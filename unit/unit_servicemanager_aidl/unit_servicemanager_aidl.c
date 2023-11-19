@@ -36,7 +36,6 @@
 #include "gbinder_ipc.h"
 #include "gbinder_reader.h"
 #include "gbinder_servicemanager_p.h"
-#include "gbinder_rpc_protocol.h"
 #include "gbinder_local_object_p.h"
 #include "gbinder_local_reply.h"
 #include "gbinder_remote_request.h"
@@ -46,6 +45,8 @@
 #include <gutil_log.h>
 
 static TestOpt test_opt;
+static const char TMP_DIR_TEMPLATE[] =
+    "gbinder-test-servicemanager_aidl-XXXXXX";
 
 GType
 gbinder_servicemanager_hidl_get_type()
@@ -586,6 +587,9 @@ test_notify2()
 
 int main(int argc, char* argv[])
 {
+    TestConfig config;
+    int result;
+
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
@@ -595,7 +599,10 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("notify"), test_notify);
     g_test_add_func(TEST_("notify2"), test_notify2);
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    test_config_init(&config, TMP_DIR_TEMPLATE);
+    result = g_test_run();
+    test_config_cleanup(&config);
+    return result;
 }
 
 /*

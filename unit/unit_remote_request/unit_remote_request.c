@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -47,6 +47,7 @@
 #include <gutil_intarray.h>
 
 static TestOpt test_opt;
+static const char TMP_DIR_TEMPLATE[] = "gbinder-test-remote-request-XXXXXX";
 
 #define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
 #define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
@@ -368,17 +369,8 @@ test_to_local(
 
 int main(int argc, char* argv[])
 {
-    const char* default_config_dir;
-    const char* default_config_file;
-    char* conf_dir = g_dir_make_tmp("gbinder-test-remote-request-XXXXXX", NULL);
-    char* conf_file = g_build_filename(conf_dir, "test.conf", NULL);
+    TestConfig test_config;
     int result;
-
-    /* Point gbinder_config_file to a non-existent file */
-    default_config_dir = gbinder_config_dir;
-    default_config_file = gbinder_config_file;
-    gbinder_config_dir = conf_dir;
-    gbinder_config_file = conf_file;
 
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_PREFIX "null", test_null);
@@ -389,13 +381,9 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "string16", test_string16);
     g_test_add_func(TEST_PREFIX "to_local", test_to_local);
     test_init(&test_opt, argc, argv);
+    test_config_init(&test_config, TMP_DIR_TEMPLATE);
     result = g_test_run();
-
-    gbinder_config_dir = default_config_dir;
-    gbinder_config_file = default_config_file;
-    remove(conf_dir);
-    g_free(conf_dir);
-    g_free(conf_file);
+    test_config_cleanup(&test_config);
     return result;
 }
 

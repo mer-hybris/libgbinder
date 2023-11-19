@@ -37,7 +37,6 @@
 #include "gbinder_ipc.h"
 #include "gbinder_reader.h"
 #include "gbinder_servicemanager_p.h"
-#include "gbinder_rpc_protocol.h"
 #include "gbinder_local_object_p.h"
 #include "gbinder_local_reply.h"
 #include "gbinder_remote_request.h"
@@ -121,24 +120,20 @@ servicemanager_aidl4_handler(
         gbinder_remote_request_init_reader(req, &reader);
         str = gbinder_reader_read_string16(&reader);
         if (str) {
-            reply = gbinder_local_object_new_reply(obj);
+            GBinderWriter writer;
+
             remote_obj = g_hash_table_lookup(self->objects, str);
-            if (str) {
-                GBinderWriter writer;
+            reply = gbinder_local_object_new_reply(obj);
 
-                remote_obj = g_hash_table_lookup(self->objects, str);
-                reply = gbinder_local_object_new_reply(obj);
-
-                gbinder_local_reply_init_writer(reply, &writer);
-                gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
-                gbinder_writer_append_remote_object(&writer, remote_obj);
-                if (remote_obj) {
-                    GDEBUG("Found name '%s' => %p", str, remote_obj);
-                } else {
-                    GDEBUG("Name '%s' not found", str);
-                }
-                g_free(str);
+            gbinder_local_reply_init_writer(reply, &writer);
+            gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
+            gbinder_writer_append_remote_object(&writer, remote_obj);
+            if (remote_obj) {
+                GDEBUG("Found name '%s' => %p", str, remote_obj);
+            } else {
+                GDEBUG("Name '%s' not found", str);
             }
+            g_free(str);
         }
         break;
     case ADD_SERVICE_TRANSACTION:
@@ -278,10 +273,7 @@ servicemanager_aidl4_new(
  *==========================================================================*/
 
 typedef struct test_context {
-    const char* default_config_dir;
-    const char* default_config_file;
-    char* config_dir;
-    char* config_subdir;
+    TestConfig config;
     char* config_file;
     GBinderLocalObject* object;
     ServiceManagerAidl4* service;
@@ -306,14 +298,11 @@ test_context_init(
     GBinderIpc* ipc;
 
     memset(test, 0, sizeof(*test));
-    test->default_config_dir = gbinder_config_dir;
-    test->default_config_file = gbinder_config_file;
-    test->config_dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
-    test->config_subdir = g_build_filename(test->config_dir, "d", NULL);
-    test->config_file = g_build_filename(test->config_dir, "test.conf", NULL);
+    test_config_init(&test->config, TMP_DIR_TEMPLATE);
+    test->config_file = g_build_filename(test->config.config_dir,
+        "test.conf", NULL);
     g_assert(g_file_set_contents(test->config_file, config, -1, NULL));
     GDEBUG("Config file %s", test->config_file);
-    gbinder_config_dir = test->config_subdir; /* Doesn't exist */
     gbinder_config_file = test->config_file;
 
     ipc = gbinder_ipc_new(dev, NULL);
@@ -337,14 +326,9 @@ test_context_deinit(
     gbinder_servicemanager_unref(test->client);
     test_binder_exit_wait(&test_opt, test->loop);
     remove(test->config_file);
-    remove(test->config_dir);
     g_free(test->config_file);
-    g_free(test->config_subdir);
-    g_free(test->config_dir);
     g_main_loop_unref(test->loop);
-    gbinder_config_dir = test->default_config_dir;
-    gbinder_config_file = test->default_config_file;
-    gbinder_config_exit();
+    test_config_cleanup(&test->config);
 }
 
 static

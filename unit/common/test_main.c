@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,6 +31,9 @@
  */
 
 #include "test_common.h"
+
+#include "gbinder_config.h"
+#include "gbinder_rpc_protocol.h"
 
 #include <gutil_log.h>
 
@@ -189,6 +192,49 @@ test_init(
     gutil_log_default.level = g_test_verbose() ?
         GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
     gutil_log_timestamp = FALSE;
+}
+
+/*
+ * Unit tests shouldn't depend on the system gbinder config. This is
+ * achieved by pointing gbinder_config_file to a non-existent file
+ * and gbinder_config_dir to an empty directory (where individual
+ * tests may create their own config files when they need it)
+ */
+void
+test_config_init(
+    TestConfig* config,
+    const char* template)
+{
+    config->config_dir = g_dir_make_tmp("gbinder-test-driver-XXXXXX", NULL);
+    g_assert(config->config_dir);
+    config->non_existent_config_file = g_build_filename(config->config_dir,
+        "non-existent.conf", NULL);
+
+    /* Point gbinder_config_file to a non-existent file */
+    config->default_config_dir = gbinder_config_dir;
+    config->default_config_file = gbinder_config_file;
+    gbinder_config_dir = config->config_dir;
+    gbinder_config_file = config->non_existent_config_file;
+
+    /* Reset the state */
+    gbinder_rpc_protocol_exit();
+    gbinder_config_exit();
+}
+
+void
+test_config_cleanup(
+    TestConfig* config)
+{
+    gbinder_config_dir = config->default_config_dir;
+    gbinder_config_file = config->default_config_file;
+    remove(config->config_dir);
+    g_free(config->config_dir);
+    g_free(config->non_existent_config_file);
+    memset(config, 0, sizeof(*config));
+
+    /* Reset the state */
+    gbinder_rpc_protocol_exit();
+    gbinder_config_exit();
 }
 
 /*
