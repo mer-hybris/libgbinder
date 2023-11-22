@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -40,12 +40,29 @@ typedef struct test_opt {
     int flags;
 } TestOpt;
 
+typedef struct test_config {
+    const char* default_config_dir;
+    const char* default_config_file;
+    char* config_dir;
+    char* non_existent_config_file;
+} TestConfig;
+
 /* Should be invoked after g_test_init */
 void
 test_init(
     TestOpt* opt,
     int argc,
     char* argv[]);
+
+/* Creates empty test config dir */
+void
+test_config_init(
+    TestConfig* config,
+    const char* template);
+
+void
+test_config_cleanup(
+    TestConfig* config);
 
 /* Run loop with a timeout */
 void

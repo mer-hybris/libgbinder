@@ -1,7 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -83,10 +82,7 @@ test_local_request_new_64()
  *==========================================================================*/
 
 typedef struct test_context {
-    const char* default_config_dir;
-    const char* default_config_file;
-    char* config_dir;
-    char* config_subdir;
+    TestConfig config;
     char* config_file;
 } TestContext;
 
@@ -97,20 +93,17 @@ test_context_init(
     const char* prot)
 {
     memset(test, 0, sizeof(*test));
-    test->default_config_dir = gbinder_config_dir;
-    test->default_config_file = gbinder_config_file;
-    test->config_dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
-    test->config_subdir = g_build_filename(test->config_dir, "d", NULL);
-    test->config_file = g_build_filename(test->config_dir, "test.conf", NULL);
-    gbinder_config_dir = test->config_subdir; /* Doesn't exist */
-    gbinder_config_file = test->config_file;
+    test_config_init(&test->config, TMP_DIR_TEMPLATE);
     if (prot) {
         char* config = g_strdup_printf("[Protocol]\n"
             GBINDER_DEFAULT_BINDER " = %s", prot);
 
+        test->config_file = g_build_filename(test->config.config_dir,
+            "test.conf", NULL);
         GDEBUG("Config file %s", test->config_file);
         g_assert(g_file_set_contents(test->config_file, config, -1, NULL));
         g_free(config);
+        gbinder_config_file = test->config_file;
     }
 }
 
@@ -119,15 +112,11 @@ void
 test_context_deinit(
     TestContext* test)
 {
-    remove(test->config_file);
-    remove(test->config_dir);
-    g_free(test->config_file);
-    g_free(test->config_subdir);
-    g_free(test->config_dir);
-    gbinder_config_dir = test->default_config_dir;
-    gbinder_config_file = test->default_config_file;
-    gbinder_config_exit();
-    gbinder_rpc_protocol_exit();
+    if (test->config_file) {
+        remove(test->config_file);
+        g_free(test->config_file);
+    }
+    test_config_cleanup(&test->config);
 }
 
 /*==========================================================================*

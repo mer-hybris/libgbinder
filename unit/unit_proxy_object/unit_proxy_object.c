@@ -66,9 +66,9 @@ enum test_tx_codes {
 #define TX_PARAM_DONT_REPLY 0x22220000
 #define TX_RESULT 0x03030303
 
-static const char TMP_DIR_TEMPLATE[] = "gbinder-test-proxy-XXXXXX";
-const char TEST_IFACE[] = "test@1.0::ITest";
-const char TEST_IFACE2[] = "test@1.0::ITest2";
+static const char TMP_DIR_TEMPLATE[] = "gbinder-test-proxy_object-XXXXXX";
+static const char TEST_IFACE[] = "test@1.0::ITest";
+static const char TEST_IFACE2[] = "test@1.0::ITest2";
 static const char* TEST_IFACES[] =  { TEST_IFACE, NULL };
 static const char* TEST_IFACES2[] =  { TEST_IFACE2, NULL };
 static const char DEFAULT_CONFIG_DATA[] =
@@ -76,46 +76,6 @@ static const char DEFAULT_CONFIG_DATA[] =
     "Default = hidl\n"
     "[ServiceManager]\n"
     "Default = hidl\n";
-
-typedef struct test_config {
-    char* dir;
-    char* file;
-} TestConfig;
-
-/*==========================================================================*
- * Common
- *==========================================================================*/
-
-static
-void
-test_config_init(
-    TestConfig* config,
-    char* config_data)
-{
-    config->dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
-    config->file = g_build_filename(config->dir, "test.conf", NULL);
-    g_assert(g_file_set_contents(config->file, config_data ? config_data :
-        DEFAULT_CONFIG_DATA, -1, NULL));
-
-    gbinder_config_exit();
-    gbinder_config_dir = config->dir;
-    gbinder_config_file = config->file;
-    GDEBUG("Wrote config to %s", config->file);
-}
-
-static
-void
-test_config_deinit(
-    TestConfig* config)
-{
-    gbinder_config_exit();
-
-    remove(config->file);
-    g_free(config->file);
-
-    remove(config->dir);
-    g_free(config->dir);
-}
 
 /*==========================================================================*
  * null
@@ -184,7 +144,6 @@ void
 test_basic_run(
     void)
 {
-    TestConfig config;
     GBinderLocalObject* obj;
     GBinderProxyObject* proxy;
     GBinderRemoteObject* remote_obj;
@@ -194,7 +153,6 @@ test_basic_run(
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     int fd_obj, fd_proxy, n = 0;
 
-    test_config_init(&config, NULL);
     ipc_proxy = gbinder_ipc_new(DEV, NULL);
     ipc_obj = gbinder_ipc_new(DEV2, NULL);
     fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
@@ -224,7 +182,6 @@ test_basic_run(
     gbinder_ipc_unref(ipc_obj);
     gbinder_ipc_unref(ipc_proxy);
     test_binder_exit_wait(&test_opt, loop);
-    test_config_deinit(&config);
     g_main_loop_unref(loop);
 }
 
@@ -332,7 +289,6 @@ void
 test_param_run(
     void)
 {
-    TestConfig config;
     GBinderLocalObject* obj;
     GBinderProxyObject* proxy;
     GBinderRemoteObject* remote_obj;
@@ -344,7 +300,6 @@ test_param_run(
     GMainLoop* loop2 = g_main_loop_new(NULL, FALSE);
     int fd_obj, fd_proxy, n = 0;
 
-    test_config_init(&config, NULL);
     ipc_proxy = gbinder_ipc_new(DEV2, NULL);
     ipc_obj = gbinder_ipc_new(DEV, NULL);
     fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
@@ -387,7 +342,6 @@ test_param_run(
     gbinder_ipc_unref(ipc_obj);
     gbinder_ipc_unref(ipc_proxy);
     test_binder_exit_wait(&test_opt, loop);
-    test_config_deinit(&config);
     g_main_loop_unref(loop);
     g_main_loop_unref(loop2);
 }
@@ -559,7 +513,6 @@ void
 test_obj_run(
     void)
 {
-    TestConfig config;
     TestObj test;
     GBinderLocalObject* obj;
     GBinderLocalObject* obj2;
@@ -571,7 +524,6 @@ test_obj_run(
     GBinderLocalRequest* req;
     int fd_obj, fd_proxy;
 
-    test_config_init(&config, NULL);
     memset(&test, 0, sizeof(test));
     test.loop = g_main_loop_new(NULL, FALSE);
 
@@ -621,7 +573,6 @@ test_obj_run(
     gbinder_ipc_unref(ipc_obj);
     gbinder_ipc_unref(ipc_proxy);
     test_binder_exit_wait(&test_opt, test.loop);
-    test_config_deinit(&config);
     g_main_loop_unref(test.loop);
 }
 
@@ -641,6 +592,10 @@ test_obj(
 
 int main(int argc, char* argv[])
 {
+    TestConfig test_config;
+    char* config_file;
+    int result;
+
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
@@ -649,8 +604,20 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("param"), test_param);
     g_test_add_func(TEST_("obj"), test_obj);
+
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    test_config_init(&test_config, TMP_DIR_TEMPLATE);
+    config_file = g_build_filename(test_config.config_dir, "test.conf", NULL);
+    g_assert(g_file_set_contents(config_file, DEFAULT_CONFIG_DATA, -1, NULL));
+    GDEBUG("Config file %s", config_file);
+    gbinder_config_file = config_file;
+
+    result = g_test_run();
+
+    remove(config_file);
+    g_free(config_file);
+    test_config_cleanup(&test_config);
+    return result;
 }
 
 /*

@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2021-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2021-2022 Jolla Ltd.
- * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -67,45 +67,9 @@ static const char DEFAULT_CONFIG_DATA[] =
     "[ServiceManager]\n"
     "Default = hidl\n";
 
-typedef struct test_config {
-    char* dir;
-    char* file;
-} TestConfig;
-
 /*==========================================================================*
  * Common
  *==========================================================================*/
-
-static
-void
-test_config_init(
-    TestConfig* config,
-    char* config_data)
-{
-    config->dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
-    config->file = g_build_filename(config->dir, "test.conf", NULL);
-    g_assert(g_file_set_contents(config->file, config_data ? config_data :
-        DEFAULT_CONFIG_DATA, -1, NULL));
-
-    gbinder_config_exit();
-    gbinder_config_dir = config->dir;
-    gbinder_config_file = config->file;
-    GDEBUG("Wrote config to %s", config->file);
-}
-
-static
-void
-test_config_deinit(
-    TestConfig* config)
-{
-    gbinder_config_exit();
-
-    remove(config->file);
-    g_free(config->file);
-
-    remove(config->dir);
-    g_free(config->dir);
-}
 
 static
 TestServiceManagerHidl*
@@ -261,7 +225,6 @@ test_basic_run(
     void)
 {
     TestBasic test;
-    TestConfig config;
     TestServiceManagerHidl* dest_impl;
     GBinderServiceManager* src;
     GBinderServiceManager* dest;
@@ -277,7 +240,6 @@ test_basic_run(
     int src_fd, dest_fd, n = 0;
     gulong id;
 
-    test_config_init(&config, NULL);
     memset(&test, 0, sizeof(test));
     test.loop = g_main_loop_new(NULL, FALSE);
 
@@ -365,7 +327,6 @@ test_basic_run(
     gbinder_ipc_unref(dest_ipc);
 
     test_binder_exit_wait(&test_opt, test.loop);
-    test_config_deinit(&config);
     g_main_loop_unref(test.loop);
 }
 
@@ -385,14 +346,31 @@ test_basic(
 
 int main(int argc, char* argv[])
 {
+    TestConfig test_config;
+    char* config_file;
+    int result;
+
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    test_config_init(&test_config, TMP_DIR_TEMPLATE);
+
+    config_file = g_build_filename(test_config.config_dir, "test.conf", NULL);
+    g_assert(g_file_set_contents(config_file, DEFAULT_CONFIG_DATA, -1, NULL));
+    GDEBUG("Config file %s", config_file);
+    gbinder_config_file = config_file;
+
+    result = g_test_run();
+
+    remove(config_file);
+    g_free(config_file);
+    test_config_cleanup(&test_config);
+    return result;
 }
 
 /*

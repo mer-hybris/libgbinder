@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,6 +42,8 @@
 #include "gbinder_remote_request_p.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_writer.h"
+
+#include <gutil_log.h>
 
 static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] = "gbinder-test-protocol-XXXXXX";
@@ -121,57 +123,49 @@ static const TestHeaderData test_header_tests[] = {
       test_header_hidl, 1 }
 };
 
-typedef struct test_config {
-    char* dir;
-    char* file;
-} TestConfig;
+typedef struct test_context {
+    TestConfig config;
+    char* config_file;
+} TestContext;
 
 static
 void
-test_config_init(
-    TestConfig* test,
+test_context_init(
+    TestContext* test,
     const char* config)
 {
-    test->dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
-    test->file = g_build_filename(test->dir, "test.conf", NULL);
-
-    /* Reset the state */
-    gbinder_rpc_protocol_exit();
-    gbinder_config_exit();
+    memset(test, 0, sizeof(*test));
+    test_config_init(&test->config, TMP_DIR_TEMPLATE);
+    test->config_file = g_build_filename(test->config.config_dir,
+        "test.conf", NULL);
 
     /* Write the config */
-    g_assert(g_file_set_contents(test->file, config, -1, NULL));
-    gbinder_config_file = test->file;
+    g_assert(g_file_set_contents(test->config_file, config, -1, NULL));
+    GDEBUG("Config file %s", test->config_file);
+    gbinder_config_file = test->config_file;
 }
 
 static
 void
-test_config_init2(
-    TestConfig* test,
+test_context_init2(
+    TestContext* test,
     const char* dev,
     const char* prot)
 {
     char* config = g_strconcat("[Protocol]\n", dev, " = ", prot, "\n", NULL);
 
-    test_config_init(test, config);
+    test_context_init(test, config);
     g_free(config);
 }
 
 static
 void
-test_config_cleanup(
-    TestConfig* test)
+test_context_cleanup(
+    TestContext* test)
 {
-    /* Undo the damage */
-    gbinder_rpc_protocol_exit();
-    gbinder_config_exit();
-    gbinder_config_file = NULL;
-
-    remove(test->file);
-    g_free(test->file);
-
-    remove(test->dir);
-    g_free(test->dir);
+    remove(test->config_file);
+    g_free(test->config_file);
+    test_config_cleanup(&test->config);
 }
 
 /*==========================================================================*
@@ -184,9 +178,9 @@ test_device(
     void)
 {
     const GBinderRpcProtocol* p;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init(&config, "");
+    test_context_init(&context, "");
 
     p = gbinder_rpc_protocol_for_device(NULL);
     g_assert(p);
@@ -200,7 +194,7 @@ test_device(
     g_assert(p);
     g_assert_cmpstr(p->name, == ,"hidl");
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -213,9 +207,9 @@ test_config1(
     void)
 {
     const GBinderRpcProtocol* p;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init(&config,
+    test_context_init(&context,
         "[Protocol]\n"
         "/dev/binder = hidl\n" /* Redefined name for /dev/binder */
         "/dev/hwbinder = foo\n"); /* Invalid protocol name */
@@ -236,7 +230,7 @@ test_config1(
     g_assert(p);
     g_assert_cmpstr(p->name, == ,"aidl");
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -249,9 +243,9 @@ test_config2(
     void)
 {
     const GBinderRpcProtocol* p;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init(&config,
+    test_context_init(&context,
         "[Protocol]\n"
         "Default = hidl\n"
         "/dev/vndbinder = hidl\n"
@@ -278,7 +272,7 @@ test_config2(
     g_assert(p);
     g_assert_cmpstr(p->name, == ,"hidl");
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -291,9 +285,9 @@ test_config3(
     void)
 {
     const GBinderRpcProtocol* p;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init(&config,
+    test_context_init(&context,
         "[Whatever]\n"
         "/dev/hwbinder = aidl\n"); /* Ignored, wrong section */
 
@@ -310,7 +304,7 @@ test_config3(
     g_assert(p);
     g_assert_cmpstr(p->name, == ,"aidl");
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -324,9 +318,9 @@ test_no_header1(
 {
     const TestData* test = test_data;
     GBinderRemoteRequest* req;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init2(&config, test->dev, test->prot);
+    test_context_init2(&context, test->dev, test->prot);
 
     req = gbinder_remote_request_new(NULL, gbinder_rpc_protocol_for_device
         (GBINDER_DEFAULT_BINDER), 0, 0);
@@ -334,7 +328,7 @@ test_no_header1(
     g_assert(!gbinder_remote_request_interface(req));
     gbinder_remote_request_unref(req);
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -350,9 +344,9 @@ test_no_header2(
     const GBinderRpcProtocol* p;
     GBinderDriver* driver;
     GBinderRemoteRequest* req;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init2(&config, test->dev, test->prot);
+    test_context_init2(&context, test->dev, test->prot);
 
     p = gbinder_rpc_protocol_for_device(test->dev);
     driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, p);
@@ -365,7 +359,7 @@ test_no_header2(
     g_assert(!gbinder_remote_request_interface(req));
     gbinder_remote_request_unref(req);
     gbinder_driver_unref(driver);
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 static const TestData test_no_header_data[] = {
@@ -388,9 +382,9 @@ test_write_header(
     GBinderLocalRequest* req;
     GBinderOutputData* data;
     GBinderWriter writer;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init2(&config, test->dev, test->prot);
+    test_context_init2(&context, test->dev, test->prot);
 
     prot = gbinder_rpc_protocol_for_device(test->dev);
     req = gbinder_local_request_new(&gbinder_io_32,
@@ -402,7 +396,7 @@ test_write_header(
     g_assert(!memcmp(data->bytes->data, test->header, test->header_size));
     gbinder_local_request_unref(req);
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
@@ -417,9 +411,9 @@ test_read_header(
     const TestHeaderData* test = test_data;
     GBinderDriver* driver;
     GBinderRemoteRequest* req;
-    TestConfig config;
+    TestContext context;
 
-    test_config_init2(&config, test->dev, test->prot);
+    test_context_init2(&context, test->dev, test->prot);
 
     driver = gbinder_driver_new(test->dev, NULL);
     req = gbinder_remote_request_new(NULL, gbinder_rpc_protocol_for_device
@@ -431,7 +425,7 @@ test_read_header(
     gbinder_remote_request_unref(req);
     gbinder_driver_unref(driver);
 
-    test_config_cleanup(&config);
+    test_context_cleanup(&context);
 }
 
 /*==========================================================================*
