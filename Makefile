@@ -126,6 +126,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 # Tools and flags
 #
 
+PKG_CONFIG ?= pkg-config
 CC ?= $(CROSS_COMPILE)gcc
 STRIP ?= strip
 LD = $(CC)
@@ -135,9 +136,9 @@ DEFINES += -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_32 \
 INCLUDES += -I$(INCLUDE_DIR)
 BASE_FLAGS = -fPIC
 FULL_CFLAGS = $(BASE_FLAGS) $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
-  -MMD -MP $(shell pkg-config --cflags $(PKGS))
+  -MMD -MP $(shell $(PKG_CONFIG) --cflags $(PKGS))
 FULL_LDFLAGS = $(BASE_FLAGS) $(LDFLAGS) -shared -Wl,-soname,$(LIB_SONAME) \
-  $(shell pkg-config --libs $(PKGS)) -lpthread
+  $(shell $(PKG_CONFIG) --libs $(PKGS)) -lpthread
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =
 COVERAGE_FLAGS = -g

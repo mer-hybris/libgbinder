@@ -66,6 +66,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 # Tools and flags
 #
 
+PKG_CONFIG ?= pkg-config
 CC ?= $(CROSS_COMPILE)gcc
 LD = $(CC)
 WARNINGS += -Wall -Wno-deprecated-declarations
@@ -76,9 +77,9 @@ BASE_FLAGS = -fPIC
 BASE_LDFLAGS = $(BASE_FLAGS) $(LDFLAGS)
 BASE_CFLAGS = $(BASE_FLAGS) $(CFLAGS)
 FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
-  $(shell pkg-config --cflags $(PKGS))
+  $(shell $(PKG_CONFIG) --cflags $(PKGS))
 FULL_LDFLAGS = $(BASE_LDFLAGS)
-LIBS = $(shell pkg-config --libs $(PKGS)) -lpthread
+LIBS = $(shell $(PKG_CONFIG) --libs $(PKGS)) -lpthread
 QUIET_MAKE = $(MAKE) --no-print-directory
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =
