@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -517,11 +517,23 @@ static const guint8 string16_tests_data_xy[] = {
     0x00, 0x00, 0x00, 0x00
 };
 
+static const guint8 string16_tests_data_surrogates[] = {
+    TEST_INT32_BYTES(8),
+    TEST_INT16_BYTES(0xd83d), TEST_INT16_BYTES(0xde00),
+    TEST_INT16_BYTES(0xd83d), TEST_INT16_BYTES(0xde01),
+    TEST_INT16_BYTES(0xd83d), TEST_INT16_BYTES(0xde02),
+    TEST_INT16_BYTES(0xd83d), TEST_INT16_BYTES(0xde03),
+    0x00, 0x00, 0x00, 0x00
+};
+
 static const TestString16Data test_string16_tests[] = {
     { "null", NULL, TEST_ARRAY_AND_SIZE(string16_tests_data_null) },
     { "empty", "", TEST_ARRAY_AND_SIZE(string16_tests_data_empty) },
     { "1", "x", TEST_ARRAY_AND_SIZE(string16_tests_data_x) },
-    { "2", "xy", TEST_ARRAY_AND_SIZE(string16_tests_data_xy) }
+    { "2", "xy", TEST_ARRAY_AND_SIZE(string16_tests_data_xy) },
+    { "surrogates", "\xF0\x9F\x98\x80" "\xF0\x9F\x98\x81"
+      "\xF0\x9F\x98\x82" "\xF0\x9F\x98\x83",
+      TEST_ARRAY_AND_SIZE(string16_tests_data_surrogates) }
 };
 
 static
@@ -539,7 +551,7 @@ test_string16(
     data = gbinder_local_request_data(req);
     g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
-    g_assert(data->bytes->len == test->output_len);
+    g_assert_cmpuint(data->bytes->len, == ,test->output_len);
     g_assert(!memcmp(data->bytes->data, test->output, test->output_len));
     gbinder_local_request_unref(req);
 }
