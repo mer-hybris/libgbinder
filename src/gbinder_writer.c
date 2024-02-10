@@ -522,26 +522,30 @@ gbinder_writer_data_append_string16_len(
         glong len = g_utf8_strlen(utf8, num_bytes);
         gsize padded_len = G_ALIGN4((len+1)*2);
         guint32* len_ptr;
-        gunichar2* utf16_ptr;
+        gunichar2 *utf16_ptr, *utf16 = 0;
+
+        /* Create utf-16 string to make sure of its size */
+        /* TODO: this could be optimized for ASCII strings, i.e. if
+         * len equals num_bytes */
+        if (len > 0) {
+            glong utf16_len = 0;
+            utf16 = g_utf8_to_utf16(utf8, num_bytes, NULL,
+                &utf16_len, NULL);
+            if (utf16) {
+                len = utf16_len;
+                padded_len = G_ALIGN4((len+1)*2);
+            }
+        }
 
         /* Preallocate space */
         g_byte_array_set_size(buf, old_size + padded_len + 4);
         len_ptr = (guint32*)(buf->data + old_size);
         utf16_ptr = (gunichar2*)(len_ptr + 1);
 
-        /* TODO: this could be optimized for ASCII strings, i.e. if
-         * len equals num_bytes */
-        if (len > 0) {
-            glong utf16_len = 0;
-            gunichar2* utf16 = g_utf8_to_utf16(utf8, num_bytes, NULL,
-                &utf16_len, NULL);
-
-            if (utf16) {
-                len = utf16_len;
-                padded_len = G_ALIGN4((len+1)*2);
-                memcpy(utf16_ptr, utf16, (len+1)*2);
-                g_free(utf16);
-            }
+        /* Copy string */
+        if (utf16) {
+            memcpy(utf16_ptr, utf16, (len+1)*2);
+            g_free(utf16);
         }
 
         /* Actual length */
@@ -551,9 +555,6 @@ gbinder_writer_data_append_string16_len(
         if (padded_len - (len + 1)*2) {
             memset(utf16_ptr + (len + 1), 0, padded_len - (len + 1)*2);
         }
-
-        /* Correct the packet size if necessaary */
-        g_byte_array_set_size(buf, old_size + padded_len + 4);
     } else if (utf8) {
         /* Empty string */
         gbinder_writer_data_append_string16_empty(data);
