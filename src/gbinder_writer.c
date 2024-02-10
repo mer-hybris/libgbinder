@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -522,15 +522,14 @@ gbinder_writer_data_append_string16_len(
         glong len = g_utf8_strlen(utf8, num_bytes);
         gsize padded_len = G_ALIGN4((len+1)*2);
         guint32* len_ptr;
-        gunichar2 *utf16_ptr, *utf16 = 0;
+        gunichar2* utf16_ptr;
+        gunichar2* utf16 = NULL;
 
         /* Create utf-16 string to make sure of its size */
-        /* TODO: this could be optimized for ASCII strings, i.e. if
-         * len equals num_bytes */
         if (len > 0) {
             glong utf16_len = 0;
-            utf16 = g_utf8_to_utf16(utf8, num_bytes, NULL,
-                &utf16_len, NULL);
+
+            utf16 = g_utf8_to_utf16(utf8, num_bytes, NULL, &utf16_len, NULL);
             if (utf16) {
                 len = utf16_len;
                 padded_len = G_ALIGN4((len+1)*2);
@@ -544,7 +543,7 @@ gbinder_writer_data_append_string16_len(
 
         /* Copy string */
         if (utf16) {
-            memcpy(utf16_ptr, utf16, (len+1)*2);
+            memcpy(utf16_ptr, utf16, len*2);
             g_free(utf16);
         }
 
@@ -552,8 +551,8 @@ gbinder_writer_data_append_string16_len(
         *len_ptr = len;
 
         /* Zero padding */
-        if (padded_len - (len + 1)*2) {
-            memset(utf16_ptr + (len + 1), 0, padded_len - (len + 1)*2);
+        if (padded_len > len*2) {
+            memset(utf16_ptr + len, 0, padded_len - len*2);
         }
     } else if (utf8) {
         /* Empty string */
