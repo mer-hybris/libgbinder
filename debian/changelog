@@ -1,3 +1,10 @@
+libgbinder (1.1.36) unstable; urgency=low
+
+  * Support pkg-config cross-compilation
+  * Fixed handling of UTF-16 surrogate pairs
+
+ -- Slava Monich <slava@monich.com>  Sat, 10 Feb 2024 05:04:13 +0200
+
 libgbinder (1.1.35) unstable; urgency=low
 
   * Make unit tests independent on system config
