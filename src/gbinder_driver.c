@@ -506,7 +506,7 @@ gbinder_driver_reply_data(
     write.ptr = (uintptr_t)buf;
     write.size = len;
     write.consumed = 0;
-    status = gbinder_driver_write(self, &write) >= 0;
+    status = gbinder_driver_write(self, &write);
 
     g_free(offsets_buf);
     return status >= 0;
