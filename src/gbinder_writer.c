@@ -1203,13 +1203,18 @@ gbinder_writer_append_byte_array(
     GASSERT(len >= 0);
     if (G_LIKELY(data)) {
         GByteArray* buf = data->bytes;
-        void* ptr;
+        gsize padded_len;
+        guint8* ptr;
 
         if (!byte_array) {
             len = 0;
         }
 
-        gint32 padded_len = G_ALIGN4(len);
+        /*
+         * Android aligns byte array reads and writes to 4 bytes and
+         * pads with 0xFF.
+         */
+        padded_len = G_ALIGN4(len);
         g_byte_array_set_size(buf, buf->len + sizeof(len) + padded_len);
         ptr = buf->data + (buf->len - sizeof(len) - padded_len);
 
@@ -1219,7 +1224,7 @@ gbinder_writer_append_byte_array(
             memcpy(ptr, byte_array, len);
             /* FF padding */
             if (padded_len > len) {
-                memset(ptr, 0xFF, padded_len - len);
+                memset(ptr + len, 0xff, padded_len - len);
             }
         } else {
             *((gint32*)ptr) = -1;
