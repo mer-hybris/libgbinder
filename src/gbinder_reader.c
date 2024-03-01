@@ -770,7 +770,8 @@ gbinder_reader_read_byte_array(
             *len = (gsize)*ptr;
             p->ptr += sizeof(*ptr);
             data = p->ptr;
-            p->ptr += *len;
+            gsize pad = G_ALIGN4(*len);
+            p->ptr += pad;
         }
     }
     return data;

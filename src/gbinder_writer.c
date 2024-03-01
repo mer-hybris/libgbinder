@@ -1209,13 +1209,18 @@ gbinder_writer_append_byte_array(
             len = 0;
         }
 
-        g_byte_array_set_size(buf, buf->len + sizeof(len) + len);
-        ptr = buf->data + (buf->len - sizeof(len) - len);
+        gint32 padded_len = G_ALIGN4(len);
+        g_byte_array_set_size(buf, buf->len + sizeof(len) + padded_len);
+        ptr = buf->data + (buf->len - sizeof(len) - padded_len);
 
         if (len > 0) {
             *((gint32*)ptr) = len;
             ptr += sizeof(len);
             memcpy(ptr, byte_array, len);
+            /* FF padding */
+            if (padded_len > len) {
+                memset(ptr, 0xFF, padded_len - len);
+            }
         } else {
             *((gint32*)ptr) = -1;
         }
