@@ -1,6 +1,12 @@
+libgbinder (1.1.38) unstable; urgency=low
+
+  * Fixed byte array padding
+
+ -- Slava Monich <slava@monich.com>  Sat, 02 Mar 2024 02:11:50 +0200
+
 libgbinder (1.1.37) unstable; urgency=low
 
-  * Fix gbinder_driver_reply_data return value
+  * Fixed gbinder_driver_reply_data return value
 
  -- Slava Monich <slava@monich.com>  Mon, 26 Feb 2024 16:22:29 +0200
 
