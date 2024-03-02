@@ -45,6 +45,7 @@
 #include "gbinder_io.h"
 
 #include <gutil_intarray.h>
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 #include <gutil_log.h>
 
@@ -1410,7 +1411,7 @@ test_byte_array(
     GBinderOutputData* data;
     GBinderWriter writer;
 
-    const char in_data[] = "abcd1234";
+    const char in_data[] = "abcd12";
     gint32 in_len = sizeof(in_data) - 1;
     gint32 null_len = -1;
 
@@ -1443,7 +1444,7 @@ test_byte_array(
     data = gbinder_local_request_data(req);
     g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
-    g_assert(data->bytes->len == sizeof(in_len) + in_len);
+    g_assert(data->bytes->len == sizeof(in_len) + G_ALIGN4(in_len));
     g_assert(!memcmp(data->bytes->data, &in_len, sizeof(in_len)));
     g_assert(!memcmp(data->bytes->data + sizeof(in_len), in_data, in_len));
     gbinder_local_request_unref(req);
