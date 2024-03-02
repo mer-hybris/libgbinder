@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -770,8 +770,8 @@ gbinder_reader_read_byte_array(
             *len = (gsize)*ptr;
             p->ptr += sizeof(*ptr);
             data = p->ptr;
-            gsize pad = G_ALIGN4(*len);
-            p->ptr += pad;
+            /* Android aligns byte array reads and writes to 4 bytes */
+            p->ptr += G_ALIGN4(*len);
         }
     }
     return data;
