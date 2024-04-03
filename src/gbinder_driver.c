@@ -1173,7 +1173,7 @@ gbinder_driver_free_buffer(
         write.ptr = (uintptr_t)wbuf;
         write.size = len;
         write.consumed = 0;
-        gbinder_driver_write(self, &write);
+        (void) gbinder_driver_write(self, &write);
     }
 }
 
