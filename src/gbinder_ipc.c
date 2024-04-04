@@ -905,28 +905,25 @@ gbinder_ipc_looper_check(
 {
     if (G_LIKELY(self)) {
         GBinderIpcPriv* priv = self->priv;
+        GBinderIpcLooper* new_looper = NULL;
 
+        /* Lock */
+        g_mutex_lock(&priv->looper_mutex);
         if (!priv->primary_loopers) {
-            GBinderIpcLooper* looper;
+            priv->primary_loopers = gbinder_ipc_looper_new(self);
+            new_looper = priv->primary_loopers;
+            if (new_looper) {
+                gbinder_ipc_looper_ref(new_looper);
+            }
+        }
+        g_mutex_unlock(&priv->looper_mutex);
+        /* Unlock */
 
-            /* Lock */
-            g_mutex_lock(&priv->looper_mutex);
-            if (!priv->primary_loopers) {
-                priv->primary_loopers = gbinder_ipc_looper_new(self);
-            }
-            looper = priv->primary_loopers;
-            if (looper) {
-                gbinder_ipc_looper_ref(looper);
-            }
-            g_mutex_unlock(&priv->looper_mutex);
-            /* Unlock */
-
-            /* We are not ready to accept incoming transactions until
-             * looper has started. We may need to wait a bit. */
-            if (looper) {
-                gbinder_ipc_looper_start(looper);
-                gbinder_ipc_looper_unref(looper);
-            }
+        /* We are not ready to accept incoming transactions until
+         * looper has started. We may need to wait a bit. */
+        if (new_looper) {
+            gbinder_ipc_looper_start(new_looper);
+            gbinder_ipc_looper_unref(new_looper);
         }
     }
 }
