@@ -454,10 +454,23 @@ gbinder_driver_reply_status(
     memcpy(buf, code, sizeof(*code));
     ptr += sizeof(*code);
 
+    /* Translate legacy gbinder_status codes to recognizable values */
+    gint32 mapped_status;
+    switch (status) {
+    case GBINDER_STATUS_FAILED:
+        mapped_status = GBINDER_STATUS_UNKNOWN_ERROR;
+        break;
+    case GBINDER_STATUS_DEAD_OBJECT:
+        mapped_status = -EPIPE;
+        break;
+    default:
+        mapped_status = status;
+        break;
+    }
     /* Data */
-    ptr += io->encode_status_reply(ptr, &status);
+    ptr += io->encode_status_reply(ptr, &mapped_status);
 
-    GVERBOSE("< BC_REPLY (%d)", status);
+    GVERBOSE("< BC_REPLY (%d)", mapped_status);
     memset(&write, 0, sizeof(write));
     write.ptr = (uintptr_t)buf;
     write.size = ptr - buf;
@@ -835,14 +848,18 @@ gbinder_driver_txstatus(
              */
             switch (tx.status) {
             case (-EAGAIN):
-            case GBINDER_STATUS_FAILED:
-            case GBINDER_STATUS_DEAD_OBJECT:
-                txstatus = (-EFAULT);
-                GWARN("Replacing tx status %d with %d", tx.status, txstatus);
+            case GBINDER_STATUS_UNKNOWN_ERROR:
+                txstatus = GBINDER_STATUS_FAILED;
+                break;
+            case -EPIPE:
+                txstatus = GBINDER_STATUS_DEAD_OBJECT;
                 break;
             default:
                 txstatus = tx.status;
                 break;
+            }
+            if (txstatus != tx.status) {
+                GWARN("Replacing tx status %d with %d", tx.status, txstatus);
             }
         } else {
             gbinder_driver_handle_command(self, context, cmd, data);

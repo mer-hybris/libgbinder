@@ -346,7 +346,7 @@ test_sync_reply_error(
     g_assert(!gbinder_ipc_sync_main.sync_reply(ipc,handle,code,req,&status));
     g_assert_cmpint(status, == ,expected_status);
 
-    /* GBINDER_STATUS_FAILED gets replaced with -EFAULT */
+    /* Should return GBINDER_STATUS_FAILED */
     test_binder_ignore_dead_object(fd);
     test_binder_br_noop(fd, TX_THREAD);
     test_binder_br_transaction_complete(fd, TX_THREAD);
@@ -354,7 +354,7 @@ test_sync_reply_error(
     test_binder_br_reply_status(fd, TX_THREAD, unexpected_status);
 
     g_assert(!gbinder_ipc_sync_main.sync_reply(ipc,handle,code,req,&status));
-    g_assert_cmpint(status, == ,-EFAULT);
+    g_assert_cmpint(status, == , GBINDER_STATUS_FAILED);
 
     gbinder_local_request_unref(req);
     gbinder_ipc_unref(ipc);
