@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -74,7 +74,6 @@ test_null(
 
     g_assert(!gbinder_remote_request_ref(NULL));
     gbinder_remote_request_unref(NULL);
-    gbinder_remote_request_set_data(NULL, 0, NULL);
     gbinder_remote_request_init_reader(NULL, &reader);
     gbinder_remote_request_block(NULL);
     gbinder_remote_request_complete(NULL, NULL, 0);
