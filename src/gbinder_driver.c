@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -813,7 +813,7 @@ gbinder_driver_txstatus(
             gbinder_driver_verbose_transaction_data("BR_REPLY", &tx);
 
             /* Transfer data ownership to the reply */
-            if (tx.data && tx.size) {
+            if (tx.data && tx.size && reply) {
                 GBinderBuffer* buf = gbinder_buffer_new(self,
                     tx.data, tx.size, tx.objects);
 

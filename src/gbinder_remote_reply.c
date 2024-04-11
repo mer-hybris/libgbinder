@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -73,15 +73,12 @@ gbinder_remote_reply_set_data(
     GBinderRemoteReply* self,
     GBinderBuffer* buffer)
 {
-    if (G_LIKELY(self)) {
-        GBinderReaderData* data = &self->data;
+    /* The caller checks the pointer for NULL */
+    GBinderReaderData* data = &self->data;
 
-        gbinder_buffer_free(data->buffer);
-        data->buffer = buffer;
-        data->objects = gbinder_buffer_objects(buffer);
-    } else {
-        gbinder_buffer_free(buffer);
-    }
+    gbinder_buffer_free(data->buffer);
+    data->buffer = buffer;
+    data->objects = gbinder_buffer_objects(buffer);
 }
 
 GBinderRemoteReply*
