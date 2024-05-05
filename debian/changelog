@@ -1,3 +1,9 @@
+libgbinder (1.1.39) unstable; urgency=low
+
+  * Eliminate defects found by Coverity
+
+ -- Slava Monich <slava@monich.com>  Sun, 05 May 2024 20:03:44 +0300
+
 libgbinder (1.1.38) unstable; urgency=low
 
   * Fixed byte array padding
