@@ -43,8 +43,7 @@
 
 #define DEV_DEFAULT     GBINDER_DEFAULT_BINDER
 
-#define GBINDER_TRANSACTION(c2,c3,c4)     GBINDER_FOURCC('_',c2,c3,c4)
-#define GBINDER_DUMP_TRANSACTION          GBINDER_TRANSACTION('D','M','P')
+#define GBINDER_DUMP_TRANSACTION    GBINDER_AIDL_TRANSACTION('D','M','P')
 
 typedef struct app_options {
     char* dev;

@@ -109,7 +109,7 @@ gbinder_rpc_protocol_aidl_read_rpc_header(
     guint32 txcode,
     char** iface)
 {
-    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+    if (txcode > GBINDER_AIDL_TRANSACTION(0,0,0)) {
         /* Internal transaction e.g. GBINDER_DUMP_TRANSACTION etc. */
         *iface = NULL;
     } else if (gbinder_reader_read_int32(reader, NULL)) {
@@ -156,7 +156,7 @@ gbinder_rpc_protocol_aidl2_read_rpc_header(
     guint32 txcode,
     char** iface)
 {
-    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+    if (txcode > GBINDER_AIDL_TRANSACTION(0,0,0)) {
         /* Internal transaction e.g. GBINDER_DUMP_TRANSACTION etc. */
         *iface = NULL;
     } else if (gbinder_reader_read_int32(reader, NULL) /* flags */ &&
@@ -199,7 +199,7 @@ gbinder_rpc_protocol_aidl3_read_rpc_header(
     guint32 txcode,
     char** iface)
 {
-    if (txcode > GBINDER_TRANSACTION(0,0,0)) {
+    if (txcode > GBINDER_AIDL_TRANSACTION(0,0,0)) {
         *iface = NULL;
     } else if (gbinder_reader_read_int32(reader, NULL) /* flags */ &&
         gbinder_reader_read_int32(reader, NULL) /* work source */ &&
