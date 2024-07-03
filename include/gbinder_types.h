@@ -173,6 +173,13 @@ typedef enum gbinder_status {
     GBINDER_STATUS_DEAD_OBJECT
 } GBINDER_STATUS;
 
+typedef enum gbinder_stability_level {
+    GBINDER_STABILITY_UNDECLARED = 0,
+    GBINDER_STABILITY_VENDOR = 0x03,
+    GBINDER_STABILITY_SYSTEM = 0x0c,
+    GBINDER_STABILITY_VINTF = 0x3f
+} GBINDER_STABILITY_LEVEL;
+
 #define GBINDER_FOURCC(c1,c2,c3,c4) \
     (((c1) << 24) | ((c2) << 16) | ((c3) << 8) | (c4))
 

@@ -59,6 +59,7 @@ struct gbinder_local_object {
     const char* const* ifaces;
     gint weak_refs;
     gint strong_refs;
+    GBINDER_STABILITY_LEVEL stability;
 };
 
 typedef enum gbinder_local_transaction_support {

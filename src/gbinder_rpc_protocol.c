@@ -35,6 +35,7 @@
 #include "gbinder_writer.h"
 #include "gbinder_config.h"
 #include "gbinder_log.h"
+#include "gbinder_local_object_p.h"
 
 #define STRICT_MODE_PENALTY_GATHER (0x40 << 16)
 #define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
@@ -218,7 +219,11 @@ gbinder_rpc_protocol_aidl3_finish_flatten_binder(
     void* out,
     GBinderLocalObject* obj)
 {
-    *(guint32*)out = GBINDER_STABILITY_SYSTEM;
+    if (G_LIKELY(obj)) {
+        *(guint32*)out = obj->stability;
+    } else {
+        *(guint32*)out = GBINDER_STABILITY_UNDECLARED;
+    }
 }
 
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
