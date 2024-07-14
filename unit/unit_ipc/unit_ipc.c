@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -51,6 +51,7 @@
 #include <sys/types.h>
 
 static TestOpt test_opt;
+static const char TMP_DIR_TEMPLATE[] = "gbinder-test-ipc-XXXXXX";
 
 static
 gboolean
@@ -1346,6 +1347,9 @@ test_cancel_on_exit(
 
 int main(int argc, char* argv[])
 {
+    TestConfig test_config;
+    int result;
+
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
@@ -1375,7 +1379,10 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("drop_remote_refs"), test_drop_remote_refs);
     g_test_add_func(TEST_("cancel_on_exit"), test_cancel_on_exit);
     test_init(&test_opt, argc, argv);
-    return g_test_run();
+    test_config_init(&test_config, TMP_DIR_TEMPLATE);
+    result = g_test_run();
+    test_config_cleanup(&test_config);
+    return result;
 }
 
 /*
