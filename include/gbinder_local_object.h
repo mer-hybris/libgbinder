@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -64,7 +64,7 @@ gbinder_local_object_new_reply(
 void
 gbinder_local_object_set_stability(
     GBinderLocalObject* self,
-    GBINDER_STABILITY_LEVEL stability); /* Since 1.0.40 */
+    GBINDER_STABILITY_LEVEL stability); /* Since 1.1.40 */
 
 G_END_DECLS
 

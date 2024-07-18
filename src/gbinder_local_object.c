@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -615,7 +615,7 @@ gbinder_local_object_handle_release(
 void
 gbinder_local_object_set_stability(
     GBinderLocalObject* self,
-    GBINDER_STABILITY_LEVEL stability)
+    GBINDER_STABILITY_LEVEL stability) /* Since 1.1.40 */
 {
     if (G_LIKELY(self)) {
         self->stability = stability;

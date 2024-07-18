@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -140,6 +140,8 @@ test_null(
     gbinder_local_object_handle_decrefs(NULL);
     gbinder_local_object_handle_acquire(NULL, NULL);
     gbinder_local_object_handle_release(NULL);
+    gbinder_local_object_handle_release(NULL);
+    gbinder_local_object_set_stability(NULL, GBINDER_STABILITY_UNDECLARED);
 }
 
 /*==========================================================================*
