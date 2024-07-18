@@ -61,6 +61,11 @@ GBinderLocalReply*
 gbinder_local_object_new_reply(
     GBinderLocalObject* obj);
 
+void
+gbinder_local_object_set_stability(
+    GBinderLocalObject* self,
+    GBINDER_STABILITY_LEVEL stability); /* Since 1.0.40 */
+
 G_END_DECLS
 
 #endif /* GBINDER_LOCAL_OBJECT_H */

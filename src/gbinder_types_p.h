@@ -77,13 +77,6 @@ typedef struct gbinder_ipc_sync_api GBinderIpcSyncApi;
 /* As a special case, ServiceManager's handle is zero */
 #define GBINDER_SERVICEMANAGER_HANDLE (0)
 
-typedef enum gbinder_stability_level {
-    GBINDER_STABILITY_UNDECLARED = 0,
-    GBINDER_STABILITY_VENDOR = 0x03,
-    GBINDER_STABILITY_SYSTEM = 0x0c,
-    GBINDER_STABILITY_VINTF = 0x3f
-} GBINDER_STABILITY_LEVEL;
-
 #endif /* GBINDER_TYPES_PRIVATE_H */
 
 /*
