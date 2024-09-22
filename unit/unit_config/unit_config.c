@@ -531,11 +531,25 @@ static const TestPresetsData test_presets_data [] = {
         "[General]\n"
         "ApiLevel = 31\n"
         "[Protocol]\n"
-        "/dev/binder = aidl3\n"
-        "/dev/vndbinder = aidl3\n"
+        "/dev/binder = aidl4\n"
+        "/dev/vndbinder = aidl4\n"
         "[ServiceManager]\n"
         "/dev/binder = aidl4\n"
         "/dev/vndbinder = aidl4\n"
+    },{
+        "33",
+
+        "[General]\n"
+        "ApiLevel = 33",
+
+        "[General]\n"
+        "ApiLevel = 33\n"
+        "[Protocol]\n"
+        "/dev/binder = aidl3\n"
+        "/dev/vndbinder = aidl3\n"
+        "[ServiceManager]\n"
+        "/dev/binder = aidl3\n"
+        "/dev/vndbinder = aidl3\n"
     }
 };
 
