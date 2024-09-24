@@ -617,6 +617,7 @@ gbinder_reader_read_hidl_string_vec(
     return NULL;
 }
 
+/* The equivalent of Android's Parcel::readCString */
 const char*
 gbinder_reader_read_string8(
     GBinderReader* reader)
@@ -641,6 +642,49 @@ gbinder_reader_read_string8(
     return NULL;
 }
 
+/* The equivalent of Android's Parcel::readString8 */
+gboolean
+gbinder_reader_read_nullable_string8(
+    GBinderReader* reader,
+    const char** out,
+    gsize* out_len) /* Since 1.1.41 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+    if ((p->ptr + 4) <= p->end) {
+        const gint32* len_ptr = (gint32*)p->ptr;
+        const gint32 len = *len_ptr;
+
+        if (len == -1) {
+            /* NULL string */
+            p->ptr += 4;
+            if (out) {
+                *out = NULL;
+            }
+            if (out_len) {
+                *out_len = 0;
+            }
+            return TRUE;
+        } else if (len >= 0) {
+            const guint32 padded_len = G_ALIGN4(len + 1);
+            const char* str = (char*)(p->ptr + 4);
+
+            if ((p->ptr + padded_len + 4) <= p->end && !str[len]) {
+                p->ptr += padded_len + 4;
+                if (out) {
+                    *out = str;
+                }
+                if (out_len) {
+                    *out_len = len;
+                }
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+/* The equivalent of Android's Parcel::readString16 */
 gboolean
 gbinder_reader_read_nullable_string16(
     GBinderReader* reader,

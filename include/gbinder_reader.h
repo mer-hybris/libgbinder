@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -195,6 +195,15 @@ gbinder_reader_skip_buffer(
 const char*
 gbinder_reader_read_string8(
     GBinderReader* reader);
+
+gboolean
+gbinder_reader_read_nullable_string8(
+    GBinderReader* reader,
+    const char** out,
+    gsize* out_len); /* Since 1.1.41 */
+
+#define gbinder_reader_skip_nullable_string8(reader) \
+    gbinder_reader_read_nullable_string8(reader, NULL, NULL)
 
 char*
 gbinder_reader_read_string16(
