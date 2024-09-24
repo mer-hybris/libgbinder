@@ -578,6 +578,12 @@ static const guint8 test_string16_in_short [] = {
     TEST_INT16_BYTES('o'), 0x00
 };
 
+static const guint8 test_string16_in_noterm [] = {
+    TEST_INT32_BYTES(3),
+    TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
+    TEST_INT16_BYTES('o'), TEST_INT16_BYTES('o') /* Missing terminator */
+};
+
 static const guint8 test_string16_in_basic1 [] = {
     TEST_INT32_BYTES(3),
     TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
@@ -595,6 +601,8 @@ static const TestStringData test_string16_tests [] = {
         sizeof(test_string16_in_invalid) },
     { "short", TEST_ARRAY_AND_SIZE(test_string16_in_short), NULL,
         sizeof(test_string16_in_short) },
+    { "noterm", TEST_ARRAY_AND_SIZE(test_string16_in_noterm), NULL,
+        sizeof(test_string16_in_noterm) },
     { "ok1", TEST_ARRAY_AND_SIZE(test_string16_in_basic1), "foo", 0 },
     { "ok2", TEST_ARRAY_AND_SIZE(test_string16_in_basic2), "foo", 1 }
 };
