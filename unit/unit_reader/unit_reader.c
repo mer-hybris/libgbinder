@@ -1,7 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -194,6 +193,7 @@ void
 test_bool(
     void)
 {
+    const guint8 in_short[] = { 0 };
     const guint8 in_true[] = { TEST_INT8_BYTES_4(TRUE) };
     const guint8 in_false[] = { TEST_INT8_BYTES_4(FALSE) };
     gboolean out = FALSE;
@@ -203,10 +203,21 @@ test_bool(
 
     g_assert(driver);
     memset(&data, 0, sizeof(data));
+
+    /* not enough data */
     data.buffer = gbinder_buffer_new(driver,
-        g_memdup(&in_true, sizeof(in_true)), sizeof(in_true), NULL);
+        g_memdup(TEST_ARRAY_AND_SIZE(in_short)), sizeof(in_short), NULL);
+
+    gbinder_reader_init(&reader, &data, 0, data.buffer->size);
+    g_assert(!gbinder_reader_read_bool(&reader, NULL));
+    g_assert(!gbinder_reader_read_bool(&reader, &out));
+    g_assert(!gbinder_reader_at_end(&reader));
 
     /* true */
+    gbinder_buffer_free(data.buffer);
+    data.buffer = gbinder_buffer_new(driver,
+        g_memdup(TEST_ARRAY_AND_SIZE(in_true)), sizeof(in_true), NULL);
+
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
     g_assert(gbinder_reader_read_bool(&reader, NULL));
     g_assert(gbinder_reader_at_end(&reader));
@@ -219,7 +230,7 @@ test_bool(
     /* false */
     gbinder_buffer_free(data.buffer);
     data.buffer = gbinder_buffer_new(driver,
-        g_memdup(&in_false, sizeof(in_false)), sizeof(in_false), NULL);
+        g_memdup(TEST_ARRAY_AND_SIZE(in_false)), sizeof(in_false), NULL);
 
     gbinder_reader_init(&reader, &data, 0, data.buffer->size);
     g_assert(gbinder_reader_read_bool(&reader, NULL));
