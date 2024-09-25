@@ -504,7 +504,7 @@ test_double(
 }
 
 /*==========================================================================*
- * string8
+ * cstring
  *==========================================================================*/
 
 typedef struct test_string_data {
@@ -515,28 +515,28 @@ typedef struct test_string_data {
     gboolean remaining;
 } TestStringData;
 
-static const guint8 test_string8_in_short [] = {
+static const guint8 test_cstring_in_short [] = {
     't', 'e', 's', 't', 0, 0, 0
 };
 
-static const guint8 test_string8_in_basic1 [] = {
+static const guint8 test_cstring_in_basic1 [] = {
     't', 'e', 's', 't', 0, 0, 0, 0
 };
 
-static const guint8 test_string8_in_basic2 [] = {
+static const guint8 test_cstring_in_basic2 [] = {
     't', 'e', 's', 't', 0, 0, 0, 0, 0
 };
 
-static const TestStringData test_string8_tests [] = {
-    { "short", TEST_ARRAY_AND_SIZE(test_string8_in_short), NULL,
-       sizeof(test_string8_in_short)},
-    { "ok1", TEST_ARRAY_AND_SIZE(test_string8_in_basic1), "test", 0 },
-    { "ok2", TEST_ARRAY_AND_SIZE(test_string8_in_basic2), "test", 1 }
+static const TestStringData test_cstring_tests [] = {
+    { "err", TEST_ARRAY_AND_SIZE(test_cstring_in_short), NULL,
+       sizeof(test_cstring_in_short)},
+    { "ok1", TEST_ARRAY_AND_SIZE(test_cstring_in_basic1), "test", 0 },
+    { "ok2", TEST_ARRAY_AND_SIZE(test_cstring_in_basic2), "test", 1 }
 };
 
 static
 void
-test_string8(
+test_cstring(
     gconstpointer test_data)
 {
     const TestStringData* test = test_data;
@@ -561,6 +561,119 @@ test_string8(
 }
 
 /*==========================================================================*
+ * string8
+ *==========================================================================*/
+
+static const guint8 test_string8_in_null [] = {
+    TEST_INT32_BYTES(-1)
+};
+
+static const guint8 test_string8_in_invalid [] = {
+    TEST_INT32_BYTES(-2)
+};
+
+static const guint8 test_string8_in_short1 [] = {
+    0x00
+};
+
+static const guint8 test_string8_in_short2 [] = {
+    TEST_INT32_BYTES(3), 'f', 'o', 'o'
+};
+
+static const guint8 test_string8_in_noterm [] = {
+    TEST_INT32_BYTES(3), 'f', 'o', 'o', 'x' /* Missing terminator */
+};
+
+static const guint8 test_string8_in_basic1 [] = {
+    TEST_INT32_BYTES(3), 'f', 'o', 'o', 0x00
+};
+
+static const guint8 test_string8_in_basic2 [] = {
+    TEST_INT32_BYTES(3), 'f', 'o', 'o', 0x00, 0x00
+};
+
+static const TestStringData test_string8_tests [] = {
+    { "invalid", TEST_ARRAY_AND_SIZE(test_string8_in_invalid), NULL,
+        sizeof(test_string8_in_invalid) },
+    { "short1", TEST_ARRAY_AND_SIZE(test_string8_in_short1), NULL,
+        sizeof(test_string8_in_short1) },
+    { "short2", TEST_ARRAY_AND_SIZE(test_string8_in_short2), NULL,
+        sizeof(test_string8_in_short2) },
+    { "noterm", TEST_ARRAY_AND_SIZE(test_string8_in_noterm), NULL,
+        sizeof(test_string8_in_noterm) },
+    { "ok1", TEST_ARRAY_AND_SIZE(test_string8_in_basic1), "foo", 0 },
+    { "ok2", TEST_ARRAY_AND_SIZE(test_string8_in_basic2), "foo", 1 }
+};
+
+static
+void
+test_string8_null(
+    void)
+{
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderReader reader;
+    GBinderReaderData data;
+    gsize len = 1;
+    char dummy;
+    const char* out = &dummy;
+
+    g_assert(driver);
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver,
+        g_memdup(TEST_ARRAY_AND_SIZE(test_string8_in_null)),
+        sizeof(test_string8_in_null), NULL);
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(test_string8_in_null));
+    g_assert(gbinder_reader_skip_nullable_string8(&reader));
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(test_string8_in_null));
+    g_assert(gbinder_reader_read_nullable_string8(&reader, &out, &len));
+    g_assert(gbinder_reader_at_end(&reader));
+    g_assert(!out);
+    g_assert(!len);
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+static
+void
+test_string8(
+    gconstpointer test_data)
+{
+    const TestStringData* test = test_data;
+    GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderReader r;
+    GBinderReaderData data;
+    const gboolean valid = (test->out != NULL);
+    const char* out = NULL;
+    gsize len = 0;
+
+    g_assert(driver);
+    memset(&data, 0, sizeof(data));
+    data.buffer = gbinder_buffer_new(driver, g_memdup(test->in, test->in_size),
+        test->in_size, NULL);
+
+    gbinder_reader_init(&r, &data, 0, test->in_size);
+    g_assert(gbinder_reader_skip_nullable_string8(&r) == valid);
+    g_assert(gbinder_reader_at_end(&r) == (!test->remaining));
+    g_assert_cmpuint(gbinder_reader_bytes_remaining(&r), == ,test->remaining);
+
+    gbinder_reader_init(&r, &data, 0, test->in_size);
+    g_assert(gbinder_reader_read_nullable_string8(&r, &out, &len) == valid);
+    g_assert(gbinder_reader_at_end(&r) == (!test->remaining));
+    g_assert_cmpuint(gbinder_reader_bytes_remaining(&r), == ,test->remaining);
+    if (valid) {
+        g_assert_cmpstr(out, ==, test->out);
+        g_assert_cmpuint(len, == ,strlen(test->out));
+    }
+
+    gbinder_buffer_free(data.buffer);
+    gbinder_driver_unref(driver);
+}
+
+/*==========================================================================*
  * string16
  *==========================================================================*/
 
@@ -576,6 +689,12 @@ static const guint8 test_string16_in_short [] = {
     TEST_INT32_BYTES(3),
     TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
     TEST_INT16_BYTES('o'), 0x00
+};
+
+static const guint8 test_string16_in_noterm [] = {
+    TEST_INT32_BYTES(3),
+    TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
+    TEST_INT16_BYTES('o'), TEST_INT16_BYTES('o') /* Missing terminator */
 };
 
 static const guint8 test_string16_in_basic1 [] = {
@@ -595,6 +714,8 @@ static const TestStringData test_string16_tests [] = {
         sizeof(test_string16_in_invalid) },
     { "short", TEST_ARRAY_AND_SIZE(test_string16_in_short), NULL,
         sizeof(test_string16_in_short) },
+    { "noterm", TEST_ARRAY_AND_SIZE(test_string16_in_noterm), NULL,
+        sizeof(test_string16_in_noterm) },
     { "ok1", TEST_ARRAY_AND_SIZE(test_string16_in_basic1), "foo", 0 },
     { "ok2", TEST_ARRAY_AND_SIZE(test_string16_in_basic2), "foo", 1 }
 };
@@ -2445,6 +2566,15 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("float"), test_float);
     g_test_add_func(TEST_("double"), test_double);
 
+    for (i = 0; i < G_N_ELEMENTS(test_cstring_tests); i++) {
+        const TestStringData* test = test_cstring_tests + i;
+        char* path = g_strconcat(TEST_("cstring/"), test->name, NULL);
+
+        g_test_add_data_func(path, test, test_cstring);
+        g_free(path);
+    }
+
+    g_test_add_func(TEST_("string8/null"), test_string8_null);
     for (i = 0; i < G_N_ELEMENTS(test_string8_tests); i++) {
         const TestStringData* test = test_string8_tests + i;
         char* path = g_strconcat(TEST_("string8/"), test->name, NULL);
