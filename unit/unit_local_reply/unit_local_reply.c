@@ -454,10 +454,7 @@ test_local_object(
     reply = test_local_reply_new();
     gbinder_local_reply_append_local_object(reply, NULL);
     data = gbinder_local_reply_data(reply);
-    offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets);
-    g_assert_cmpuint(offsets->count, == ,1);
-    g_assert_cmpuint(offsets->data[0], == ,0);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
     g_assert_cmpuint(data->bytes->len, == ,BINDER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
@@ -475,14 +472,10 @@ test_remote_object(
 {
     GBinderLocalReply* reply = test_local_reply_new();
     GBinderOutputData* data;
-    GUtilIntArray* offsets;
 
     gbinder_local_reply_append_remote_object(reply, NULL);
     data = gbinder_local_reply_data(reply);
-    offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
