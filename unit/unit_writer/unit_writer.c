@@ -1359,10 +1359,7 @@ test_local_object(
     gbinder_local_request_init_writer(req, &writer);
     gbinder_writer_append_local_object(&writer, NULL);
     data = gbinder_local_request_data(req);
-    offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets);
-    g_assert_cmpuint(offsets->count, == ,1);
-    g_assert_cmpuint(offsets->data[0], == ,0);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
     g_assert_cmpuint(data->bytes->len, == ,test->objsize);
     gbinder_local_request_unref(req);
@@ -1380,7 +1377,6 @@ test_remote_object(
 {
     GBinderLocalRequest* req = test_local_request_new_64();
     GBinderOutputData* data;
-    GUtilIntArray* offsets;
     GBinderWriter writer;
     TestContext test;
 
@@ -1388,10 +1384,7 @@ test_remote_object(
     gbinder_local_request_init_writer(req, &writer);
     gbinder_writer_append_remote_object(&writer, NULL);
     data = gbinder_local_request_data(req);
-    offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == BINDER_OBJECT_SIZE_64);
     gbinder_local_request_unref(req);

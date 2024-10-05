@@ -33,6 +33,7 @@
 #include "test_common.h"
 #include "test_binder.h"
 
+#include "gbinder_local_object.h"
 #include "gbinder_local_request_p.h"
 #include "gbinder_output_data.h"
 #include "gbinder_rpc_protocol.h"
@@ -40,6 +41,7 @@
 #include "gbinder_driver.h"
 #include "gbinder_writer.h"
 #include "gbinder_io.h"
+#include "gbinder_ipc.h"
 
 #include <gutil_intarray.h>
 
@@ -432,19 +434,36 @@ void
 test_local_object(
     void)
 {
-    GBinderLocalRequest* req = test_local_request_new();
+    GBinderLocalRequest* req;
     GBinderOutputData* data;
     GUtilIntArray* offsets;
+    GBinderIpc* ipc = gbinder_ipc_new(NULL, NULL);
+    const char* const ifaces[] = { "android.hidl.base@1.0::IBase", NULL };
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, ifaces, NULL, NULL);
 
-    gbinder_local_request_append_local_object(req, NULL);
+    /* Append a real object */
+    req = test_local_request_new();
+    gbinder_local_request_append_local_object(req, obj);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
+    g_assert_cmpuint(offsets->count, == ,1);
+    g_assert_cmpuint(offsets->data[0], == ,0);
+    g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
+    g_assert_cmpuint(data->bytes->len, == ,BINDER_OBJECT_SIZE_32);
+    gbinder_local_request_unref(req);
+
+    /* Append NULL object */
+    req = test_local_request_new();
+    gbinder_local_request_append_local_object(req, NULL);
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
+
+    gbinder_local_object_unref(obj);
+    gbinder_ipc_unref(ipc);
 }
 
 /*==========================================================================*
@@ -458,14 +477,10 @@ test_remote_object(
 {
     GBinderLocalRequest* req = test_local_request_new();
     GBinderOutputData* data;
-    GUtilIntArray* offsets;
 
     gbinder_local_request_append_remote_object(req, NULL);
     data = gbinder_local_request_data(req);
-    offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets);
-    g_assert(offsets->count == 1);
-    g_assert(offsets->data[0] == 0);
+    g_assert(!gbinder_output_data_offsets(data));
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == BINDER_OBJECT_SIZE_32);
     gbinder_local_request_unref(req);
@@ -539,12 +554,10 @@ test_remote_request_obj_validate_data(
     const GByteArray* bytes = data->bytes;
     GUtilIntArray* offsets = gbinder_output_data_offsets(data);
 
-    offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 3);
+    g_assert(offsets->count == 2);
     g_assert(offsets->data[0] == 4);
     g_assert(offsets->data[1] == 4 + BUFFER_OBJECT_SIZE_64);
-    g_assert(offsets->data[2] == 4 + 2*BUFFER_OBJECT_SIZE_64);
     g_assert(bytes->len == 4 + 2*BUFFER_OBJECT_SIZE_64 + BINDER_OBJECT_SIZE_64);
     /* GBinderHidlString + the contents (2 bytes) aligned at 8-byte boundary */
     g_assert(gbinder_output_data_buffers_size(data) ==
