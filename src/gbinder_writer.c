@@ -1176,8 +1176,11 @@ gbinder_writer_data_append_local_object(
     n = data->io->encode_local_object(buf->data + offset, obj, data->protocol);
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + n);
-    /* Record the offset */
-    gbinder_writer_data_record_offset(data, offset);
+
+    if (obj) {
+        /* Record the offset */
+        gbinder_writer_data_record_offset(data, offset);
+    }
 }
 
 void
@@ -1308,8 +1311,11 @@ gbinder_writer_data_append_remote_object(
     n = data->io->encode_remote_object(buf->data + offset, obj);
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + n);
-    /* Record the offset */
-    gbinder_writer_data_record_offset(data, offset);
+
+    if (obj) {
+        /* Record the offset */
+        gbinder_writer_data_record_offset(data, offset);
+    }
 }
 
 static
