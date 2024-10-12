@@ -141,15 +141,9 @@ static const GBinderConfigPresetEntry gbinder_config_31_protocol[] = {
     { NULL, NULL }
 };
 
-static const GBinderConfigPresetEntry gbinder_config_31_servicemanager[] = {
-    { "/dev/binder", "aidl4" },
-    { "/dev/vndbinder", "aidl4" },
-    { NULL, NULL }
-};
-
 static const GBinderConfigPresetGroup gbinder_config_31[] = {
     { GBINDER_CONFIG_GROUP_PROTOCOL, gbinder_config_31_protocol },
-    { GBINDER_CONFIG_GROUP_SERVICEMANAGER, gbinder_config_31_servicemanager },
+    { GBINDER_CONFIG_GROUP_SERVICEMANAGER, gbinder_config_30_servicemanager },
     { NULL, NULL }
 };
 

@@ -534,8 +534,8 @@ static const TestPresetsData test_presets_data [] = {
         "/dev/binder = aidl4\n"
         "/dev/vndbinder = aidl4\n"
         "[ServiceManager]\n"
-        "/dev/binder = aidl4\n"
-        "/dev/vndbinder = aidl4\n"
+        "/dev/binder = aidl3\n"
+        "/dev/vndbinder = aidl3\n"
     },{
         "33",
 
