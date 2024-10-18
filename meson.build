@@ -2,6 +2,8 @@ project('libgbinder', 'c',
   version: '1.1.40',
   meson_version : '>=0.56.0')
 
+conf = configuration_data()
+
 glib_dep = dependency('glib-2.0')
 gobject_dep = dependency('gobject-2.0')
 libglibutil_dep = dependency('libglibutil')
@@ -70,6 +72,16 @@ libgbinder_headers = files(
 )
 
 libgbinder_include = include_directories('include')
+
+cc = meson.get_compiler('c')
+
+conf.set10('HAS_PTHREAD_TIMEDJOIN_NP', cc.has_function('pthread_timedjoin_np'))
+
+add_project_arguments('-DHAS_CONFIG_H=1', language: 'c')
+configure_file(
+  output: 'config.h',
+  configuration: conf,
+)
 
 install_headers(libgbinder_headers, subdir: 'gbinder')
 
