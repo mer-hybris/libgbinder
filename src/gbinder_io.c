@@ -175,12 +175,10 @@ GBINDER_IO_FN(encode_local_object)(
     struct flat_binder_object* dest = out;
 
     memset(dest, 0, sizeof(*dest));
+    dest->hdr.type = BINDER_TYPE_BINDER;
     if (obj) {
-        dest->hdr.type = BINDER_TYPE_BINDER;
         dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
         dest->binder = (uintptr_t)obj;
-    } else {
-        dest->hdr.type = BINDER_TYPE_HANDLE;
     }
     if (protocol->finish_flatten_binder) {
         protocol->finish_flatten_binder(dest + 1, obj);
