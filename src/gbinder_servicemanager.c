@@ -1021,6 +1021,7 @@ gbinder_servicemanager_remove_handlers(
                     GDEBUG("Unwatching %s", watch->name);
                     watch->watched = FALSE;
                     klass->unwatch(self, watch->name);
+                    // coverity[overflow_const:FALSE]
                     disconnected--;
                 }
             }
