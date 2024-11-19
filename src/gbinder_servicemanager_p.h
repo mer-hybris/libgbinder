@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -40,13 +40,12 @@
 #include <glib-object.h>
 
 typedef struct gbinder_servicemanager_priv GBinderServiceManagerPriv;
-
-typedef struct gbinder_servicemanager {
+struct gbinder_servicemanager {
     GObject parent;
     GBinderServiceManagerPriv* priv;
     const char* dev;
     GBinderClient* client;
-} GBinderServiceManager;
+};
 
 typedef enum gbinder_servicemanager_name_check {
     GBINDER_SERVICEMANAGER_NAME_OK,
