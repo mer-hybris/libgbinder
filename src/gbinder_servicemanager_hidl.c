@@ -290,6 +290,29 @@ gbinder_servicemanager_hidl_normalize_name(
 }
 
 static
+void
+gbinder_servicemanager_hidl_handle_watch_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* data)
+{
+    gboolean success = FALSE;
+    if (status == GBINDER_STATUS_OK && reply) {
+        GBinderReader reader;
+
+        gbinder_remote_reply_init_reader(reply, &reader);
+        if (gbinder_reader_read_int32(&reader, &status) &&
+            status == GBINDER_STATUS_OK) {
+            gbinder_reader_read_bool(&reader, &success);
+        }
+    }
+    if (!success) {
+        GERR("registerForNotifications failed");
+    }
+}
+
+static
 gboolean
 gbinder_servicemanager_hidl_watch(
     GBinderServiceManager* manager,
@@ -297,11 +320,8 @@ gbinder_servicemanager_hidl_watch(
 {
     GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(manager);
     GBinderLocalRequest* req = gbinder_client_new_request(manager->client);
-    GBinderRemoteReply* reply;
     GBinderServiceManagerHidlWatch* watch =
         g_new0(GBinderServiceManagerHidlWatch, 1);
-    gboolean success = FALSE;
-    int status;
 
     watch->name = g_strdup(name);
     watch->callback = gbinder_servicemanager_new_local_object(manager,
@@ -314,26 +334,12 @@ gbinder_servicemanager_hidl_watch(
     gbinder_local_request_append_hidl_string(req, name);
     gbinder_local_request_append_hidl_string(req, "");
     gbinder_local_request_append_local_object(req, watch->callback);
-    reply = gbinder_client_transact_sync_reply(manager->client,
-        REGISTER_FOR_NOTIFICATIONS_TRANSACTION, req, &status);
+    gbinder_client_transact(manager->client,
+        REGISTER_FOR_NOTIFICATIONS_TRANSACTION, 0, req, gbinder_servicemanager_hidl_handle_watch_reply, NULL, NULL);
 
-    if (status == GBINDER_STATUS_OK && reply) {
-        GBinderReader reader;
-
-        gbinder_remote_reply_init_reader(reply, &reader);
-        if (gbinder_reader_read_int32(&reader, &status) &&
-            status == GBINDER_STATUS_OK) {
-            gbinder_reader_read_bool(&reader, &success);
-        }
-    }
-    gbinder_remote_reply_unref(reply);
     gbinder_local_request_unref(req);
 
-    if (!success) {
-        /* unwatch() won't be called if we return FALSE */
-        g_hash_table_remove(self->watch_table, watch->name);
-    }
-    return success;
+    return TRUE;
 }
 
 static
