@@ -1350,7 +1350,6 @@ test_local_object(
     const TestLocalObjectData* test = test_data;
     GBinderLocalRequest* req;
     GBinderOutputData* data;
-    GUtilIntArray* offsets;
     GBinderWriter writer;
     TestContext context;
 
