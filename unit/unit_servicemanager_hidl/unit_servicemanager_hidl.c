@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2021-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2021-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -335,6 +335,16 @@ test_notify_add_cb(
 
 static
 void
+test_notify_unreached_cb(
+    GBinderServiceManager* sm,
+    const char* name,
+    void* user_data)
+{
+    g_assert_not_reached();
+}
+
+static
+void
 test_notify_cb(
     GBinderServiceManager* sm,
     const char* name,
@@ -384,7 +394,13 @@ test_notify_run()
     g_assert(!gbinder_servicemanager_add_registration_handler(sm, ",",
         test_notify_never, NULL));
 
-    /* Start watching */
+    /* Register and immediately unregister the handler */
+    id = gbinder_servicemanager_add_registration_handler(sm, name,
+        test_notify_unreached_cb, NULL);
+    g_assert(id);
+    gbinder_servicemanager_remove_handler(sm, id);
+
+    /* Actually start watching */
     id = gbinder_servicemanager_add_registration_handler(sm, name,
         test_notify_cb, &test);
     g_assert(id);

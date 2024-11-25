@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -45,7 +45,14 @@
 typedef struct gbinder_servicemanager_hidl_watch {
     char* name;
     GBinderLocalObject* callback;
+    GBinderClient* client;
+    gulong tx_id;
 } GBinderServiceManagerHidlWatch;
+
+typedef struct gbinder_servicemanager_hidl_watch_call {
+    GBinderLocalObject* callback;
+    GBinderServiceManagerHidlWatch* watch;
+} GBinderServiceManagerHidlWatchCall;
 
 typedef GBinderServiceManagerClass GBinderServiceManagerHidlClass;
 typedef struct gbinder_servicemanager_hidl {
@@ -253,9 +260,66 @@ gbinder_servicemanager_hidl_watch_free(
 {
     GBinderServiceManagerHidlWatch* watch = data;
 
-    g_free(watch->name);
     gbinder_local_object_drop(watch->callback);
+    gbinder_client_cancel(watch->client, watch->tx_id);
+    gbinder_client_unref(watch->client);
+    g_free(watch->name);
     g_free(watch);
+}
+
+static
+void
+gbinder_servicemanager_hidl_watch_call_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int tx_status,
+    void* user_data)
+{
+    GBinderServiceManagerHidlWatchCall* call = user_data;
+    GBinderServiceManagerHidlWatch* watch = call->watch;
+
+    /*
+     * We can only get here if the call wasn't cancelled by
+     * gbinder_servicemanager_hidl_watch_free() meaning that
+     * we can safely access GBinderServiceManagerHidlWatch.
+     */
+    watch->tx_id = 0;
+    if (tx_status == GBINDER_STATUS_OK) {
+        GBinderReader reader;
+        gint32 status;
+        gboolean success;
+
+        gbinder_remote_reply_init_reader(reply, &reader);
+        if (gbinder_reader_read_int32(&reader, &status) &&
+            gbinder_reader_read_bool(&reader, &success)) {
+            if (status == GBINDER_STATUS_OK && success) {
+                /* Successfully registered */
+                return;
+            } else {
+                GWARN("registerForNotifications(%s) failed", watch->name);
+            }
+        } else {
+            GWARN("Unexpected registerForNotifications(%s) reply", watch->name);
+        }
+    } else {
+        GWARN("registerForNotifications(%s) tx failed", watch->name);
+    }
+
+    /* There's no need to keep this object around if its registration failed */
+    gbinder_local_object_drop(watch->callback);
+    watch->callback = NULL;
+}
+
+static
+void
+gbinder_servicemanager_hidl_watch_call_destroy(
+    void* user_data)
+{
+    GBinderServiceManagerHidlWatchCall* call = user_data;
+
+    /* call->watch may be destroyed by now, don't touch it */
+    gbinder_local_object_unref(call->callback);
+    g_free(call);
 }
 
 static
@@ -297,13 +361,13 @@ gbinder_servicemanager_hidl_watch(
 {
     GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(manager);
     GBinderLocalRequest* req = gbinder_client_new_request(manager->client);
-    GBinderRemoteReply* reply;
     GBinderServiceManagerHidlWatch* watch =
         g_new0(GBinderServiceManagerHidlWatch, 1);
-    gboolean success = FALSE;
-    int status;
+    GBinderServiceManagerHidlWatchCall* call =
+        g_new0(GBinderServiceManagerHidlWatchCall, 1);
 
     watch->name = g_strdup(name);
+    watch->client = gbinder_client_ref(manager->client);
     watch->callback = gbinder_servicemanager_new_local_object(manager,
         SERVICEMANAGER_HIDL_NOTIFICATION_IFACE,
         gbinder_servicemanager_hidl_notification, self);
@@ -314,26 +378,37 @@ gbinder_servicemanager_hidl_watch(
     gbinder_local_request_append_hidl_string(req, name);
     gbinder_local_request_append_hidl_string(req, "");
     gbinder_local_request_append_local_object(req, watch->callback);
-    reply = gbinder_client_transact_sync_reply(manager->client,
-        REGISTER_FOR_NOTIFICATIONS_TRANSACTION, req, &status);
 
-    if (status == GBINDER_STATUS_OK && reply) {
-        GBinderReader reader;
-
-        gbinder_remote_reply_init_reader(reply, &reader);
-        if (gbinder_reader_read_int32(&reader, &status) &&
-            status == GBINDER_STATUS_OK) {
-            gbinder_reader_read_bool(&reader, &success);
-        }
-    }
-    gbinder_remote_reply_unref(reply);
+    /*
+     * GBinderServiceManagerHidlWatchCall keeps the additional reference
+     * to the callback object for the duration of the transaction. Since
+     * the transaction is asynchronous, the object may be unrefed before
+     * the transaction actually gets submitted, and we don't want to pass
+     * an invalid object pointer to the kernel. This extra ref makes sure
+     * that the pointer remains valid.
+     */
+    call->watch = watch;
+    call->callback = gbinder_local_object_ref(watch->callback);
+    watch->tx_id = gbinder_client_transact(watch->client,
+        REGISTER_FOR_NOTIFICATIONS_TRANSACTION, 0, req,
+        gbinder_servicemanager_hidl_watch_call_reply,
+        gbinder_servicemanager_hidl_watch_call_destroy, call);
     gbinder_local_request_unref(req);
 
-    if (!success) {
+    if (watch->tx_id) {
+        /*
+         * At this point, we don't really know whether the registration
+         * will actually succeed. Since in the worst case we just won't
+         * get any notifications, I don't see a good enough reason to
+         * complicate the internal interface to handle such an unlikely
+         * and non-critical issue.
+         */
+        return TRUE;
+    } else {
         /* unwatch() won't be called if we return FALSE */
         g_hash_table_remove(self->watch_table, watch->name);
+        return FALSE;
     }
-    return success;
 }
 
 static
