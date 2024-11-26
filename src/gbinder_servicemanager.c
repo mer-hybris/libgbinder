@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -993,36 +993,33 @@ gbinder_servicemanager_remove_handlers(
     guint count) /* Since 1.0.25 */
 {
     if (G_LIKELY(self) && G_LIKELY(ids) && G_LIKELY(count)) {
-        guint i, disconnected = 0;
+        GBinderServiceManagerClass* klass =
+            GBINDER_SERVICEMANAGER_GET_CLASS(self);
+        GBinderServiceManagerPriv* priv = self->priv;
+        GHashTableIter it;
+        gpointer value;
 
-        for (i = 0; i < count; i++) {
-            if (ids[i]) {
-                g_signal_handler_disconnect(self, ids[i]);
-                disconnected++;
-                ids[i] = 0;
-            }
-        }
+        gutil_disconnect_handlers(self, ids, count);
 
-        if (disconnected) {
-            GBinderServiceManagerClass* klass =
-                GBINDER_SERVICEMANAGER_GET_CLASS(self);
-            GBinderServiceManagerPriv* priv = self->priv;
-            GHashTableIter it;
-            gpointer value;
+        /*
+         * Regardless of whether we have actually removed any handlers, still
+         * check all watchers because there's a possibility that some handlers
+         * got removed with a straight g_signal_handler_disconnect() call.
+         */
+        g_hash_table_iter_init(&it, priv->watch_table);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            GBinderServiceManagerWatch* watch = value;
 
-            g_hash_table_iter_init(&it, priv->watch_table);
-            while (disconnected && g_hash_table_iter_next(&it, NULL, &value)) {
-                GBinderServiceManagerWatch* watch = value;
-
-                if (watch->watched && !g_signal_has_handler_pending(self,
-                    gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
-                    watch->quark, TRUE)) {
-                    /* This must be one of those we have just removed */
-                    GDEBUG("Unwatching %s", watch->name);
+            if (!g_signal_has_handler_pending(self,
+                gbinder_servicemanager_signals[SIGNAL_REGISTRATION],
+                watch->quark, TRUE)) {
+                /* No need to keep the watch around if no one is listening */
+                GDEBUG("Dropping watch %s", watch->name);
+                if (watch->watched) {
                     watch->watched = FALSE;
                     klass->unwatch(self, watch->name);
-                    disconnected--;
                 }
+                g_hash_table_iter_remove(&it);
             }
         }
     }
