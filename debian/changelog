@@ -1,3 +1,11 @@
+libgbinder (1.1.42) unstable; urgency=low
+
+  * Delete name watches with no handlers
+  * Register for sm notifications asynchronously
+  * Correct stability field wire format on Android 12
+
+ -- Slava Monich <slava@monich.com>  Wed, 11 Dec 2024 06:40:00 +0200
+
 libgbinder (1.1.41) unstable; urgency=low
 
   * Fix sending NULL binder object
