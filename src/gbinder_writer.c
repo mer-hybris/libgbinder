@@ -1324,7 +1324,7 @@ gbinder_writer_alloc(
     GBinderWriter* self,
     gsize size,
     gpointer (*alloc)(gsize),
-    void (*dealloc)())
+    void (*dealloc)(gpointer))
 {
     GBinderWriterData* data = gbinder_writer_data(self);
 
