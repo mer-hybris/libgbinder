@@ -35,6 +35,7 @@
 #include "gbinder_fmq_p.h"
 #include "gbinder_local_object.h"
 #include "gbinder_object_converter.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
@@ -301,6 +302,22 @@ gbinder_writer_data_append_int32(
 }
 
 void
+gbinder_writer_data_overwrite_int32(
+    GBinderWriterData* data,
+    gsize offset,
+    gint32 value)
+{
+    GByteArray* buf = data->bytes;
+
+    if (buf->len >= offset + sizeof(gint32)) {
+        *((gint32*)(buf->data + offset)) = value;
+    } else {
+        GWARN("Can't overwrite at %lu as buffer is only %u bytes long",
+            (gulong)offset, buf->len);
+    }
+}
+
+void
 gbinder_writer_overwrite_int32(
     GBinderWriter* self,
     gsize offset,
@@ -309,14 +326,7 @@ gbinder_writer_overwrite_int32(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data)) {
-        GByteArray* buf = data->bytes;
-
-        if (buf->len >= offset + sizeof(gint32)) {
-            *((gint32*)(buf->data + offset)) = value;
-        } else {
-            GWARN("Can't overwrite at %lu as buffer is only %u bytes long",
-                (gulong)offset, buf->len);
-        }
+        gbinder_writer_data_overwrite_int32(data, offset, value);
     }
 }
 
@@ -960,6 +970,56 @@ gbinder_writer_data_append_parcelable(
     }
 }
 
+/*
+ * This is supposed to be used to write aidl parcelables, and is not
+ * guaranteed to work on any other kind of parcelable.
+ * Returns offset needed for overwriting size of parcelable or -1
+ * if no data is to be written for the parcel.
+ */
+gssize
+gbinder_writer_data_append_parcelable_start(
+    GBinderWriterData* data,
+    gboolean has_data)
+{
+    gssize size_offset = -1;
+
+    if (has_data) {
+        /* Non-null */
+        gbinder_writer_data_append_int32(data, 1);
+
+        size_offset = data->bytes->len;
+        /*
+         * Write the dummy parcelable size which is later fixed using
+         * gbinder_writer_data_append_parcelable_finish.
+         */
+        gbinder_writer_data_append_int32(data, 0);
+    } else {
+        /* Null */
+        gbinder_writer_data_append_int32(data, 0);
+    }
+
+    return size_offset;
+}
+
+/*
+ * This is compatible with aidl parcelables, and is not guaranteed to work
+ * with any other kind of parcelable.
+ * Fixes size of parcelable using offset obtained from
+ * gbinder_writer_append_parcelable_start. Do nothing if no data was written
+ * to parceable, i.e. offset is -1.
+ */
+void
+gbinder_writer_data_append_parcelable_finish(
+    GBinderWriterData* data,
+    gssize offset)
+{
+    if (offset >= 0) {
+        /* Replace parcelable size with real value */
+        gbinder_writer_data_overwrite_int32(data, offset,
+            data->bytes->len - offset);
+    }
+}
+
 void
 gbinder_writer_append_hidl_string(
     GBinderWriter* self,
@@ -1282,6 +1342,52 @@ gbinder_writer_data_append_fmq_descriptor(
     gbinder_writer_data_append_fds(data, mqdesc->data.fds, &parent);
 }
 
+static
+void
+gbinder_writer_data_append_fmq_descriptor_aidl(
+    GBinderWriterData* data,
+    const GBinderFmq* queue)
+{
+    GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);
+
+    gssize size_offset;
+    int i;
+
+    /* Write the grantors */
+    GBinderFmqGrantorDescriptor *grantors = (GBinderFmqGrantorDescriptor *)desc->grantors.data.ptr;
+
+    gbinder_writer_data_append_int32(data, desc->grantors.count);
+    for (i = 0; i < desc->grantors.count; i++) {
+        gssize grantors_size_offset = gbinder_writer_data_append_parcelable_start(data, TRUE);
+        gbinder_writer_data_append_int32(data, grantors[i].fd_index);
+        gbinder_writer_data_append_int32(data, grantors[i].offset);
+        gbinder_writer_data_append_int64(data, grantors[i].extent);
+        gbinder_writer_data_append_parcelable_finish(data, grantors_size_offset);
+    }
+
+    /* Write the native handle */
+    size_offset = gbinder_writer_data_append_parcelable_start(data, TRUE);
+
+    gbinder_writer_data_append_int32(data, desc->data.fds->num_fds);
+    for (i = 0; i < desc->data.fds->num_fds; i++) {
+        gbinder_writer_data_append_int32(data, 1);
+        gbinder_writer_data_append_int32(data, 0);
+        gbinder_writer_data_append_fd(data, gbinder_fds_get_fd(desc->data.fds, i));
+    }
+    gbinder_writer_data_append_int32(data, desc->data.fds->num_ints);
+    for (i = 0; i < desc->data.fds->num_ints; i++) {
+        gbinder_writer_data_append_int32(data, gbinder_fds_get_fd(desc->data.fds, desc->data.fds->num_fds + i));
+    }
+
+    gbinder_writer_data_append_parcelable_finish(data, size_offset);
+
+    /* Write the quantum */
+    gbinder_writer_data_append_int32(data, desc->quantum);
+
+    /* Write the flagss */
+    gbinder_writer_data_append_int32(data, desc->flags);
+}
+
 void
 gbinder_writer_append_fmq_descriptor(
     GBinderWriter* self,
@@ -1290,7 +1396,14 @@ gbinder_writer_append_fmq_descriptor(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data) && G_LIKELY(queue)) {
-        gbinder_writer_data_append_fmq_descriptor(data, queue);
+        if (g_str_has_prefix(data->protocol->name, "aidl")) {
+            gssize size_offset = gbinder_writer_data_append_parcelable_start(data,
+                queue != NULL);
+            gbinder_writer_data_append_fmq_descriptor_aidl(data, queue);
+            gbinder_writer_data_append_parcelable_finish(data, size_offset);
+        } else {
+            gbinder_writer_data_append_fmq_descriptor(data, queue);
+        }
     }
 }
 
