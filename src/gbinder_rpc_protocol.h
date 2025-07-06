@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -58,6 +59,7 @@ struct gbinder_rpc_protocol {
     gsize flat_binder_object_extra;
     void (*finish_flatten_binder)(void* out, GBinderLocalObject* obj);
     void (*finish_unflatten_binder)(const void* in, GBinderRemoteObject* obj);
+    void (*write_fmq_descriptor)(GBinderWriter* writer, const GBinderFmq* queue);
 };
 
 const GBinderRpcProtocol*
