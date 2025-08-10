@@ -52,11 +52,12 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl3,
 #define PARENT_CLASS gbinder_servicemanager_aidl3_parent_class
 
 GBinderRemoteObject*
-gbinder_servicemanager_aidl3_get_service(
+gbinder_servicemanager_aidl3_get_service_internal(
     GBinderServiceManager* self,
     const char* name,
     int* status,
-    const GBinderIpcSyncApi* api)
+    const GBinderIpcSyncApi* api,
+    guint32 code)
 {
     GBinderClient* client = self->client;
     GBinderLocalRequest* req = gbinder_client_new_request(client);
@@ -66,7 +67,7 @@ gbinder_servicemanager_aidl3_get_service(
 
     gbinder_local_request_append_string16(req, name);
     reply = gbinder_client_transact_sync_reply2(client,
-        CHECK_SERVICE_TRANSACTION, req, status, api);
+        code, req, status, api);
 
     gbinder_remote_reply_init_reader(reply, &reader);
     gbinder_reader_read_int32(&reader, NULL /* status? */);
@@ -77,10 +78,22 @@ gbinder_servicemanager_aidl3_get_service(
     return obj;
 }
 
-char**
-gbinder_servicemanager_aidl3_list(
-    GBinderServiceManager* manager,
+GBinderRemoteObject*
+gbinder_servicemanager_aidl3_get_service(
+    GBinderServiceManager* self,
+    const char* name,
+    int* status,
     const GBinderIpcSyncApi* api)
+{
+    return gbinder_servicemanager_aidl3_get_service_internal(self, name,
+        status, api, CHECK_SERVICE_TRANSACTION);
+}
+
+char**
+gbinder_servicemanager_aidl3_list_internal(
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api,
+    guint32 code)
 {
     GPtrArray* list = g_ptr_array_new();
     GBinderClient* client = manager->client;
@@ -95,7 +108,7 @@ gbinder_servicemanager_aidl3_list(
      */
     gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_ALL);
     reply = gbinder_client_transact_sync_reply2(client,
-        LIST_SERVICES_TRANSACTION, req, NULL, api);
+        code, req, NULL, api);
 
     if (reply) {
         GBinderReader reader;
@@ -117,6 +130,15 @@ gbinder_servicemanager_aidl3_list(
     gbinder_local_request_unref(req);
     g_ptr_array_add(list, NULL);
     return (char**)g_ptr_array_free(list, FALSE);
+}
+
+char**
+gbinder_servicemanager_aidl3_list(
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
+{
+    return gbinder_servicemanager_aidl3_list_internal(manager, api,
+        LIST_SERVICES_TRANSACTION);
 }
 
 static

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -112,6 +113,7 @@ GType gbinder_servicemanager_aidl_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_aidl2_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_aidl3_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_aidl4_get_type(void) GBINDER_INTERNAL;
+GType gbinder_servicemanager_aidl5_get_type(void) GBINDER_INTERNAL;
 GType gbinder_servicemanager_hidl_get_type(void) GBINDER_INTERNAL;
 
 #endif /* GBINDER_SERVICEMANAGER_PRIVATE_H */

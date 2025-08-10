@@ -59,6 +59,14 @@ gbinder_servicemanager_hidl_get_type()
     return 0;
 }
 
+GType
+gbinder_servicemanager_aidl5_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
+    g_assert_not_reached();
+    return 0;
+}
+
 /*==========================================================================*
  * Test service manager
  *==========================================================================*/
