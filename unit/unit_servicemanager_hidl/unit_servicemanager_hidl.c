@@ -92,6 +92,14 @@ gbinder_servicemanager_aidl5_get_type()
     return 0;
 }
 
+GType
+gbinder_servicemanager_aidl6_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
+    g_assert_not_reached();
+    return 0;
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/

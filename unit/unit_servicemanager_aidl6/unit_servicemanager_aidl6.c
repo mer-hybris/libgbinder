@@ -49,7 +49,7 @@
 
 static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] =
-    "gbinder-test-servicemanager_aidl5-XXXXXX";
+    "gbinder-test-servicemanager_aidl6-XXXXXX";
 
 GType
 gbinder_servicemanager_hidl_get_type()
@@ -68,9 +68,9 @@ gbinder_servicemanager_aidl4_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl6_get_type()
+gbinder_servicemanager_aidl5_get_type()
 {
-    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
     g_assert_not_reached();
     return 0;
 }
@@ -82,32 +82,33 @@ gbinder_servicemanager_aidl6_get_type()
 #define SVCMGR_HANDLE (0)
 static const char SVCMGR_IFACE[] = "android.os.IServiceManager";
 enum servicemanager_aidl_tx {
-    AIDL5_GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
-    AIDL5_GET_SERVICE2_TRANSACTION,
-    AIDL5_CHECK_SERVICE_TRANSACTION,
-    AIDL5_ADD_SERVICE_TRANSACTION,
-    AIDL5_LIST_SERVICES_TRANSACTION
+    AIDL6_GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    AIDL6_GET_SERVICE2_TRANSACTION,
+    AIDL6_CHECK_SERVICE_TRANSACTION,
+    AIDL6_CHECK_SERVICE2_TRANSACTION,
+    AIDL6_ADD_SERVICE_TRANSACTION,
+    AIDL6_LIST_SERVICES_TRANSACTION
 };
 
 const char* const servicemanager_aidl_ifaces[] = { SVCMGR_IFACE, NULL };
 
-typedef GBinderLocalObjectClass ServiceManagerAidl5Class;
-typedef struct service_manager_aidl5 {
+typedef GBinderLocalObjectClass ServiceManagerAidl6Class;
+typedef struct service_manager_aidl6 {
     GBinderLocalObject parent;
     GHashTable* objects;
     GMutex mutex;
-} ServiceManagerAidl5;
+} ServiceManagerAidl6;
 
-#define SERVICE_MANAGER_AIDL5_TYPE (service_manager_aidl5_get_type())
-#define SERVICE_MANAGER_AIDL5(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        SERVICE_MANAGER_AIDL5_TYPE, ServiceManagerAidl5))
-G_DEFINE_TYPE(ServiceManagerAidl5, service_manager_aidl5, \
+#define SERVICE_MANAGER_AIDL6_TYPE (service_manager_aidl6_get_type())
+#define SERVICE_MANAGER_AIDL6(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        SERVICE_MANAGER_AIDL6_TYPE, ServiceManagerAidl6))
+G_DEFINE_TYPE(ServiceManagerAidl6, service_manager_aidl6, \
         GBINDER_TYPE_LOCAL_OBJECT)
 
 static
 GBinderLocalReply*
-servicemanager_aidl5_handler(
-    ServiceManagerAidl5* self,
+servicemanager_aidl6_handler(
+    ServiceManagerAidl6* self,
     GBinderRemoteRequest* req,
     guint code,
     int* status)
@@ -125,7 +126,8 @@ servicemanager_aidl5_handler(
     /* Lock */
     g_mutex_lock(&self->mutex);
     switch (code) {
-    case AIDL5_GET_SERVICE_TRANSACTION:
+    case AIDL6_GET_SERVICE_TRANSACTION:
+    case AIDL6_CHECK_SERVICE_TRANSACTION:
         gbinder_remote_request_init_reader(req, &reader);
         str = gbinder_reader_read_string16(&reader);
         if (str) {
@@ -145,7 +147,7 @@ servicemanager_aidl5_handler(
             g_free(str);
         }
         break;
-    case AIDL5_ADD_SERVICE_TRANSACTION:
+    case AIDL6_ADD_SERVICE_TRANSACTION:
         gbinder_remote_request_init_reader(req, &reader);
         str = gbinder_reader_read_string16(&reader);
         remote_obj = gbinder_reader_read_object(&reader);
@@ -162,7 +164,7 @@ servicemanager_aidl5_handler(
         g_free(str);
         gbinder_remote_object_unref(remote_obj);
         break;
-    case AIDL5_LIST_SERVICES_TRANSACTION:
+    case AIDL6_LIST_SERVICES_TRANSACTION:
         gbinder_remote_request_init_reader(req, &reader);
         if (gbinder_reader_read_uint32(&reader, &dumpsys_priority)) {
             if (g_hash_table_size(self->objects) == 1) {
@@ -196,7 +198,7 @@ servicemanager_aidl5_handler(
 
 static
 GBinderLocalReply*
-servicemanager_aidl5_handle_looper_transaction(
+servicemanager_aidl6_handle_looper_transaction(
     GBinderLocalObject* obj,
     GBinderRemoteRequest* req,
     guint code,
@@ -204,41 +206,41 @@ servicemanager_aidl5_handle_looper_transaction(
     int* status)
 {
     return !g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE) ?
-        servicemanager_aidl5_handler(SERVICE_MANAGER_AIDL5(obj),
+        servicemanager_aidl6_handler(SERVICE_MANAGER_AIDL6(obj),
             req, code, status) :
-        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl5_parent_class)->
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl6_parent_class)->
             handle_looper_transaction(obj, req, code, flags, status);
 }
 
 static
 GBINDER_LOCAL_TRANSACTION_SUPPORT
-servicemanager_aidl5_can_handle_transaction(
+servicemanager_aidl6_can_handle_transaction(
     GBinderLocalObject* self,
     const char* iface,
     guint code)
 {
     /* Handle servicemanager transactions on the looper thread */
     return !g_strcmp0(iface, SVCMGR_IFACE) ? GBINDER_LOCAL_TRANSACTION_LOOPER :
-        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl5_parent_class)->
+        GBINDER_LOCAL_OBJECT_CLASS(service_manager_aidl6_parent_class)->
             can_handle_transaction(self, iface, code);
 }
 
 static
 void
-service_manager_aidl5_finalize(
+service_manager_aidl6_finalize(
     GObject* object)
 {
-    ServiceManagerAidl5* self = SERVICE_MANAGER_AIDL5(object);
+    ServiceManagerAidl6* self = SERVICE_MANAGER_AIDL6(object);
 
     g_mutex_clear(&self->mutex);
     g_hash_table_destroy(self->objects);
-    G_OBJECT_CLASS(service_manager_aidl5_parent_class)->finalize(object);
+    G_OBJECT_CLASS(service_manager_aidl6_parent_class)->finalize(object);
 }
 
 static
 void
-service_manager_aidl5_init(
-    ServiceManagerAidl5* self)
+service_manager_aidl6_init(
+    ServiceManagerAidl6* self)
 {
     g_mutex_init(&self->mutex);
     self->objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
@@ -247,22 +249,22 @@ service_manager_aidl5_init(
 
 static
 void
-service_manager_aidl5_class_init(
-    ServiceManagerAidl5Class* klass)
+service_manager_aidl6_class_init(
+    ServiceManagerAidl6Class* klass)
 {
-    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl5_finalize;
+    G_OBJECT_CLASS(klass)->finalize = service_manager_aidl6_finalize;
     klass->can_handle_transaction =
-        servicemanager_aidl5_can_handle_transaction;
+        servicemanager_aidl6_can_handle_transaction;
     klass->handle_looper_transaction =
-        servicemanager_aidl5_handle_looper_transaction;
+        servicemanager_aidl6_handle_looper_transaction;
 }
 
 static
-ServiceManagerAidl5*
-servicemanager_aidl5_new(
+ServiceManagerAidl6*
+servicemanager_aidl6_new(
     const char* dev)
 {
-    ServiceManagerAidl5* self = g_object_new(SERVICE_MANAGER_AIDL5_TYPE, NULL);
+    ServiceManagerAidl6* self = g_object_new(SERVICE_MANAGER_AIDL6_TYPE, NULL);
     GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
@@ -283,7 +285,7 @@ typedef struct test_context {
     TestConfig config;
     char* config_file;
     GBinderLocalObject* object;
-    ServiceManagerAidl5* service;
+    ServiceManagerAidl6* service;
     GBinderServiceManager* client;
     GMainLoop* loop;
     int fd;
@@ -300,8 +302,8 @@ test_context_init(
         "Default = aidl3\n"
         "/dev/binder = aidl3\n"
         "[ServiceManager]\n"
-        "Default = aidl5\n"
-        "/dev/binder = aidl5\n";
+        "Default = aidl6\n"
+        "/dev/binder = aidl6\n";
     GBinderIpc* ipc;
 
     memset(test, 0, sizeof(*test));
@@ -316,7 +318,7 @@ test_context_init(
     test->fd = gbinder_driver_fd(ipc->driver);
     test->object = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     test_binder_register_object(test->fd, test->object, AUTO_HANDLE);
-    test->service = servicemanager_aidl5_new(dev);
+    test->service = servicemanager_aidl6_new(dev);
     test->client = gbinder_servicemanager_new(dev);
     test->loop = g_main_loop_new(NULL, FALSE);
     gbinder_ipc_unref(ipc);
@@ -462,7 +464,7 @@ test_list()
  * Common
  *==========================================================================*/
 
-#define TEST_(t) "/servicemanager_aidl5/" t
+#define TEST_(t) "/servicemanager_aidl6/" t
 
 int main(int argc, char* argv[])
 {
