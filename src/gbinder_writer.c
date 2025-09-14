@@ -732,6 +732,19 @@ gbinder_writer_data_append_fds(
     }
 }
 
+void
+gbinder_writer_append_fds(
+    GBinderWriter* self,
+    const GBinderFds *fds,
+    const GBinderParent* parent) /* Since 1.0.43 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_fds(data, fds, parent);
+    }
+}
+
 guint
 gbinder_writer_append_buffer_object_with_parent(
     GBinderWriter* self,

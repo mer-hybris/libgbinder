@@ -236,7 +236,7 @@ void
 gbinder_writer_append_fds(
     GBinderWriter* writer,
     const GBinderFds* fds,
-    const GBinderParent* parent); /* Since 1.1.14 */
+    const GBinderParent* parent); /* Since 1.1.43 */
 
 guint
 gbinder_writer_append_buffer_object_with_parent(
