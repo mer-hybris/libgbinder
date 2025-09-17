@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018-2024 Jolla Ltd.
  * Copyright (C) 2025 Jolla Mobile Ltd.
- * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -994,8 +994,8 @@ gbinder_writer_append_parcelable_start(
         if (has_data) {
             /* Non-null */
             gbinder_writer_data_append_int32(data, 1);
-
             size_offset = data->bytes->len;
+
             /*
              * Write the dummy parcelable size which is later fixed using
              * gbinder_writer_data_append_parcelable_finish.
@@ -1007,7 +1007,7 @@ gbinder_writer_append_parcelable_start(
         }
 
         return size_offset;
-        }
+    }
     return -1;
 }
 

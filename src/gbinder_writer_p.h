@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2025 Jolla Mobile Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -181,12 +181,14 @@ gbinder_writer_data_append_fd(
 gssize
 gbinder_writer_append_parcelable_start(
     GBinderWriter* writer,
-    gboolean has_data);
+    gboolean has_data)
+    GBINDER_INTERNAL;
 
 void
 gbinder_writer_append_parcelable_finish(
     GBinderWriter* writer,
-    gssize offset);
+    gssize offset)
+    GBINDER_INTERNAL;
 
 #endif /* GBINDER_WRITER_PRIVATE_H */
 

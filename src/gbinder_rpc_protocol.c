@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2025 Jolla Mobile Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -123,7 +123,8 @@ gbinder_rpc_protocol_aidl_write_fmq_descriptor(
     }
     gbinder_writer_append_int32(writer, desc->data.fds->num_ints);
     for (i = 0; i < desc->data.fds->num_ints; i++) {
-        gbinder_writer_append_int32(writer, gbinder_fds_get_fd(desc->data.fds, desc->data.fds->num_fds + i));
+        gbinder_writer_append_int32(writer, gbinder_fds_get_fd(desc->data.fds,
+            desc->data.fds->num_fds + i));
     }
 
     gbinder_writer_append_parcelable_finish(writer, size_offset);
@@ -393,6 +394,7 @@ gbinder_rpc_protocol_hidl_write_fmq_descriptor(
     GBinderFds* fds = gutil_memdup(desc->data.fds, fds_total);
 
     mqdesc->data.fds = fds;
+    gbinder_writer_add_cleanup(writer, g_free, mqdesc);
     gbinder_writer_add_cleanup(writer, g_free, fds);
 
     /* Fill in the grantor vector descriptor */
@@ -402,7 +404,6 @@ gbinder_rpc_protocol_hidl_write_fmq_descriptor(
         mqdesc->grantors.owns_buffer = TRUE;
         gbinder_writer_add_cleanup(writer, g_free, vec_buf);
     }
-    gbinder_writer_add_cleanup(writer, g_free, mqdesc);
 
     /* Write the FMQ descriptor object */
     parent.index = gbinder_writer_append_buffer_object(writer,

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
- * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2025 Jolla Mobile Ltd.
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -92,7 +92,8 @@ static
 GBinderLocalRequest*
 test_local_request_new_64_hidl()
 {
-    return test_local_request_new_with_io_dev(&gbinder_io_64, GBINDER_DEFAULT_HWBINDER);
+    return test_local_request_new_with_io_dev(&gbinder_io_64,
+        GBINDER_DEFAULT_HWBINDER);
 }
 
 /*==========================================================================*
@@ -1657,7 +1658,8 @@ int main(int argc, char* argv[])
         } else {
             close(test_fd);
             g_test_add_func(TEST_("fmq_descriptor"), test_fmq_descriptor);
-            g_test_add_func(TEST_("fmq_descriptor_aidl"), test_fmq_descriptor_aidl);
+            g_test_add_func(TEST_("fmq_descriptor_aidl"),
+                test_fmq_descriptor_aidl);
         }
     }
 #endif /* GBINDER_FMQ_SUPPORTED */
