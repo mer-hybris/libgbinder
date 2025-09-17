@@ -1,3 +1,11 @@
+libgbinder (1.1.43) unstable; urgency=low
+
+  * Add support for writing AIDL FMQs
+  * Add missing implementation for gbinder_writer_append_fds
+  * Explicitly declare function parameters for C23 compatibility
+
+ -- Slava Monich <slava@monich.com>  Wed, 17 Sep 2025 04:02:48 +0300
+
 libgbinder (1.1.42) unstable; urgency=low
 
   * Delete name watches with no handlers
