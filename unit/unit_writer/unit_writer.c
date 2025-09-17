@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2025 Jolla Mobile Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -57,11 +58,20 @@ static const char TMP_DIR_TEMPLATE[] = "gbinder-test-writer-XXXXXX";
 
 static
 GBinderLocalRequest*
+test_local_request_new_with_io_dev(
+    const GBinderIo* io,
+    const char *dev)
+{
+    return gbinder_local_request_new(io,
+      gbinder_rpc_protocol_for_device(dev), NULL);
+}
+
+static
+GBinderLocalRequest*
 test_local_request_new_with_io(
     const GBinderIo* io)
 {
-    return gbinder_local_request_new(io,
-      gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER), NULL);
+    return test_local_request_new_with_io_dev(io, GBINDER_DEFAULT_BINDER);
 }
 
 static
@@ -76,6 +86,13 @@ GBinderLocalRequest*
 test_local_request_new_64()
 {
     return test_local_request_new_with_io(&gbinder_io_64);
+}
+
+static
+GBinderLocalRequest*
+test_local_request_new_64_hidl()
+{
+    return test_local_request_new_with_io_dev(&gbinder_io_64, GBINDER_DEFAULT_HWBINDER);
 }
 
 /*==========================================================================*
@@ -1466,7 +1483,7 @@ test_fmq_descriptor(
         GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
 
     g_assert(fmq);
-    req = test_local_request_new_64();
+    req = test_local_request_new_64_hidl();
     gbinder_local_request_init_writer(req, &writer);
     gbinder_writer_append_fmq_descriptor(&writer, fmq);
     data = gbinder_local_request_data(req);
@@ -1477,6 +1494,36 @@ test_fmq_descriptor(
     g_assert(offsets->data[1] == BUFFER_OBJECT_SIZE_64);
     g_assert(offsets->data[2] == 2 * BUFFER_OBJECT_SIZE_64 + sizeof(gint64));
     g_assert(offsets->data[3] == 3 * BUFFER_OBJECT_SIZE_64 + sizeof(gint64));
+    g_assert_cmpuint(data->bytes->len, == ,len);
+    gbinder_local_request_unref(req);
+    gbinder_fmq_unref(fmq);
+}
+
+static
+void
+test_fmq_descriptor_aidl(
+    void)
+{
+    GBinderLocalRequest* req;
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    const gint32 len = 2 * sizeof(gint32) /* FMQ decriptor parcelable header */
+        + sizeof(gint32) + 4 * (4 * sizeof(gint32) + sizeof(gint64)) /* grantors + parcelable headers */
+        + 2 * sizeof(gint32) /* Native handle parcelable header */
+        + sizeof(gint32) + 2 * sizeof(gint32) + 3 * sizeof(gint64) /* fds (1 fd array) */
+        + sizeof(gint32) /* ints (0 int array) */
+        + sizeof(gint32) /* quantum */
+        + sizeof(gint32); /* flags */
+
+    GBinderFmq* fmq = gbinder_fmq_new(sizeof(guint32), 5,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE,
+        GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
+
+    g_assert(fmq);
+    req = test_local_request_new_64();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_fmq_descriptor(&writer, fmq);
+    data = gbinder_local_request_data(req);
     g_assert_cmpuint(data->bytes->len, == ,len);
     gbinder_local_request_unref(req);
     gbinder_fmq_unref(fmq);
@@ -1610,6 +1657,7 @@ int main(int argc, char* argv[])
         } else {
             close(test_fd);
             g_test_add_func(TEST_("fmq_descriptor"), test_fmq_descriptor);
+            g_test_add_func(TEST_("fmq_descriptor_aidl"), test_fmq_descriptor_aidl);
         }
     }
 #endif /* GBINDER_FMQ_SUPPORTED */

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -35,6 +36,7 @@
 #include "gbinder_fmq_p.h"
 #include "gbinder_local_object.h"
 #include "gbinder_object_converter.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
@@ -732,6 +734,19 @@ gbinder_writer_data_append_fds(
     }
 }
 
+void
+gbinder_writer_append_fds(
+    GBinderWriter* self,
+    const GBinderFds *fds,
+    const GBinderParent* parent) /* Since 1.0.43 */
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gbinder_writer_data_append_fds(data, fds, parent);
+    }
+}
+
 guint
 gbinder_writer_append_buffer_object_with_parent(
     GBinderWriter* self,
@@ -957,6 +972,61 @@ gbinder_writer_data_append_parcelable(
     } else {
         /* Null */
         gbinder_writer_data_append_int32(data, 0);
+    }
+}
+
+/*
+ * This is compatible with aidl parcelables, and is not guaranteed to work
+ * with any other kind of parcelable.
+ * Returns offset needed for overwriting size of parcelable or -1
+ * if no data is to be written for the parcel.
+ */
+gssize
+gbinder_writer_append_parcelable_start(
+    GBinderWriter* self,
+    gboolean has_data)
+{
+    GBinderWriterData* data = gbinder_writer_data(self);
+
+    if (G_LIKELY(data)) {
+        gssize size_offset = -1;
+
+        if (has_data) {
+            /* Non-null */
+            gbinder_writer_data_append_int32(data, 1);
+
+            size_offset = data->bytes->len;
+            /*
+             * Write the dummy parcelable size which is later fixed using
+             * gbinder_writer_data_append_parcelable_finish.
+             */
+            gbinder_writer_data_append_int32(data, 0);
+        } else {
+            /* Null */
+            gbinder_writer_data_append_int32(data, 0);
+        }
+
+        return size_offset;
+        }
+    return -1;
+}
+
+/*
+ * This is compatible with aidl parcelables, and is not guaranteed to work
+ * with any other kind of parcelable.
+ * Fixes size of parcelable using offset obtained from
+ * gbinder_writer_append_parcelable_start. Do nothing if no data was written
+ * to parceable, i.e. offset is -1.
+ */
+void
+gbinder_writer_append_parcelable_finish(
+    GBinderWriter* self,
+    gssize offset)
+{
+    if (offset >= 0) {
+        /* Replace parcelable size with real value */
+        gbinder_writer_overwrite_int32(self, offset,
+            gbinder_writer_bytes_written(self) - offset);
     }
 }
 
@@ -1237,51 +1307,6 @@ gbinder_writer_append_byte_array(
 
 #if GBINDER_FMQ_SUPPORTED
 
-static
-void
-gbinder_writer_data_append_fmq_descriptor(
-    GBinderWriterData* data,
-    const GBinderFmq* queue)
-{
-    GBinderParent parent;
-    GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);
-    GBinderMQDescriptor* mqdesc = gutil_memdup(desc,
-        sizeof(GBinderMQDescriptor));
-
-    const gsize vec_total =
-        desc->grantors.count * sizeof(GBinderFmqGrantorDescriptor);
-    void* vec_buf = gutil_memdup(desc->grantors.data.ptr, vec_total);
-
-    const gsize fds_total = sizeof(GBinderFds) +
-        sizeof(int) * (desc->data.fds->num_fds + desc->data.fds->num_ints);
-    GBinderFds* fds = gutil_memdup(desc->data.fds, fds_total);
-
-    mqdesc->data.fds = fds;
-    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, fds);
-
-    /* Fill in the grantor vector descriptor */
-    if (vec_buf) {
-        mqdesc->grantors.count = desc->grantors.count;
-        mqdesc->grantors.data.ptr = vec_buf;
-        mqdesc->grantors.owns_buffer = TRUE;
-        data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec_buf);
-    }
-    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, mqdesc);
-
-    /* Write the FMQ descriptor object */
-    parent.index = gbinder_writer_data_append_buffer_object(data,
-        mqdesc, sizeof(*mqdesc), NULL);
-
-    /* Write the vector data buffer */
-    parent.offset = GBINDER_MQ_DESCRIPTOR_GRANTORS_OFFSET;
-    gbinder_writer_data_append_buffer_object(data, vec_buf, vec_total,
-        &parent);
-
-    /* Write the fds */
-    parent.offset = GBINDER_MQ_DESCRIPTOR_FDS_OFFSET;
-    gbinder_writer_data_append_fds(data, mqdesc->data.fds, &parent);
-}
-
 void
 gbinder_writer_append_fmq_descriptor(
     GBinderWriter* self,
@@ -1290,7 +1315,7 @@ gbinder_writer_append_fmq_descriptor(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data) && G_LIKELY(queue)) {
-        gbinder_writer_data_append_fmq_descriptor(data, queue);
+        data->protocol->write_fmq_descriptor(self, queue);
     }
 }
 
