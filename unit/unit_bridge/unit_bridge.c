@@ -98,6 +98,7 @@ test_null(
     static const char* ifaces[] = { "foo", "bar", NULL};
 
     g_assert(!gbinder_bridge_new2(NULL, NULL, NULL, NULL, NULL));
+    g_assert(!gbinder_bridge_new3(NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new(NULL, NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", NULL, NULL, NULL));
     g_assert(!gbinder_bridge_new("foo", ifaces, NULL, NULL));
@@ -339,6 +340,123 @@ test_basic(
 }
 
 /*==========================================================================*
+ * direct_name
+ *==========================================================================*/
+
+static
+void
+test_direct_name_run(
+    void)
+{
+    TestBasic test;
+    TestServiceManagerHidl* dest_impl;
+    GBinderServiceManager* src;
+    GBinderServiceManager* dest;
+    GBinderIpc* src_ipc;
+    GBinderIpc* dest_ipc;
+    GBinderBridge* bridge;
+    GBinderLocalObject* obj;
+    GBinderRemoteObject* src_obj;
+    GBinderLocalRequest* req;
+    GBinderClient* src_client;
+    const char* name = TEST_IFACE "/test";
+    int src_fd, dest_fd, n = 0;
+    gulong id;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+
+    /* obj (DEST) <=> bridge <=> (SRC) mirror */
+    src_ipc = gbinder_ipc_new(SRC_DEV, NULL);
+    dest_ipc = gbinder_ipc_new(DEST_DEV, NULL);
+    test.src_impl = test_servicemanager_impl_new(SRC_DEV);
+    dest_impl = test_servicemanager_impl_new(DEST_DEV);
+    src_fd = gbinder_driver_fd(src_ipc->driver);
+    dest_fd = gbinder_driver_fd(dest_ipc->driver);
+    obj = gbinder_local_object_new(dest_ipc, TEST_IFACES, test_basic_cb, &n);
+
+    /* Set up binder simulator */
+    src = gbinder_servicemanager_new(SRC_DEV);
+    dest = gbinder_servicemanager_new(DEST_DEV);
+
+    /* Direct service name mode */
+    bridge = gbinder_bridge_new(name, NULL, src, dest);
+    g_assert(bridge);
+
+    /* Start watching the name */
+    id = gbinder_servicemanager_add_registration_handler(src, name,
+        test_basic_notify_cb, &test);
+    g_assert(id);
+
+    /* Register the object and wait for completion */
+    GDEBUG("Registering object '%s' => %p", name, obj);
+    g_assert(gbinder_servicemanager_add_service(dest, name, obj,
+        test_basic_add_cb, &test));
+
+    /* This loop quits after the name is added and notification is received */
+    test_run(&test_opt, test.loop);
+
+    GDEBUG("Bridge object has been registered on source");
+    g_assert_cmpint(test.src_notify_count, == ,1);
+    gbinder_servicemanager_remove_handler(src, id);
+
+    /* Get a remote reference to the object created by the bridge */
+    src_obj = gbinder_servicemanager_get_service_sync(src, name, NULL);
+    g_assert(!src_obj->dead);
+
+    /* Make a call */
+    GDEBUG("Submitting a call");
+    /* src_client will hold a reference to src_obj */
+    src_client = gbinder_client_new(src_obj, TEST_IFACE);
+    req = gbinder_client_new_request(src_client);
+    gbinder_local_request_append_int32(req, TX_PARAM);
+    g_assert(gbinder_client_transact(src_client, TX_CODE, 0, req,
+        test_basic_reply, NULL, test.loop));
+    gbinder_local_request_unref(req);
+
+    /* Wait for completion */
+    test_run(&test_opt, test.loop);
+
+    /* Kill the objects and wait for one of them to die */
+    g_assert(!src_obj->dead);
+    id = gbinder_remote_object_add_death_handler(src_obj, test_basic_death,
+        test.loop);
+
+    g_assert(test_servicemanager_hidl_remove(dest_impl, name));
+    GDEBUG("Killing destination objects");
+    test_binder_br_dead_binder_obj(dest_fd, obj);
+    test_binder_br_dead_binder(src_fd, ANY_THREAD, src_obj->handle);
+
+    /* Wait for the auto-created object to die */
+    test_run(&test_opt, test.loop);
+    g_assert(src_obj->dead);
+    gbinder_remote_object_remove_handler(src_obj, id);
+
+    GDEBUG("Done");
+
+    gbinder_local_object_drop(obj);
+    gbinder_bridge_free(bridge);
+    test_servicemanager_hidl_free(test.src_impl);
+    test_servicemanager_hidl_free(dest_impl);
+    gbinder_servicemanager_unref(src);
+    gbinder_servicemanager_unref(dest);
+    gbinder_client_unref(src_client);
+    gbinder_ipc_unref(src_ipc);
+    gbinder_ipc_unref(dest_ipc);
+
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_direct_name(
+    void)
+{
+    test_run_in_context(&test_opt, test_direct_name_run);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -356,6 +474,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("direct_name"), test_direct_name);
 
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);

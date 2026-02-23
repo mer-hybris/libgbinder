@@ -73,8 +73,9 @@ app_run(
             GMainLoop* loop = g_main_loop_new(NULL, TRUE);
             guint sigtrm = g_unix_signal_add(SIGTERM, app_signal, loop);
             guint sigint = g_unix_signal_add(SIGINT, app_signal, loop);
-            GBinderBridge* bridge = gbinder_bridge_new2
-                (opt->src_name, opt->dest_name, opt->ifaces, src, dest);
+            GBinderBridge* bridge = opt->ifaces ? gbinder_bridge_new2
+                (opt->src_name, opt->dest_name, opt->ifaces, src, dest) :
+                gbinder_bridge_new3(opt->src_name, opt->dest_name, src, dest);
 
             g_main_loop_run(loop);
 
@@ -137,27 +138,30 @@ app_init(
     };
 
     GError* error = NULL;
-    GOptionContext* options = g_option_context_new("SRC DST NAME IFACES...");
+    GOptionContext* options = g_option_context_new("SRC DST NAME [IFACES...]");
 
     gutil_log_default.level = GLOG_LEVEL_DEFAULT;
 
     g_option_context_add_main_entries(options, entries, NULL);
     g_option_context_set_summary(options,
-        "Forwards calls from device SRC to device DST.");
+        "Forwards calls from device SRC to device DST. IFACES are optional "
+        "for direct-name services (e.g. AIDL).");
 
     if (g_option_context_parse(options, &argc, &argv, &error)) {
-        if (argc >= 5) {
+        if (argc >= 4) {
             int i;
             const int first_iface = 4;
 
             opt->src = argv[1];
             opt->dest = argv[2];
             opt->dest_name = argv[3];
-            opt->ifaces = g_new(const char*, argc - first_iface + 1);
-            for (i = first_iface; i < argc; i++) {
-                opt->ifaces[i - first_iface] = argv[i];
+            if (argc > first_iface) {
+                opt->ifaces = g_new(const char*, argc - first_iface + 1);
+                for (i = first_iface; i < argc; i++) {
+                    opt->ifaces[i - first_iface] = argv[i];
+                }
+                opt->ifaces[i - first_iface] = NULL;
             }
-            opt->ifaces[i - first_iface] = NULL;
             ok = TRUE;
         } else {
             char* help = g_option_context_get_help(options, TRUE, NULL);

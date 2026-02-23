@@ -187,8 +187,12 @@ gbinder_bridge_interface_new(
     GBinderBridgeInterface* bi = g_slice_new0(GBinderBridgeInterface);
 
     bi->bridge = self;
-    bi->iface = g_strdup(iface);
-    bi->fqname = g_strconcat(iface, "/", dest_name, NULL);
+    if (iface) {
+        bi->iface = g_strdup(iface);
+        bi->fqname = g_strconcat(iface, "/", dest_name, NULL);
+    } else {
+        bi->fqname = g_strdup(dest_name);
+    }
     bi->src_name = g_strdup(src_name);
     bi->dest_name = g_strdup(dest_name);
     bi->dest_watch_id = gbinder_servicemanager_add_registration_handler
@@ -210,7 +214,11 @@ gbinder_bridge_new(
     GBinderServiceManager* src,
     GBinderServiceManager* dest) /* Since 1.1.5 */
 {
-    return gbinder_bridge_new2(name, NULL, ifaces, src, dest);
+    if (gutil_strv_length((const GStrV*)ifaces) > 0) {
+        return gbinder_bridge_new2(name, NULL, ifaces, src, dest);
+    } else {
+        return gbinder_bridge_new3(name, NULL, src, dest);
+    }
 }
 
 GBinderBridge*
@@ -240,6 +248,33 @@ gbinder_bridge_new2(
                 src_name, dest_name, ifaces[i]);
         }
         self->ifaces[i] = NULL;
+        return self;
+    }
+    return NULL;
+}
+
+GBinderBridge*
+gbinder_bridge_new3(
+    const char* src_name,
+    const char* dest_name,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest) /* Since 1.1.44 */
+{
+    if (!src_name) {
+        src_name = dest_name;
+    } else if (!dest_name) {
+        dest_name = src_name;
+    }
+    if (G_LIKELY(src_name) && G_LIKELY(dest_name) &&
+        G_LIKELY(src) && G_LIKELY(dest)) {
+        GBinderBridge* self = g_slice_new0(GBinderBridge);
+
+        self->src = gbinder_servicemanager_ref(src);
+        self->dest = gbinder_servicemanager_ref(dest);
+        self->ifaces = g_new(GBinderBridgeInterface*, 2);
+        self->ifaces[0] = gbinder_bridge_interface_new(self,
+            src_name, dest_name, NULL);
+        self->ifaces[1] = NULL;
         return self;
     }
     return NULL;
