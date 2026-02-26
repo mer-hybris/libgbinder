@@ -457,6 +457,32 @@ test_direct_name(
 }
 
 /*==========================================================================*
+ * incompatible
+ *==========================================================================*/
+
+static
+void
+test_incompatible(
+    void)
+{
+    const char* name = "test";
+    const char* fqname = TEST_IFACE "/test";
+    GBinderServiceManager* aidl = gbinder_defaultservicemanager_new(SRC_DEV);
+    GBinderServiceManager* hidl = gbinder_hwservicemanager_new(DEST_DEV);
+
+    g_assert(aidl);
+    g_assert(hidl);
+    g_assert(!gbinder_bridge_new(name, TEST_IFACES, aidl, hidl));
+    g_assert(!gbinder_bridge_new(name, TEST_IFACES, hidl, aidl));
+    g_assert(!gbinder_bridge_new3(NULL, fqname, aidl, hidl));
+    g_assert(!gbinder_bridge_new3(NULL, fqname, hidl, aidl));
+
+    gbinder_servicemanager_unref(aidl);
+    gbinder_servicemanager_unref(hidl);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -475,6 +501,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("direct_name"), test_direct_name);
+    g_test_add_func(TEST_("incompatible"), test_incompatible);
 
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);

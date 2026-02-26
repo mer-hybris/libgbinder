@@ -72,6 +72,32 @@ struct gbinder_bridge {
  *==========================================================================*/
 
 static
+gboolean
+gbinder_bridge_aidl_manager(
+    GBinderServiceManager* sm)
+{
+    return g_type_is_a(G_OBJECT_TYPE(sm),
+        gbinder_servicemanager_aidl_get_type());
+}
+
+static
+gboolean
+gbinder_bridge_manager_compatible(
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest)
+{
+    const gboolean src_aidl = gbinder_bridge_aidl_manager(src);
+    const gboolean dest_aidl = gbinder_bridge_aidl_manager(dest);
+
+    if (src_aidl != dest_aidl) {
+        GWARN("Incompatible service manager types (%s -> %s)",
+            G_OBJECT_TYPE_NAME(src), G_OBJECT_TYPE_NAME(dest));
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static
 void
 gbinder_bridge_dest_drop_remote_object(
     GBinderBridgeInterface* bi)
@@ -236,7 +262,8 @@ gbinder_bridge_new2(
     } else if (!dest_name) {
         dest_name = src_name;
     }
-    if (G_LIKELY(src_name) && G_LIKELY(n) && G_LIKELY(src) && G_LIKELY(dest)) {
+    if (G_LIKELY(src_name) && G_LIKELY(n) && G_LIKELY(src) && G_LIKELY(dest) &&
+        G_LIKELY(gbinder_bridge_manager_compatible(src, dest))) {
         GBinderBridge* self = g_slice_new0(GBinderBridge);
         guint i;
 
@@ -266,7 +293,8 @@ gbinder_bridge_new3(
         dest_name = src_name;
     }
     if (G_LIKELY(src_name) && G_LIKELY(dest_name) &&
-        G_LIKELY(src) && G_LIKELY(dest)) {
+        G_LIKELY(src) && G_LIKELY(dest) &&
+        G_LIKELY(gbinder_bridge_manager_compatible(src, dest))) {
         GBinderBridge* self = g_slice_new0(GBinderBridge);
 
         self->src = gbinder_servicemanager_ref(src);
