@@ -3,6 +3,7 @@
  * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
  * Copyright (C) 2021 Madhushan Nishantha <jlmadushan@gmail.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -119,22 +120,6 @@ gbinder_servicemanager_aidl3_list(
 }
 
 static
-GBinderLocalRequest*
-gbinder_servicemanager_aidl3_add_service_req(
-    GBinderClient* client,
-    const char* name,
-    GBinderLocalObject* obj)
-{
-    GBinderLocalRequest* req = gbinder_client_new_request(client);
-
-    gbinder_local_request_append_string16(req, name);
-    gbinder_local_request_append_local_object(req, obj);
-    gbinder_local_request_append_int32(req, 0);
-    gbinder_local_request_append_int32(req, DUMP_FLAG_PRIORITY_DEFAULT);
-    return req;
-}
-
-static
 void
 gbinder_servicemanager_aidl3_init(
     GBinderServiceManagerAidl3* self)
@@ -148,7 +133,7 @@ gbinder_servicemanager_aidl3_class_init(
 {
     GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
 
-    klass->add_service_req = gbinder_servicemanager_aidl3_add_service_req;
+    klass->add_service_req = gbinder_servicemanager_aidl2_add_service_req;
     manager->list = gbinder_servicemanager_aidl3_list;
     manager->get_service = gbinder_servicemanager_aidl3_get_service;
 }

@@ -2,6 +2,7 @@
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,6 +36,13 @@
 #define GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H
 
 #include "gbinder_servicemanager_aidl.h"
+
+GBinderLocalRequest*
+gbinder_servicemanager_aidl2_add_service_req(
+    GBinderClient* client,
+    const char* name,
+    GBinderLocalObject* obj)
+    GBINDER_INTERNAL;
 
 char**
 gbinder_servicemanager_aidl3_list(

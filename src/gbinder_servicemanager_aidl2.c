@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2020 Jolla Ltd.
  * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -59,7 +60,6 @@ gbinder_servicemanager_aidl2_list_services_req(
     return req;
 }
 
-static
 GBinderLocalRequest*
 gbinder_servicemanager_aidl2_add_service_req(
     GBinderClient* client,
