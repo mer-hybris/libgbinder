@@ -106,6 +106,8 @@ SRC += \
   gbinder_servicemanager_aidl2.c \
   gbinder_servicemanager_aidl3.c \
   gbinder_servicemanager_aidl4.c \
+  gbinder_servicemanager_aidl5.c \
+  gbinder_servicemanager_aidl6.c \
   gbinder_servicemanager_hidl.c
 
 SRC += \

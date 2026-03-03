@@ -1,7 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2021 Gary Wang <gary.wang@canonical.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
@@ -32,58 +31,77 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H
-#define GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H
+#include "gbinder_servicemanager_aidl_p.h"
+#include "gbinder_client_p.h"
+#include "gbinder_reader_p.h"
 
-#include "gbinder_servicemanager_aidl.h"
+#include <gbinder_local_request.h>
+#include <gbinder_remote_reply.h>
 
-int
-gbinder_servicemanager_aidl_add_service_internal(
-    GBinderServiceManager* manager,
-    const char* name,
-    GBinderLocalObject* obj,
-    const GBinderIpcSyncApi* api,
-    guint32 code)
-    GBINDER_INTERNAL;
+#include <gutil_log.h>
 
-GBinderLocalRequest*
-gbinder_servicemanager_aidl2_add_service_req(
-    GBinderClient* client,
-    const char* name,
-    GBinderLocalObject* obj)
-    GBINDER_INTERNAL;
+/* Variant of AIDL servicemanager appeared in Android 16 (API level 36) */
 
-char**
-gbinder_servicemanager_aidl3_list(
-    GBinderServiceManager* manager,
-    const GBinderIpcSyncApi* api)
-    GBINDER_INTERNAL;
+typedef GBinderServiceManagerAidl GBinderServiceManagerAidl6;
+typedef GBinderServiceManagerAidlClass GBinderServiceManagerAidl6Class;
 
-char**
-gbinder_servicemanager_aidl3_list_internal(
-    GBinderServiceManager* manager,
-    const GBinderIpcSyncApi* api,
-    guint32 code)
-    GBINDER_INTERNAL;
+G_DEFINE_TYPE(GBinderServiceManagerAidl6,
+    gbinder_servicemanager_aidl6,
+    GBINDER_TYPE_SERVICEMANAGER_AIDL)
+
+#define PARENT_CLASS gbinder_servicemanager_aidl6_parent_class
 
 GBinderRemoteObject*
-gbinder_servicemanager_aidl3_get_service_internal(
+gbinder_servicemanager_aidl6_get_service(
     GBinderServiceManager* self,
     const char* name,
     int* status,
-    const GBinderIpcSyncApi* api,
-    guint32 code)
-    GBINDER_INTERNAL;
+    const GBinderIpcSyncApi* api)
+{
+    return gbinder_servicemanager_aidl3_get_service_internal(self, name,
+        status, api, AIDL6_CHECK_SERVICE_TRANSACTION);
+}
 
-GBinderRemoteObject*
-gbinder_servicemanager_aidl3_get_service(
+char**
+gbinder_servicemanager_aidl6_list(
+    GBinderServiceManager* manager,
+    const GBinderIpcSyncApi* api)
+{
+    return gbinder_servicemanager_aidl3_list_internal(manager, api,
+        AIDL6_LIST_SERVICES_TRANSACTION);
+}
+
+static
+int
+gbinder_servicemanager_aidl6_add_service(
     GBinderServiceManager* manager,
     const char* name,
-    int* status,
+    GBinderLocalObject* obj,
     const GBinderIpcSyncApi* api)
-    GBINDER_INTERNAL;
+{
+    return gbinder_servicemanager_aidl_add_service_internal(manager, name, obj,
+        api, AIDL6_ADD_SERVICE_TRANSACTION);
+}
 
-#endif /* GBINDER_SERVICEMANAGER_AIDL_PRIVATE_H */
+static
+void
+gbinder_servicemanager_aidl6_init(
+    GBinderServiceManagerAidl6* self)
+{
+}
+
+static
+void
+gbinder_servicemanager_aidl6_class_init(
+    GBinderServiceManagerAidl6Class* klass)
+{
+    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
+
+    klass->add_service_req = gbinder_servicemanager_aidl2_add_service_req;
+    manager->list = gbinder_servicemanager_aidl6_list;
+    manager->get_service = gbinder_servicemanager_aidl6_get_service;
+    manager->add_service = gbinder_servicemanager_aidl6_add_service;
+}
 
 /*
  * Local Variables:
