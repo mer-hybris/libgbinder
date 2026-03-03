@@ -1,3 +1,9 @@
+libgbinder (1.1.44) unstable; urgency=low
+
+  * Added gbinder_bridge_new3 (direct-name bridging)
+
+ -- Slava Monich <slava@monich.com>  Tue, 03 Mar 2026 03:49:47 +0200
+
 libgbinder (1.1.43) unstable; urgency=low
 
   * Add support for writing AIDL FMQs
