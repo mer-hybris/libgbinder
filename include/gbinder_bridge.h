@@ -46,7 +46,8 @@ G_BEGIN_DECLS
  * "example@1.0::IBar"] would:
  *
  * 1. Watch "example@1.0::IFoo/foobar" and "example@1.0::IBar/foobar" on dest
- * 2. When those names appears, register objects with the same name on src
+ * 2. When those names appears, register objects on src under matching source
+ *    service names
  * 3. Pass calls coming from src to the dest objects and replies in the
  *    opposite direction
  * 4. When dest objects disappear, remove the corresponding bridging objects
@@ -70,6 +71,15 @@ gbinder_bridge_new2(
     const char* const* ifaces,
     GBinderServiceManager* src,
     GBinderServiceManager* dest) /* Since 1.1.6 */
+    G_GNUC_WARN_UNUSED_RESULT;
+
+/* Direct-name bridge (e.g. AIDL fq service names such as iface/instance). */
+GBinderBridge*
+gbinder_bridge_new3(
+    const char* src_name,
+    const char* dest_name,
+    GBinderServiceManager* src,
+    GBinderServiceManager* dest) /* Since 1.1.44 */
     G_GNUC_WARN_UNUSED_RESULT;
 
 void
