@@ -1,6 +1,7 @@
 /*
+ * Copyright (C) 2021-2026 Slava Monich <slava@monich.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd.
  * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,21 +31,18 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "gbinder_local_request.h"
-#include "gbinder_local_reply.h"
-#include "gbinder_proxy_object.h"
-#include "gbinder_remote_request_p.h"
-#include "gbinder_remote_reply.h"
-#include "gbinder_remote_object_p.h"
-#include "gbinder_servicename.h"
-#include "gbinder_servicemanager_p.h"
-#include "gbinder_client_p.h"
 #include "gbinder_bridge.h"
-#include "gbinder_ipc.h"
-#include "gbinder_log.h"
 
-#include <gutil_strv.h>
+#include "gbinder_client_p.h"
+#include "gbinder_log.h"
+#include "gbinder_proxy_object.h"
+#include "gbinder_remote_object_p.h"
+#include "gbinder_servicemanager_aidl.h"
+#include "gbinder_servicemanager_p.h"
+#include "gbinder_servicename.h"
+
 #include <gutil_macros.h>
+#include <gutil_strv.h>
 
 #include <errno.h>
 
@@ -76,8 +74,7 @@ gboolean
 gbinder_bridge_aidl_manager(
     GBinderServiceManager* sm)
 {
-    return g_type_is_a(G_OBJECT_TYPE(sm),
-        gbinder_servicemanager_aidl_get_type());
+    return g_type_is_a(G_OBJECT_TYPE(sm), GBINDER_TYPE_SERVICEMANAGER_AIDL);
 }
 
 static
