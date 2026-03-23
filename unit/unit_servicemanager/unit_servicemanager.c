@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -402,6 +403,22 @@ GType
 gbinder_servicemanager_aidl4_get_type()
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl4 */
+    g_assert_not_reached();
+    return 0;
+}
+
+GType
+gbinder_servicemanager_aidl5_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
+    g_assert_not_reached();
+    return 0;
+}
+
+GType
+gbinder_servicemanager_aidl6_get_type()
+{
+    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
     g_assert_not_reached();
     return 0;
 }

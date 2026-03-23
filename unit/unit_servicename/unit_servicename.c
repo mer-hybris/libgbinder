@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2022 Jolla Ltd.
  * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -242,6 +243,18 @@ gbinder_servicemanager_aidl3_get_type()
 
 GType
 gbinder_servicemanager_aidl4_get_type()
+{
+    return TEST_TYPE_SERVICEMANAGER;
+}
+
+GType
+gbinder_servicemanager_aidl5_get_type()
+{
+    return TEST_TYPE_SERVICEMANAGER;
+}
+
+GType
+gbinder_servicemanager_aidl6_get_type()
 {
     return TEST_TYPE_SERVICEMANAGER;
 }

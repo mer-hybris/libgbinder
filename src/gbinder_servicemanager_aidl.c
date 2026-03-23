@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -211,6 +212,26 @@ gbinder_servicemanager_aidl_get_service(
     return obj;
 }
 
+int
+gbinder_servicemanager_aidl_add_service_internal(
+    GBinderServiceManager* manager,
+    const char* name,
+    GBinderLocalObject* obj,
+    const GBinderIpcSyncApi* api,
+    guint32 code)
+{
+    int status;
+    GBinderClient* client = manager->client;
+    GBinderLocalRequest* req = GBINDER_SERVICEMANAGER_AIDL_GET_CLASS
+        (manager)->add_service_req(client, name, obj);
+    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply2(client,
+        code, req, &status, api);
+
+    gbinder_remote_reply_unref(reply);
+    gbinder_local_request_unref(req);
+    return status;
+}
+
 static
 int
 gbinder_servicemanager_aidl_add_service(
@@ -219,16 +240,8 @@ gbinder_servicemanager_aidl_add_service(
     GBinderLocalObject* obj,
     const GBinderIpcSyncApi* api)
 {
-    int status;
-    GBinderClient* client = manager->client;
-    GBinderLocalRequest* req = GBINDER_SERVICEMANAGER_AIDL_GET_CLASS
-        (manager)->add_service_req(client, name, obj);
-    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply2(client,
-        ADD_SERVICE_TRANSACTION, req, &status, api);
-
-    gbinder_remote_reply_unref(reply);
-    gbinder_local_request_unref(req);
-    return status;
+    return gbinder_servicemanager_aidl_add_service_internal(manager, name, obj,
+        api, ADD_SERVICE_TRANSACTION);
 }
 
 static

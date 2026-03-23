@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2020-2022 Jolla Ltd.
  * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2026 Jolla Mobile Ltd
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -60,6 +61,23 @@ enum gbinder_servicemanager_aidl_calls {
     CHECK_SERVICE_TRANSACTION,
     ADD_SERVICE_TRANSACTION,
     LIST_SERVICES_TRANSACTION
+};
+
+enum gbinder_servicemanager_aidl5_calls {
+    AIDL5_GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    AIDL5_GET_SERVICE2_TRANSACTION,
+    AIDL5_CHECK_SERVICE_TRANSACTION,
+    AIDL5_ADD_SERVICE_TRANSACTION,
+    AIDL5_LIST_SERVICES_TRANSACTION
+};
+
+enum gbinder_servicemanager_aidl6_calls {
+    AIDL6_GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    AIDL6_GET_SERVICE2_TRANSACTION,
+    AIDL6_CHECK_SERVICE_TRANSACTION,
+    AIDL6_CHECK_SERVICE2_TRANSACTION,
+    AIDL6_ADD_SERVICE_TRANSACTION,
+    AIDL6_LIST_SERVICES_TRANSACTION
 };
 
 #define DUMP_FLAG_PRIORITY_DEFAULT (0x08)
