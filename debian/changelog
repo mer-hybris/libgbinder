@@ -1,3 +1,11 @@
+libgbinder (1.1.45) unstable; urgency=low
+
+  * Add support for Android 15 (API level 35)
+  * Add support for Android 16 (API level 36)
+  * Conform to openSUSE shared library packaging policy
+
+ -- Slava Monich <slava@monich.com>  Mon, 23 Mar 2026 04:54:02 +0200
+
 libgbinder (1.1.44) unstable; urgency=low
 
   * Added gbinder_bridge_new3 (direct-name bridging)
