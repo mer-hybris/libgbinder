@@ -34,10 +34,11 @@ C interfaces for Android binder
 Summary: Runtime library for %{name}
 %else
 %define libname %{name}
+Requires: libglibutil >= %{libglibutil_version}
 %endif
 
 Requires: glib2 >= %{glib_version}
-Requires: libglibutil >= %{libglibutil_version}
+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
