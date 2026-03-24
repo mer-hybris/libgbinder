@@ -36,8 +36,11 @@ Summary: Runtime library for %{name}
 %define libname %{name}
 %endif
 
+# Fix for openSUSE
+%if 0%{?suse_version} == 0
 Requires: glib2 >= %{glib_version}
 Requires: libglibutil >= %{libglibutil_version}
+%endif
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
