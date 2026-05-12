@@ -32,6 +32,7 @@ C interfaces for Android binder
 
 %package -n %{libname}
 Summary: Runtime library for %{name}
+Provides: %{name} = %{version}
 %else
 %define libname %{name}
 %endif
