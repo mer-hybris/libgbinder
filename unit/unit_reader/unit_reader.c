@@ -572,6 +572,10 @@ static const guint8 test_string8_in_invalid [] = {
     TEST_INT32_BYTES(-2)
 };
 
+static const guint8 test_string8_in_too_long [] = {
+    TEST_INT32_BYTES(INT32_MAX)
+};
+
 static const guint8 test_string8_in_short1 [] = {
     0x00
 };
@@ -595,6 +599,8 @@ static const guint8 test_string8_in_basic2 [] = {
 static const TestStringData test_string8_tests [] = {
     { "invalid", TEST_ARRAY_AND_SIZE(test_string8_in_invalid), NULL,
         sizeof(test_string8_in_invalid) },
+    { "too_long", TEST_ARRAY_AND_SIZE(test_string8_in_too_long), NULL,
+        sizeof(test_string8_in_too_long) },
     { "short1", TEST_ARRAY_AND_SIZE(test_string8_in_short1), NULL,
         sizeof(test_string8_in_short1) },
     { "short2", TEST_ARRAY_AND_SIZE(test_string8_in_short2), NULL,
@@ -685,6 +691,10 @@ static const guint8 test_string16_in_invalid [] = {
     TEST_INT32_BYTES(-2)
 };
 
+static const guint8 test_string16_in_too_long [] = {
+    TEST_INT32_BYTES(INT32_MAX)
+};
+
 static const guint8 test_string16_in_short [] = {
     TEST_INT32_BYTES(3),
     TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
@@ -712,6 +722,8 @@ static const guint8 test_string16_in_basic2 [] = {
 static const TestStringData test_string16_tests [] = {
     { "invalid", TEST_ARRAY_AND_SIZE(test_string16_in_invalid), NULL,
         sizeof(test_string16_in_invalid) },
+    { "too_long", TEST_ARRAY_AND_SIZE(test_string16_in_too_long), NULL,
+        sizeof(test_string16_in_too_long) },
     { "short", TEST_ARRAY_AND_SIZE(test_string16_in_short), NULL,
         sizeof(test_string16_in_short) },
     { "noterm", TEST_ARRAY_AND_SIZE(test_string16_in_noterm), NULL,
