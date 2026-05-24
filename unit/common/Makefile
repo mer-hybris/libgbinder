@@ -1,7 +1,8 @@
 # -*- Mode: makefile-gmake -*-
 
-.PHONY: clean all debug release coverage
+.PHONY: unitclean clean cleaner all debug release coverage
 .PHONY: debug_lib release_lib coverage_lib
+.PHONY: valgrind test test-banner test-debug test-release
 
 #
 # Real test makefile defines EXE (and possibly SRC) and includes this one.
@@ -73,7 +74,7 @@ WARNINGS += -Wall -Wno-deprecated-declarations
 DEFINES += -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_32 \
   -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_MAX_ALLOWED
 INCLUDES += -I$(COMMON_DIR) -I$(LIB_DIR)/src -I$(LIB_DIR)/include
-BASE_FLAGS = -fPIC
+BASE_FLAGS = -fPIC -g
 BASE_LDFLAGS = $(BASE_FLAGS) $(LDFLAGS)
 BASE_CFLAGS = $(BASE_FLAGS) $(CFLAGS)
 FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
@@ -81,17 +82,14 @@ FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
 FULL_LDFLAGS = $(BASE_LDFLAGS)
 LIBS = $(shell $(PKG_CONFIG) --libs $(PKGS)) -lpthread
 QUIET_MAKE = $(MAKE) --no-print-directory
-DEBUG_FLAGS = -g
-RELEASE_FLAGS =
-COVERAGE_FLAGS = -g
 
-DEBUG_LDFLAGS = $(FULL_LDFLAGS) $(DEBUG_FLAGS)
-RELEASE_LDFLAGS = $(FULL_LDFLAGS) $(RELEASE_FLAGS)
-COVERAGE_LDFLAGS = $(FULL_LDFLAGS) $(COVERAGE_FLAGS) --coverage
+DEBUG_LDFLAGS = $(FULL_LDFLAGS)
+RELEASE_LDFLAGS = $(FULL_LDFLAGS)
+COVERAGE_LDFLAGS = $(FULL_LDFLAGS) --coverage
 
-DEBUG_CFLAGS = $(FULL_CFLAGS) $(DEBUG_FLAGS) -DDEBUG
-RELEASE_CFLAGS = $(FULL_CFLAGS) $(RELEASE_FLAGS) -O2
-COVERAGE_CFLAGS = $(FULL_CFLAGS) $(COVERAGE_FLAGS) --coverage
+DEBUG_CFLAGS = $(FULL_CFLAGS) -DDEBUG
+RELEASE_CFLAGS = $(FULL_CFLAGS) -O2
+COVERAGE_CFLAGS = $(FULL_CFLAGS) --coverage
 
 DEBUG_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_lib)
 RELEASE_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_lib)
@@ -161,14 +159,19 @@ clean: unitclean
 cleaner: unitclean
 	@$(MAKE) -C $(LIB_DIR) clean
 
-test_banner:
+test-banner:
 	@echo "===========" $(EXE) "=========== "
 
-test: test_banner debug 
-	@$(DEBUG_EXE)
+test-debug: test-banner debug
+	@$(DEBUG_EXE) $(TEST_OPTS)
 
-valgrind: test_banner debug
-	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no $(DEBUG_EXE)
+test-release: test-banner release
+	@$(RELEASE_EXE) $(TEST_OPTS)
+
+test: test-release
+
+valgrind: test-banner release
+	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no $(RELEASE_EXE) $(TEST_OPTS)
 
 $(DEBUG_BUILD_DIR):
 	mkdir -p $@
