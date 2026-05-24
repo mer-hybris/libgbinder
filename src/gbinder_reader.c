@@ -665,7 +665,7 @@ gbinder_reader_read_nullable_string8(
                 *out_len = 0;
             }
             return TRUE;
-        } else if (len >= 0) {
+        } else if (len >= 0 && len < INT32_MAX) {
             const guint32 padded_len = G_ALIGN4(len + 1);
             const char* str = (char*)(p->ptr + 4);
 
@@ -724,8 +724,8 @@ gbinder_reader_read_nullable_string16_utf16(
                 *out_len = 0;
             }
             return TRUE;
-        } else if (len >= 0) {
-            const guint32 padded_len = G_ALIGN4((len + 1)*2);
+        } else if (len >= 0 && len < INT32_MAX) {
+            const gsize padded_len = G_ALIGN4((((gsize)len) + 1) * 2);
 
             if ((p->ptr + padded_len + 4) <= p->end) {
                 const gunichar2* utf16 = (gunichar2*)(p->ptr + 4);
