@@ -1,7 +1,7 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -86,56 +86,101 @@ static const GBinderRpcProtocol* gbinder_rpc_protocol_default =
  * Common AIDL protocol
  *==========================================================================*/
 
+static
+void
+gbinder_rpc_protocol_aidl_write_fmq_grantor_descriptor(
+    GBinderWriter* writer,
+    const GBinderFmqGrantorDescriptor* grantor)
+{
+    GBinderWriter parcelable;
+
+    /*
+     * package android.hardware.common.fmq;
+     * parcelable GrantorDescriptor {
+     *   int fdIndex;
+     *   int offset;
+     *   long extent;
+     * }
+     */
+    gbinder_writer_start_parcelable(writer, &parcelable);
+    gbinder_writer_append_int32(&parcelable, grantor->fd_index);
+    gbinder_writer_append_int32(&parcelable, grantor->offset);
+    gbinder_writer_append_int64(&parcelable, grantor->extent);
+    gbinder_writer_finish_parcelable(&parcelable);
+}
+
+static
+void
+gbinder_rpc_protocol_aidl_write_fds(
+    GBinderWriter* writer,
+    const GBinderFds* fds)
+{
+    GBinderWriter parcelable;
+    guint i;
+
+    /*
+     * package android.hardware.common;
+     * parcelable NativeHandle {
+     *   ParcelFileDescriptor[] fds;
+     *   int[] ints;
+     * }
+     */
+    gbinder_writer_start_parcelable(writer, &parcelable);
+
+    /* fds */
+    gbinder_writer_append_int32(&parcelable, fds->num_fds);
+    for (i = 0; i < fds->num_fds; i++) {
+        gbinder_writer_append_int32(&parcelable, 1);
+        gbinder_writer_append_int32(&parcelable, 0);
+        gbinder_writer_append_fd(&parcelable, gbinder_fds_get_fd(fds, i));
+    }
+
+    /* ints */
+    gbinder_writer_append_int32(&parcelable, fds->num_ints);
+    for (i = 0; i < fds->num_ints; i++) {
+        gbinder_writer_append_int32(&parcelable,
+            gbinder_fds_get_fd(fds, fds->num_fds + i));
+    }
+    gbinder_writer_finish_parcelable(&parcelable);
+}
+
+static
 void
 gbinder_rpc_protocol_aidl_write_fmq_descriptor(
-    GBinderWriter* writer, const GBinderFmq* queue)
+    GBinderWriter* writer,
+    const GBinderFmq* queue)
 {
-    GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);
+    if (queue) {
+        const GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);
+        const GBinderFmqGrantorDescriptor* grantors = desc->grantors.data.ptr;
+        GBinderWriter parcelable;
+        guint i;
 
-    gssize size_offset;
-    int i;
+        /*
+         * package android.hardware.common.fmq;
+         * parcelable MQDescriptor<T, Flavor> {
+         *   android.hardware.common.fmq.GrantorDescriptor[] grantors;
+         *   android.hardware.common.NativeHandle handle;
+         *   int quantum;
+         *   int flags;
+         * }
+         */
+        gbinder_writer_start_parcelable(writer, &parcelable);
 
-    gssize fmq_size_offset = gbinder_writer_append_parcelable_start(writer,
-        queue != NULL);
+        /* grantors */
+        gbinder_writer_append_int32(&parcelable, desc->grantors.count);
+        for (i = 0; i < desc->grantors.count; i++) {
+            gbinder_rpc_protocol_aidl_write_fmq_grantor_descriptor
+                (&parcelable, grantors + i);
+        }
 
-    /* Write the grantors */
-    GBinderFmqGrantorDescriptor *grantors =
-        (GBinderFmqGrantorDescriptor *)desc->grantors.data.ptr;
-
-    gbinder_writer_append_int32(writer, desc->grantors.count);
-    for (i = 0; i < desc->grantors.count; i++) {
-        gssize grantors_size_offset =
-            gbinder_writer_append_parcelable_start(writer, TRUE);
-        gbinder_writer_append_int32(writer, grantors[i].fd_index);
-        gbinder_writer_append_int32(writer, grantors[i].offset);
-        gbinder_writer_append_int64(writer, grantors[i].extent);
-        gbinder_writer_append_parcelable_finish(writer, grantors_size_offset);
+        gbinder_rpc_protocol_aidl_write_fds(&parcelable, desc->data.fds);
+        gbinder_writer_append_int32(&parcelable, desc->quantum);
+        gbinder_writer_append_int32(&parcelable, desc->flags);
+        gbinder_writer_finish_parcelable(&parcelable);
+    } else {
+        gbinder_writer_append_null_parcelable(writer);
     }
-
-    /* Write the native handle */
-    size_offset = gbinder_writer_append_parcelable_start(writer, TRUE);
-
-    gbinder_writer_append_int32(writer, desc->data.fds->num_fds);
-    for (i = 0; i < desc->data.fds->num_fds; i++) {
-        gbinder_writer_append_int32(writer, 1);
-        gbinder_writer_append_int32(writer, 0);
-        gbinder_writer_append_fd(writer, gbinder_fds_get_fd(desc->data.fds, i));
-    }
-    gbinder_writer_append_int32(writer, desc->data.fds->num_ints);
-    for (i = 0; i < desc->data.fds->num_ints; i++) {
-        gbinder_writer_append_int32(writer, gbinder_fds_get_fd(desc->data.fds,
-            desc->data.fds->num_fds + i));
-    }
-
-    gbinder_writer_append_parcelable_finish(writer, size_offset);
-
-    /* Write the quantum */
-    gbinder_writer_append_int32(writer, desc->quantum);
-
-    /* Write the flags */
-    gbinder_writer_append_int32(writer, desc->flags);
-
-    gbinder_writer_append_parcelable_finish(writer, fmq_size_offset);
 }
 
 /*==========================================================================*
@@ -378,7 +423,8 @@ gbinder_rpc_protocol_hidl_read_rpc_header(
 
 void
 gbinder_rpc_protocol_hidl_write_fmq_descriptor(
-    GBinderWriter* writer, const GBinderFmq* queue)
+    GBinderWriter* writer,
+    const GBinderFmq* queue)
 {
     GBinderParent parent;
     GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(queue);

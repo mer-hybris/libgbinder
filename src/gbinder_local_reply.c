@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -184,7 +184,7 @@ gbinder_local_reply_init_writer(
     GBinderWriter* writer)
 {
     if (G_LIKELY(writer)) {
-        gbinder_writer_init(writer, G_LIKELY(self) ? &self->data : NULL);
+        gbinder_writer_init(writer, G_LIKELY(self) ? &self->data : NULL, 0);
     }
 }
 

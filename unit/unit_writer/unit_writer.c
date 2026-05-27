@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2025 Jolla Mobile Ltd.
- * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -968,14 +968,16 @@ test_parcelable(
     void)
 {
     const guint8 encoded_non_null[] = {
+        TEST_INT32_BYTES(42),
         TEST_INT32_BYTES(1),
         TEST_INT32_BYTES(sizeof(TestData) + sizeof(gint32)),
         TEST_INT32_BYTES(10)
     };
+    const gint32 prefix = 42;
     const gint32 test_null_value = 0;
     GBinderLocalRequest* req;
     GBinderOutputData* data;
-    GBinderWriter writer;
+    GBinderWriter writer, parcelable;
     TestData test_data;
 
     test_data.x = 10;
@@ -983,13 +985,27 @@ test_parcelable(
     /* Non-null */
     req = test_local_request_new();
     gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, prefix);
     gbinder_writer_append_parcelable(&writer, &test_data, sizeof(test_data));
 
     data = gbinder_local_request_data(req);
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(data->bytes->len == sizeof(encoded_non_null));
     g_assert(!memcmp(data->bytes->data, &encoded_non_null, data->bytes->len));
+    gbinder_local_request_unref(req);
 
+    /* Same with start/finish parcelable */
+    req = test_local_request_new();
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, prefix);
+    gbinder_writer_start_parcelable(&writer, &parcelable);
+    gbinder_writer_append_bytes(&parcelable, &test_data, sizeof(test_data));
+    gbinder_writer_finish_parcelable(&parcelable);
+
+    data = gbinder_local_request_data(req);
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(data->bytes->len == sizeof(encoded_non_null));
+    g_assert(!memcmp(data->bytes->data, &encoded_non_null, data->bytes->len));
     gbinder_local_request_unref(req);
 
     /* Null */
