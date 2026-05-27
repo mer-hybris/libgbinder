@@ -1,6 +1,6 @@
 Name: libgbinder
 
-Version: 1.1.46
+Version: 1.1.47
 Release: 0
 Summary: Binder client library
 License: BSD
