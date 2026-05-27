@@ -1,7 +1,7 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2024 Jolla Ltd.
- * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -52,7 +52,11 @@
 
 typedef struct gbinder_writer_priv {
     GBinderWriterData* data;
+    guint offset;
 } GBinderWriterPriv;
+
+#define kNullParcelableFlag (0)
+#define kNonNullParcelableFlag (1)
 
 const GBinderWriterType gbinder_writer_type_byte = { "byte", 1, NULL };
 const GBinderWriterType gbinder_writer_type_int32 = { "int32", 4, NULL };
@@ -177,10 +181,14 @@ gbinder_writer_data_record_offset(
 void
 gbinder_writer_init(
     GBinderWriter* self,
-    GBinderWriterData* data)
+    GBinderWriterData* data,
+    guint offset)
 {
+    GBinderWriterPriv* priv = gbinder_writer_cast(self);
+
     memset(self, 0, sizeof(*self));
-    gbinder_writer_cast(self)->data = data;
+    priv->data = data;
+    priv->offset = offset;
 }
 
 const void*
@@ -302,6 +310,23 @@ gbinder_writer_data_append_int32(
     *ptr = value;
 }
 
+static
+void
+gbinder_writer_data_overwrite_int32(
+    GBinderWriterData* data,
+    gsize offset,
+    gint32 value)
+{
+    GByteArray* buf = data->bytes;
+
+    if (buf->len >= offset + sizeof(gint32)) {
+        *((gint32*)(buf->data + offset)) = value;
+    } else {
+        GWARN("Can't overwrite at %lu as buffer is only %u bytes long",
+            (gulong)offset, buf->len);
+    }
+}
+
 void
 gbinder_writer_overwrite_int32(
     GBinderWriter* self,
@@ -311,14 +336,7 @@ gbinder_writer_overwrite_int32(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data)) {
-        GByteArray* buf = data->bytes;
-
-        if (buf->len >= offset + sizeof(gint32)) {
-            *((gint32*)(buf->data + offset)) = value;
-        } else {
-            GWARN("Can't overwrite at %lu as buffer is only %u bytes long",
-                (gulong)offset, buf->len);
-        }
+        gbinder_writer_data_overwrite_int32(data, offset, value);
     }
 }
 
@@ -959,7 +977,7 @@ gbinder_writer_data_append_parcelable(
 {
     if (ptr) {
         /* Non-null */
-        gbinder_writer_data_append_int32(data, 1);
+        gbinder_writer_data_append_int32(data, kNonNullParcelableFlag);
 
         /*
          * Write the parcelable size, taking in account the size of this
@@ -971,63 +989,36 @@ gbinder_writer_data_append_parcelable(
         g_byte_array_append(data->bytes, ptr, size);
     } else {
         /* Null */
-        gbinder_writer_data_append_int32(data, 0);
+        gbinder_writer_data_append_int32(data, kNullParcelableFlag);
     }
 }
 
-/*
- * This is compatible with aidl parcelables, and is not guaranteed to work
- * with any other kind of parcelable.
- * Returns offset needed for overwriting size of parcelable or -1
- * if no data is to be written for the parcel.
- */
-gssize
-gbinder_writer_append_parcelable_start(
+void
+gbinder_writer_start_parcelable(
     GBinderWriter* self,
-    gboolean has_data)
+    GBinderWriter* parcelable) /* Since 1.1.47 */
 {
     GBinderWriterData* data = gbinder_writer_data(self);
 
-    if (G_LIKELY(data)) {
-        gssize size_offset = -1;
+    /* Non-null parcelable is assumed */
+    gbinder_writer_data_append_int32(data, kNonNullParcelableFlag);
+    gbinder_writer_init(parcelable, data, data->bytes->len);
 
-        if (has_data) {
-            /* Non-null */
-            gbinder_writer_data_append_int32(data, 1);
-            size_offset = data->bytes->len;
-
-            /*
-             * Write the dummy parcelable size which is later fixed using
-             * gbinder_writer_data_append_parcelable_finish.
-             */
-            gbinder_writer_data_append_int32(data, 0);
-        } else {
-            /* Null */
-            gbinder_writer_data_append_int32(data, 0);
-        }
-
-        return size_offset;
-    }
-    return -1;
+    /*
+     * Write the dummy parcelable size which is later fixed by
+     * gbinder_writer_finish_parcelable.
+     */
+    gbinder_writer_data_append_int32(data, 0);
 }
 
-/*
- * This is compatible with aidl parcelables, and is not guaranteed to work
- * with any other kind of parcelable.
- * Fixes size of parcelable using offset obtained from
- * gbinder_writer_append_parcelable_start. Do nothing if no data was written
- * to parceable, i.e. offset is -1.
- */
 void
-gbinder_writer_append_parcelable_finish(
-    GBinderWriter* self,
-    gssize offset)
+gbinder_writer_finish_parcelable(
+    GBinderWriter* parcelable) /* Since 1.1.47 */
 {
-    if (offset >= 0) {
-        /* Replace parcelable size with real value */
-        gbinder_writer_overwrite_int32(self, offset,
-            gbinder_writer_bytes_written(self) - offset);
-    }
+    GBinderWriterPriv* priv = gbinder_writer_cast(parcelable);
+
+    gbinder_writer_data_overwrite_int32(priv->data, priv->offset,
+        priv->data->bytes->len - priv->offset);
 }
 
 void
