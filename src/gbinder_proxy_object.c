@@ -40,6 +40,7 @@
 #include "gbinder_object_converter.h"
 #include "gbinder_object_registry.h"
 #include "gbinder_driver.h"
+#include "gbinder_eventloop_p.h"
 #include "gbinder_ipc.h"
 #include "gbinder_log.h"
 
@@ -156,6 +157,23 @@ gbinder_proxy_object_converter_init(
 
 static
 void
+gbinder_proxy_object_handle_dead_reply(
+    gpointer user_data)
+{
+    gbinder_remote_object_commit_suicide(user_data);
+}
+
+static
+void
+gbinder_proxy_object_handle_dead_reply_later(
+    GBinderRemoteObject* remote)
+{
+    gbinder_idle_callback_invoke_later(gbinder_proxy_object_handle_dead_reply,
+        gbinder_remote_object_ref(remote), g_object_unref);
+}
+
+static
+void
 gbinder_proxy_tx_dequeue(
     GBinderProxyTx* tx)
 {
@@ -246,37 +264,113 @@ gbinder_proxy_object_handle_transaction(
     GBinderProxyObject* self = THIS(object);
     GBinderProxyObjectPriv* priv = self->priv;
     GBinderRemoteObject* remote = self->remote;
+    GBinderProxyTx* tx;
+    GBinderLocalRequest* fwd;
+    GBinderProxyObjectConverter convert;
 
-    if (!priv->dropped && !remote->dead) {
-        GBinderLocalRequest* fwd;
-        GBinderProxyTx* tx = g_slice_new0(GBinderProxyTx);
-        GBinderProxyObjectConverter convert;
+    /*
+     * Direct synchronous transactions don't have req->tx to block
+     * and complete asynchronously. Forward them synchronously and
+     * return the reply directly.
+     */
+    if (!req->tx) {
+        GBinderRemoteReply* reply;
+        GBinderLocalReply* fwd_reply = NULL;
+        GBinderProxyObjectConverter convert_reply;
+        gboolean has_reply = FALSE;
+        const gboolean oneway = !!(flags & GBINDER_TX_FLAG_ONEWAY);
+        int tx_status;
 
-        g_object_ref(tx->proxy = self);
-        tx->req = gbinder_remote_request_ref(req);
-        tx->next = priv->tx;
-        priv->tx = tx;
+        if (priv->dropped || remote->dead) {
+            GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
+            *status = (-EBADMSG);
+            return NULL;
+        }
 
-        /* Mark the incoming request as pending */
-        gbinder_remote_request_block(req);
-
-        /*
-         * For auto-created proxy objects, this object's GBinderIpc will
-         * become a remote, and the remote's GBinderIpc will become local
-         * because they work in the opposite direction.
-         */
         gbinder_proxy_object_converter_init(&convert, self, object->ipc,
             remote->ipc);
-
-        /* Forward the transaction */
         fwd = gbinder_remote_request_convert_to_local(req, &convert.pub);
-        tx->id = gbinder_ipc_transact(remote->ipc, remote->handle, code, flags,
-            fwd, gbinder_proxy_tx_reply, gbinder_proxy_tx_destroy, tx);
+        if (!fwd) {
+            GWARN("Failed to convert transaction 0x%08x for forwarding", code);
+            *status = -ENOMEM;
+            return NULL;
+        }
+
+        if (oneway) {
+            reply = NULL;
+            tx_status = gbinder_ipc_sync_worker.sync_oneway(remote->ipc,
+                remote->handle, code, fwd);
+        } else {
+            reply = gbinder_ipc_sync_worker.sync_reply(remote->ipc,
+                remote->handle, code, fwd, &tx_status);
+        }
         gbinder_local_request_unref(fwd);
-        *status = GBINDER_STATUS_OK;
-    } else {
+
+        if (reply) {
+            has_reply = TRUE;
+            if (gbinder_remote_reply_is_empty(reply)) {
+                fwd_reply = gbinder_local_object_new_reply(object);
+            } else {
+                gbinder_proxy_object_converter_init(&convert_reply, self,
+                    remote->ipc, self->parent.ipc);
+                fwd_reply = gbinder_remote_reply_convert_to_local(reply,
+                    &convert_reply.pub);
+            }
+            gbinder_remote_reply_unref(reply);
+        }
+        if (tx_status == GBINDER_STATUS_DEAD_OBJECT) {
+            gbinder_proxy_object_handle_dead_reply_later(remote);
+        }
+        *status = (has_reply && !fwd_reply) ? -ENOMEM : tx_status;
+        return fwd_reply;
+    }
+
+    if (priv->dropped || remote->dead) {
         GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
         *status = (-EBADMSG);
+        return NULL;
+    }
+    tx = g_slice_new0(GBinderProxyTx);
+    g_object_ref(tx->proxy = self);
+    tx->req = gbinder_remote_request_ref(req);
+    tx->next = priv->tx;
+    priv->tx = tx;
+
+    /* Mark the incoming request as pending */
+    gbinder_remote_request_block(req);
+
+    /*
+     * For auto-created proxy objects, this object's GBinderIpc will
+     * become a remote, and the remote's GBinderIpc will become local
+     * because they work in the opposite direction.
+     */
+    gbinder_proxy_object_converter_init(&convert, self, object->ipc,
+        remote->ipc);
+
+    /* Forward the transaction */
+    fwd = gbinder_remote_request_convert_to_local(req, &convert.pub);
+    if (fwd) {
+        tx->id = gbinder_ipc_transact(remote->ipc, remote->handle,
+            code, flags, fwd, gbinder_proxy_tx_reply,
+            gbinder_proxy_tx_destroy, tx);
+        gbinder_local_request_unref(fwd);
+        if (tx->id) {
+            *status = GBINDER_STATUS_OK;
+        } else {
+            GWARN("Failed to enqueue forwarded transaction 0x%08x", code);
+            gbinder_proxy_tx_dequeue(tx);
+            gbinder_remote_request_complete(req, NULL, -EFAULT);
+            gbinder_remote_request_unref(tx->req);
+            gutil_slice_free(tx);
+            *status = -EFAULT;
+        }
+    } else {
+        GWARN("Failed to convert transaction 0x%08x for forwarding", code);
+        gbinder_proxy_tx_dequeue(tx);
+        gbinder_remote_request_complete(req, NULL, -ENOMEM);
+        gbinder_remote_request_unref(tx->req);
+        gutil_slice_free(tx);
+        *status = -ENOMEM;
     }
     return NULL;
 }
@@ -407,6 +501,7 @@ gbinder_proxy_object_class_init(
     object_class->finalize = gbinder_proxy_object_finalize;
     klass->can_handle_transaction = gbinder_proxy_object_can_handle_transaction;
     klass->handle_transaction = gbinder_proxy_object_handle_transaction;
+    klass->handle_looper_transaction = gbinder_proxy_object_handle_transaction;
     klass->acquire = gbinder_proxy_object_acquire;
     klass->drop = gbinder_proxy_object_drop;
 }

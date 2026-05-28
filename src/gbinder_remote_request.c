@@ -99,18 +99,22 @@ gbinder_remote_request_convert_to_local(
 {
     GBinderRemoteRequestPriv* self = gbinder_remote_request_cast(req);
 
-    if (G_LIKELY(self)) {
+    if (G_LIKELY(self) && G_LIKELY(convert)) {
         GBinderReaderData* data = &self->data;
+        GBinderBuffer* buffer = data->buffer;
 
-        if (!convert || convert->protocol == self->protocol) {
+        if (!buffer) {
+            return gbinder_local_request_new(convert->io, convert->protocol,
+                NULL);
+        } else if (convert->protocol == self->protocol) {
             /* The same protocol, the same format of RPC header */
-            return gbinder_local_request_new_from_data(data->buffer, convert);
+            return gbinder_local_request_new_from_data(buffer, convert);
         } else {
             /* Need to translate to another format */
             GBinderLocalRequest* local = gbinder_local_request_new_iface
                 (convert->io, convert->protocol, self->iface);
 
-            gbinder_local_request_append_contents(local, data->buffer,
+            gbinder_local_request_append_contents(local, buffer,
                 self->header_size, convert);
             return local;
         }

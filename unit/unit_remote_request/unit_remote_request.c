@@ -325,8 +325,13 @@ test_to_local(
     g_assert(!memcmp(request_data, bytes->data, bytes->len));
     gbinder_local_request_unref(req2);
 
+    memset(&convert, 0, sizeof(convert));
+    convert.f = &convert_f;
+    convert.io = gbinder_driver_io(driver);
+    convert.protocol = gbinder_driver_protocol(driver);
+
     /* The same with gbinder_remote_request_translate_to_local() */
-    req2 = gbinder_remote_request_convert_to_local(req, NULL);
+    req2 = gbinder_remote_request_convert_to_local(req, &convert);
     data = gbinder_local_request_data(req2);
     offsets = gbinder_output_data_offsets(data);
     bytes = data->bytes;
@@ -338,11 +343,12 @@ test_to_local(
     g_assert(!memcmp(request_data, bytes->data, bytes->len));
     gbinder_local_request_unref(req2);
 
-    /* Different driver actually requires translation */
     memset(&convert, 0, sizeof(convert));
     convert.f = &convert_f;
     convert.io = gbinder_driver_io(driver2);
     convert.protocol = gbinder_driver_protocol(driver2);
+
+    /* Different driver actually requires translation */
     req2 = gbinder_remote_request_convert_to_local(req, &convert);
     data = gbinder_local_request_data(req2);
     offsets = gbinder_output_data_offsets(data);
@@ -353,6 +359,17 @@ test_to_local(
     g_assert(!gbinder_output_data_buffers_size(data));
     g_assert(bytes->len == sizeof(request_data_hidl));
     g_assert(!memcmp(request_data_hidl, bytes->data, bytes->len));
+    gbinder_local_request_unref(req2);
+
+    gbinder_remote_request_unref(req);
+    req = gbinder_remote_request_new(NULL, gbinder_rpc_protocol_for_device(dev),
+        0, 0);
+    req2 = gbinder_remote_request_convert_to_local(req, &convert);
+    data = gbinder_local_request_data(req2);
+    bytes = data->bytes;
+    g_assert(!gbinder_output_data_offsets(data));
+    g_assert(!gbinder_output_data_buffers_size(data));
+    g_assert(!bytes->len);
     gbinder_local_request_unref(req2);
 
     gbinder_remote_request_unref(req);
