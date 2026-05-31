@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -191,7 +191,6 @@ test_init(
         sep1 ? (sep1 + 1) : sep2 ? (sep2 + 1) : argv[0];
     gutil_log_default.level = g_test_verbose() ?
         GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
-    gutil_log_timestamp = FALSE;
 }
 
 /*
