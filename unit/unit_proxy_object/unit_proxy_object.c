@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2023-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2021-2022 Jolla Ltd.
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -197,6 +197,12 @@ test_basic(
  * param
  *==========================================================================*/
 
+typedef struct test_param_data {
+    GMainLoop* loop;
+    int stop;
+    int n;
+} TestParamData;
+
 static
 gboolean
 test_param_cancel(
@@ -253,12 +259,17 @@ test_param_canceled(
     GBinderClient* client,
     GBinderRemoteReply* reply,
     int status,
-    void* loop)
+    void* data)
 {
+    TestParamData* test = data;
+
     g_assert(!reply);
     g_assert_cmpint(status, == ,-ECANCELED);
-    GDEBUG("Transaction cancelled");
-    g_main_loop_quit((GMainLoop*)loop);
+    test->n++;
+    GDEBUG("Transaction cancelled (%d)", test->n);
+    if (test->n == test->stop) {
+        g_main_loop_quit(test->loop);
+    }
 }
 
 static
@@ -267,21 +278,25 @@ test_param_reply(
     GBinderClient* client,
     GBinderRemoteReply* reply,
     int status,
-    void* loop)
+    void* data)
 {
+    TestParamData* test = data;
     GBinderReader reader;
     gint32 result = 0;
 
     g_assert(reply);
     g_assert_cmpint(status, == ,0);
-    GDEBUG("Reply received");
+    test->n++;
+    GDEBUG("Reply received (%d)", test->n);
 
     /* Make sure that result got delivered intact */
     gbinder_remote_reply_init_reader(reply, &reader);
     g_assert(gbinder_reader_read_int32(&reader, &result));
     g_assert(gbinder_reader_at_end(&reader));
     g_assert_cmpint(result, == ,TX_RESULT);
-    g_main_loop_quit((GMainLoop*)loop);
+    if (test->n == test->stop) {
+        g_main_loop_quit(test->loop);
+    }
 }
 
 static
@@ -296,9 +311,12 @@ test_param_run(
     GBinderLocalRequest* req;
     GBinderIpc* ipc_obj;
     GBinderIpc* ipc_proxy;
-    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
-    GMainLoop* loop2 = g_main_loop_new(NULL, FALSE);
+    TestParamData test;
     int fd_obj, fd_proxy, n = 0;
+
+    memset(&test, 0, sizeof(test));
+    test.stop = 2;
+    test.loop = g_main_loop_new(NULL, FALSE);
 
     ipc_proxy = gbinder_ipc_new(DEV2, NULL);
     ipc_obj = gbinder_ipc_new(DEV, NULL);
@@ -320,17 +338,17 @@ test_param_run(
     req = gbinder_client_new_request(client);
     gbinder_local_request_append_int32(req, TX_PARAM_DONT_REPLY);
     gbinder_client_transact(client, TX_CODE, 0, req, test_param_canceled,
-        NULL, loop2);
+        NULL, &test);
     gbinder_local_request_unref(req);
 
     req = gbinder_client_new_request(client);
     gbinder_local_request_append_int32(req, TX_PARAM_REPLY);
     g_assert(gbinder_client_transact(client, TX_CODE, 0, req,
-        test_param_reply, NULL, loop));
+        test_param_reply, NULL, &test));
     gbinder_local_request_unref(req);
 
-    test_run(&test_opt, loop);
-    test_run(&test_opt, loop2);
+    test_run(&test_opt, test.loop);
+    g_assert_cmpint(test.n, == ,2);
     g_assert_cmpint(n, == ,2);
 
     test_binder_unregister_objects(fd_obj);
@@ -341,9 +359,8 @@ test_param_run(
     gbinder_client_unref(client);
     gbinder_ipc_unref(ipc_obj);
     gbinder_ipc_unref(ipc_proxy);
-    test_binder_exit_wait(&test_opt, loop);
-    g_main_loop_unref(loop);
-    g_main_loop_unref(loop2);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
 }
 
 static
