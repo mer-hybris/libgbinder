@@ -45,6 +45,7 @@ struct gbinder_remote_object {
     GBinderRemoteObjectPriv* priv;
     GBinderIpc* ipc;
     guint32 handle;
+    GBINDER_STABILITY_LEVEL stability;
     gboolean dead;
 };
 

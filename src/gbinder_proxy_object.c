@@ -437,6 +437,7 @@ gbinder_proxy_object_new(
         if (object) {
             GBinderProxyObject* self = THIS(object);
 
+            object->stability = remote->stability;
             GDEBUG("Proxy %p %s => %u %s created", self, gbinder_ipc_name(src),
                 remote->handle, gbinder_ipc_name(remote->ipc));
             self->remote = gbinder_remote_object_ref(remote);

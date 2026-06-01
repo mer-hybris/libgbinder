@@ -163,9 +163,11 @@ test_basic_run(
     remote_obj = gbinder_remote_object_new(ipc_obj,
         test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
         REMOTE_OBJECT_CREATE_ALIVE);
+    remote_obj->stability = GBINDER_STABILITY_VINTF;
 
     g_assert(!gbinder_proxy_object_new(NULL, remote_obj));
     g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    g_assert_cmpint(proxy->parent.stability, == ,GBINDER_STABILITY_VINTF);
     client = gbinder_client_new(proxy->remote, TEST_IFACE);
 
     /* Perform a transaction via proxy */

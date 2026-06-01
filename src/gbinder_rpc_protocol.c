@@ -38,6 +38,7 @@
 #include "gbinder_config.h"
 #include "gbinder_log.h"
 #include "gbinder_local_object_p.h"
+#include "gbinder_remote_object_p.h"
 
 #include <gutil_misc.h>
 
@@ -335,6 +336,18 @@ gbinder_rpc_protocol_aidl3_finish_flatten_binder(
     }
 }
 
+static
+void
+gbinder_rpc_protocol_aidl3_finish_unflatten_binder(
+    const void* in,
+    GBinderRemoteObject* obj)
+{
+    guint32 stability;
+
+    memcpy(&stability, in, sizeof(stability));
+    obj->stability = stability;
+}
+
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .name = "aidl3",
     .ping_tx = GBINDER_PING_TRANSACTION,
@@ -343,6 +356,8 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl3_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl3_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
 };
 
@@ -374,6 +389,18 @@ gbinder_rpc_protocol_aidl4_finish_flatten_binder(
     memcpy(out, &cat, sizeof(cat));
 }
 
+static
+void
+gbinder_rpc_protocol_aidl4_finish_unflatten_binder(
+    const void* in,
+    GBinderRemoteObject* obj)
+{
+    struct stability_category cat;
+
+    memcpy(&cat, in, sizeof(cat));
+    obj->stability = cat.stability_level;
+}
+
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
     .name = "aidl4",
     .ping_tx = GBINDER_PING_TRANSACTION,
@@ -382,6 +409,8 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl4_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl4_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
 };
 
