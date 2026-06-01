@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -357,7 +357,10 @@ void
 gbinder_local_object_default_release(
     GBinderLocalObject* self)
 {
-    GASSERT(self->strong_refs > 0);
+    /*
+     * Double-check the refs in case if gbinder_ipc_exit() cleared them
+     * while this callback was being delivered to the main thread.
+     */
     if (self->strong_refs > 0) {
         self->strong_refs--;
         GVERBOSE_("%p => %d", self, self->strong_refs);

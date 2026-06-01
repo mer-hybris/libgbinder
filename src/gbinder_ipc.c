@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -2243,6 +2243,7 @@ gbinder_ipc_exit()
         for (l = local_objs; l; l = l->next) {
             GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(l->data);
 
+            GVERBOSE_("%p has %d strong ref(s)", obj, obj->strong_refs);
             while (obj->strong_refs > 0) {
                 obj->strong_refs--;
                 gbinder_local_object_unref(obj);
