@@ -81,6 +81,7 @@ typedef struct gbinder_proxy_object_converter {
     GBinderObjectConverter pub;
     GBinderIpc* remote;
     GBinderIpc* local;
+    GBINDER_STABILITY_LEVEL stability;
 } GBinderProxyObjectConverter;
 
 GBINDER_INLINE_FUNC
@@ -106,6 +107,17 @@ gbinder_proxy_object_converter_check(
 }
 
 static
+void
+gbinder_proxy_object_set_min_stability(
+    GBinderLocalObject* local,
+    GBINDER_STABILITY_LEVEL stability)
+{
+    if (local && local->stability < stability) {
+        local->stability = stability;
+    }
+}
+
+static
 GBinderLocalObject*
 gbinder_proxy_object_converter_handle_to_local(
     GBinderObjectConverter* pub,
@@ -122,6 +134,7 @@ gbinder_proxy_object_converter_handle_to_local(
         /* GBinderProxyObject will reference GBinderRemoteObject */
         local = &gbinder_proxy_object_new(c->local, remote)->parent;
     }
+    gbinder_proxy_object_set_min_stability(local, c->stability);
 
     /* Release the reference returned by gbinder_object_registry_get_remote */
     gbinder_remote_object_unref(remote);
@@ -146,6 +159,7 @@ gbinder_proxy_object_converter_init(
     memset(convert, 0, sizeof(*convert));
     convert->remote = remote;
     convert->local = local;
+    convert->stability = proxy->parent.stability;
     pub->f = &gbinder_converter_fn;
     pub->io = gbinder_ipc_io(dest);
     pub->protocol = gbinder_ipc_protocol(dest);
