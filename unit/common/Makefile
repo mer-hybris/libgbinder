@@ -85,11 +85,11 @@ QUIET_MAKE = $(MAKE) --no-print-directory
 
 DEBUG_LDFLAGS = $(FULL_LDFLAGS)
 RELEASE_LDFLAGS = $(FULL_LDFLAGS)
-COVERAGE_LDFLAGS = $(FULL_LDFLAGS) --coverage
+COVERAGE_LDFLAGS = $(FULL_LDFLAGS) --coverage -fprofile-update=atomic
 
 DEBUG_CFLAGS = $(FULL_CFLAGS) -DDEBUG
 RELEASE_CFLAGS = $(FULL_CFLAGS) -O2
-COVERAGE_CFLAGS = $(FULL_CFLAGS) --coverage
+COVERAGE_CFLAGS = $(FULL_CFLAGS) -O0 --coverage -fprofile-update=atomic
 
 DEBUG_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_lib)
 RELEASE_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_lib)
