@@ -51,6 +51,11 @@ if  [ ! -z "$(lcov --help | grep ' --rc ')" ] ; then
     GENHTML_OPT="--branch-coverage"
 fi
 
+# If specific tests are provided on the command line, only run those
+if [ $# -gt 0 ] ; then
+    TESTS="$@"
+fi
+
 pushd `dirname $0` > /dev/null
 COV_DIR="$PWD"
 pushd .. > /dev/null
