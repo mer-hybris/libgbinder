@@ -1,8 +1,7 @@
 /*
- * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
- *
- * You may use this file under the terms of BSD license as follows:
+ * Copyright (C) 2018-2024 Jolla Ltd.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -426,36 +425,68 @@ gbinder_reader_skip_buffer(
     return gbinder_reader_read_buffer_object(reader, NULL);
 }
 
-/*
- * This is supposed to be used to read aidl parcelables, and is not
- * guaranteed to work on any other kind of parcelable.
- */
+/* AIDL Parcelable */
 const void*
 gbinder_reader_read_parcelable(
     GBinderReader* reader,
     gsize* size) /* Since 1.1.19 */
 {
-    guint32 non_null, payload_size = 0;
+    /*
+     * Use gbinder_reader_read_parcelable2 if you need to distinguish a failure
+     * to read a parcelable from a successfully read NULL parcelable.
+     */
+    return gbinder_reader_read_parcelable2(reader, size, NULL);
+}
 
-    if (gbinder_reader_read_uint32(reader, &non_null) && non_null &&
-        gbinder_reader_read_uint32(reader, &payload_size) &&
-        payload_size >= sizeof(payload_size)) {
-        GBinderReaderPriv* p = gbinder_reader_cast(reader);
+const void*
+gbinder_reader_read_parcelable2(
+    GBinderReader* reader,
+    gsize* size,
+    gboolean* ok) /* Since 1.1.48 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const guint8* saved_ptr = p->ptr;
+    guint32 flag;
 
-        payload_size -= sizeof(payload_size);
-        if (p->ptr + payload_size <= p->end) {
-            const void* out = p->ptr;
-
-            /* Success */
-            p->ptr += payload_size;
+    if (gbinder_reader_read_uint32(reader, &flag)) {
+        if (flag == kNullParcelableFlag) {
             if (size) {
-                *size = payload_size;
+                *size = 0;
             }
-            return out;
+            if (ok) {
+                *ok = TRUE;
+            }
+            return NULL;
+        } else {
+            guint32 payload_size;
+
+            if (gbinder_reader_read_uint32(reader, &payload_size) &&
+                payload_size >= sizeof(payload_size)) {
+                payload_size -= sizeof(payload_size);
+                if (p->ptr + payload_size <= p->end) {
+                    const void* out = p->ptr;
+
+                    /* Non-NULL parcelable */
+                    p->ptr += payload_size;
+                    if (size) {
+                        *size = payload_size;
+                    }
+                    if (ok) {
+                        *ok = TRUE;
+                    }
+                    return out;
+                }
+            }
         }
     }
+
+    /* Restore the state on failure */
+    p->ptr = saved_ptr;
     if (size) {
         *size = 0;
+    }
+    if (ok) {
+        *ok = FALSE;
     }
     return NULL;
 }

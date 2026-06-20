@@ -1,8 +1,7 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
- *
- * You may use this file under the terms of BSD license as follows:
+ * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1874,14 +1873,14 @@ test_parcelable(
     void)
 {
     const guint8 input_null_header[] = {
-        TEST_INT32_BYTES(0)
+        TEST_INT32_BYTES(kNullParcelableFlag)
     };
     const guint8 input_broken_header[] = {
-        TEST_INT32_BYTES(1),
+        TEST_INT32_BYTES(kNonNullParcelableFlag),
         TEST_INT32_BYTES(1)
     };
     const guint8 input_non_null_header[] = {
-        TEST_INT32_BYTES(1),
+        TEST_INT32_BYTES(kNonNullParcelableFlag),
         /* Size must be size of itself + payload */
         TEST_INT32_BYTES(sizeof(gint32) * 3)
     };
@@ -1890,8 +1889,9 @@ test_parcelable(
         TEST_INT32_BYTES(20)
     };
     gpointer in;
+    gboolean ok;
     gsize in_size, out_size;
-    const void* out = 0;
+    const void* out;
     GBinderDriver* driver = gbinder_driver_new(GBINDER_DEFAULT_BINDER, NULL);
     GBinderReader reader;
     GBinderReaderData data;
@@ -1902,33 +1902,52 @@ test_parcelable(
     /* Missing payload */
     test_init_reader(driver, &data, &reader,
         TEST_ARRAY_AND_SIZE(input_non_null_header));
-    out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(!out);
+    out_size = 1;
+    ok = TRUE;
+    g_assert_null(gbinder_reader_read_parcelable(&reader, &out_size));
+    g_assert_null(gbinder_reader_read_parcelable2(&reader, &out_size, &ok));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
     g_assert_cmpuint(out_size, == ,0);
+    g_assert_false(ok);
     gbinder_buffer_free(data.buffer);
 
     /* Broken headers */
     test_init_reader(driver, &data, &reader, input_broken_header, 4);
-    out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(!out);
+    out_size = 1;
+    ok = TRUE;
+    g_assert_null(gbinder_reader_read_parcelable(&reader, &out_size));
+    g_assert_null(gbinder_reader_read_parcelable2(&reader, &out_size, &ok));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
     g_assert_cmpuint(out_size, == ,0);
+    g_assert_false(ok);
     gbinder_buffer_free(data.buffer);
 
     test_init_reader(driver, &data, &reader,
         TEST_ARRAY_AND_SIZE(input_broken_header));
-    out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(!out);
+    out_size = 1;
+    ok = TRUE;
+    g_assert_null(gbinder_reader_read_parcelable(&reader, &out_size));
+    g_assert_null(gbinder_reader_read_parcelable2(&reader, &out_size, &ok));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
     g_assert_cmpuint(out_size, == ,0);
+    g_assert_false(ok);
     gbinder_buffer_free(data.buffer);
 
     /* Null */
     test_init_reader(driver, &data, &reader,
         TEST_ARRAY_AND_SIZE(input_null_header));
     gbinder_reader_init(&reader, &data, 0, sizeof(input_null_header));
-    out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(!out);
+    g_assert_null(gbinder_reader_read_parcelable2(&reader, NULL, NULL));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), > ,0);
+    g_assert_true(gbinder_reader_at_end(&reader));
+
+    gbinder_reader_init(&reader, &data, 0, sizeof(input_null_header));
+    out_size = 1;
+    ok = FALSE;
+    g_assert_null(gbinder_reader_read_parcelable2(&reader, &out_size, &ok));
+    g_assert_true(gbinder_reader_at_end(&reader));
     g_assert_cmpuint(out_size, == ,0);
-    g_assert(gbinder_reader_at_end(&reader));
+    g_assert_true(ok);
     gbinder_buffer_free(data.buffer);
 
     /* Non-null */
@@ -1940,11 +1959,13 @@ test_parcelable(
     data.buffer = gbinder_buffer_new(driver, in, in_size, NULL);
 
     gbinder_reader_init(&reader, &data, 0, in_size);
-    out = gbinder_reader_read_parcelable(&reader, &out_size);
-    g_assert(memcmp(&input_non_null_payload, out,
-        sizeof(input_non_null_payload)) == 0);
-    g_assert_cmpuint(out_size, == ,sizeof(input_non_null_payload));
-    g_assert(gbinder_reader_at_end(&reader));
+    out_size = 0;
+    ok = FALSE;
+    out = gbinder_reader_read_parcelable2(&reader, &out_size, &ok);
+    g_assert_true(ok);
+    g_assert_cmpmem(&input_non_null_payload, sizeof(input_non_null_payload),
+        out, out_size);
+    g_assert_true(gbinder_reader_at_end(&reader));
 
     /* And verify NULL tolerance for the size parameter */
     gbinder_reader_init(&reader, &data, 0, in_size);
