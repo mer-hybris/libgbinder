@@ -1,8 +1,7 @@
 /*
- * Copyright (C) 2018-2024 Jolla Ltd.
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
- *
- * You may use this file under the terms of BSD license as follows:
+ * Copyright (C) 2018-2024 Jolla Ltd.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,12 +40,45 @@
 #include <errno.h>
 #include <fcntl.h>
 
+/*
+ * GBINDER_READER_FLAG_HAS_PARENT flag means that the objects field
+ * actually points to the top-most GBinderReader's objects pointer,
+ * not to GBinderReaderData's objects area. That way, all nested
+ * readers would share the same objects pointer and that pointer
+ * can be correctly updated even if objects are read by the child
+ * (parcelable) reader.
+ *
+ * +-------+-------+-----+-------+
+ * | obj_1 | obj_2 | ... | obj_n | tx objects
+ * +-------+-------+-----+-------+
+ *            ^
+ *            |
+ *      +-----+
+ *      |
+ * +---------+
+ * | objects | Top level GBinderReader
+ * +---------+
+ *      ^
+ *      |    +---------+
+ *      +----| objects | GBinderReader with a parent
+ *      |    +---------+
+ *      |
+ *      |    +---------+
+ *      +----| objects | GBinderReader with a parent
+ *           +---------+
+ */
+typedef enum gbinder_reader_flags {
+    GBINDER_READER_FLAG_NONE = 0,
+    GBINDER_READER_FLAG_HAS_PARENT = 0x1,
+} GBINDER_READER_FLAGS;
+
 typedef struct gbinder_reader_priv {
     const guint8* start;
     const guint8* end;
     const guint8* ptr;
     const GBinderReaderData* data;
     void** objects;
+    GBINDER_READER_FLAGS flags;
 } GBinderReaderPriv;
 
 G_STATIC_ASSERT(sizeof(GBinderReader) >= sizeof(GBinderReaderPriv));
@@ -56,16 +88,19 @@ static inline GBinderReaderPriv* gbinder_reader_cast(GBinderReader* reader)
 static inline const GBinderReaderPriv* gbinder_reader_cast_c
     (const GBinderReader* reader)  { return (GBinderReaderPriv*)reader; }
 
+static
 void
-gbinder_reader_init(
+gbinder_reader_init2(
     GBinderReader* reader,
-    GBinderReaderData* data,
+    const GBinderReaderData* data,
     gsize offset,
-    gsize len)
+    gsize len,
+    void*** parent_objects)
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
     p->data = data;
+    p->flags = GBINDER_READER_FLAG_NONE;
     if (G_LIKELY(data)) {
         GBinderBuffer* buffer = data->buffer;
 
@@ -77,11 +112,27 @@ gbinder_reader_init(
         } else {
             p->ptr = p->start = p->end = NULL;
         }
-        p->objects = data->objects;
+
+        if (parent_objects) {
+            p->objects = (void**)parent_objects;
+            p->flags |= GBINDER_READER_FLAG_HAS_PARENT;
+        } else {
+            p->objects = data->objects;
+        }
     } else {
         p->ptr = p->start = p->end = NULL;
         p->objects = NULL;
     }
+}
+
+void
+gbinder_reader_init(
+    GBinderReader* reader,
+    GBinderReaderData* data,
+    gsize offset,
+    gsize len)
+{
+    gbinder_reader_init2(reader, data, offset, len, NULL);
 }
 
 gboolean
@@ -303,9 +354,36 @@ gbinder_reader_can_read_object(
 {
     const GBinderReaderData* data = p->data;
 
-    return data && data->reg &&
-        p->objects && p->objects[0] &&
-        p->ptr == p->objects[0];
+    if (data && data->reg) {
+        void** objs = (p->flags & GBINDER_READER_FLAG_HAS_PARENT) ?
+            (*((void***)p->objects)) : p->objects;
+
+        if (objs && objs[0] == p->ptr) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static
+inline
+gboolean
+gbinder_reader_consume_object(
+    GBinderReaderPriv* p,
+    gsize size)
+{
+    if (size) {
+        p->ptr += size;
+        if (p->flags & GBINDER_READER_FLAG_HAS_PARENT) {
+            /* Increment the top reader's obj pointer */
+            (*((void***)p->objects))++;
+        } else {
+            /* We are the top reader */
+            p->objects++;
+        }
+        return TRUE;
+    }
+    return FALSE;
 }
 
 int
@@ -315,14 +393,12 @@ gbinder_reader_read_fd(
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
     if (gbinder_reader_can_read_object(p)) {
-        int fd;
-        const guint eaten = p->data->reg->io->decode_fd_object(p->ptr,
-            gbinder_reader_bytes_remaining(reader), &fd);
+        const gsize size = gbinder_reader_bytes_remaining(reader);
+        int fd = -1;
 
-        if (eaten) {
+        if (gbinder_reader_consume_object(p, p->data->reg->io->
+            decode_fd_object(p->ptr, size, &fd))) {
             GASSERT(fd >= 0);
-            p->ptr += eaten;
-            p->objects++;
             return fd;
         }
     }
@@ -356,13 +432,11 @@ gbinder_reader_read_nullable_object(
 
     if (gbinder_reader_can_read_object(p)) {
         const GBinderReaderData* data = p->data;
-        const guint eaten = data->reg->io->decode_binder_object(p->ptr,
-            gbinder_reader_bytes_remaining(reader), data->reg, out,
-            gbinder_buffer_protocol(data->buffer));
+        const GBinderRpcProtocol* rpc = gbinder_buffer_protocol(data->buffer);
+        const gsize size = gbinder_reader_bytes_remaining(reader);
 
-        if (eaten) {
-            p->ptr += eaten;
-            p->objects++;
+        if (gbinder_reader_consume_object(p, data->reg->io->
+            decode_binder_object(p->ptr,size, data->reg, out, rpc))) {
             return TRUE;
         }
     }
@@ -391,13 +465,10 @@ gbinder_reader_read_buffer_object(
     if (gbinder_reader_can_read_object(p)) {
         const GBinderReaderData* data = p->data;
         GBinderBuffer* buf = data->buffer;
-        const GBinderIo* io = data->reg->io;
         const gsize offset = p->ptr - (guint8*)buf->data;
-        const guint eaten = io->decode_buffer_object(buf, offset, out);
 
-        if (eaten) {
-            p->ptr += eaten;
-            p->objects++;
+        if (gbinder_reader_consume_object(p, data->reg->io->
+            decode_buffer_object(buf, offset, out))) {
             return TRUE;
         }
     }
@@ -426,38 +497,141 @@ gbinder_reader_skip_buffer(
     return gbinder_reader_read_buffer_object(reader, NULL);
 }
 
-/*
- * This is supposed to be used to read aidl parcelables, and is not
- * guaranteed to work on any other kind of parcelable.
- */
+/* AIDL Parcelable */
 const void*
 gbinder_reader_read_parcelable(
     GBinderReader* reader,
     gsize* size) /* Since 1.1.19 */
 {
-    guint32 non_null, payload_size = 0;
+    /*
+     * Use gbinder_reader_read_parcelable2 if you need to distinguish a failure
+     * to read a parcelable from a successfully read NULL parcelable.
+     */
+    return gbinder_reader_read_parcelable2(reader, size, NULL);
+}
 
-    if (gbinder_reader_read_uint32(reader, &non_null) && non_null &&
-        gbinder_reader_read_uint32(reader, &payload_size) &&
-        payload_size >= sizeof(payload_size)) {
-        GBinderReaderPriv* p = gbinder_reader_cast(reader);
+const void*
+gbinder_reader_read_parcelable2(
+    GBinderReader* reader,
+    gsize* size,
+    gboolean* ok) /* Since 1.1.48 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const guint8* saved_ptr = p->ptr;
+    guint32 flag;
 
-        payload_size -= sizeof(payload_size);
-        if (p->ptr + payload_size <= p->end) {
-            const void* out = p->ptr;
-
-            /* Success */
-            p->ptr += payload_size;
+    if (gbinder_reader_read_uint32(reader, &flag)) {
+        if (flag == kNullParcelableFlag) {
             if (size) {
-                *size = payload_size;
+                *size = 0;
             }
-            return out;
+            if (ok) {
+                *ok = TRUE;
+            }
+            return NULL;
+        } else {
+            guint32 payload_size;
+
+            if (gbinder_reader_read_uint32(reader, &payload_size) &&
+                payload_size >= sizeof(payload_size)) {
+                payload_size -= sizeof(payload_size);
+                if (p->ptr + payload_size <= p->end) {
+                    const void* out = p->ptr;
+
+                    /* Non-NULL parcelable */
+                    p->ptr += payload_size;
+                    if (size) {
+                        *size = payload_size;
+                    }
+                    if (ok) {
+                        *ok = TRUE;
+                    }
+                    return out;
+                }
+            }
         }
     }
+
+    /* Restore the state on failure */
+    p->ptr = saved_ptr;
     if (size) {
         *size = 0;
     }
+    if (ok) {
+        *ok = FALSE;
+    }
     return NULL;
+}
+
+gboolean
+gbinder_reader_start_parcelable(
+    GBinderReader* reader,
+    GBinderReader* parcelable,
+    gboolean* non_null) /* Since 1.1.48 */
+{
+    gsize size;
+    gboolean ok;
+    const guint8* ptr = gbinder_reader_read_parcelable2(reader, &size, &ok);
+
+    /*
+     * gbinder_reader_finish_parcelable() should be invoked on every
+     * parcelable reader initialized by this function. It's especially
+     * important (if not to say mandatory) if the parcelable contains
+     * binder objects.
+     */
+    if (ok) {
+        if (ptr) {
+            GBinderReaderPriv* p = gbinder_reader_cast(reader);
+            const GBinderReaderData* data = p->data;
+
+            gbinder_reader_init2(parcelable, data,
+                (ptr - (guint8*)data->buffer->data), size,
+                (p->flags & GBINDER_READER_FLAG_HAS_PARENT) ?
+                (void***)p->objects : &p->objects);
+        } else {
+            /* NULL parcelable (with a parent) */
+            gbinder_reader_init(parcelable, NULL, 0, 0);
+            gbinder_reader_cast(parcelable)->flags |=
+                GBINDER_READER_FLAG_HAS_PARENT;
+        }
+    } else {
+        memset(parcelable, 0, sizeof(*parcelable));
+    }
+
+    if (non_null) {
+        *non_null = ptr != NULL;
+    }
+    return ok;
+}
+
+void
+gbinder_reader_finish_parcelable(
+    GBinderReader* parcelable) /* Since 1.1.48 */
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(parcelable);
+
+    /*
+     * The reader must be created by gbinder_reader_start_parcelable()
+     * and have a parent but let's check it anyway.
+     */
+    if (p->flags & GBINDER_READER_FLAG_HAS_PARENT) {
+        /*
+         * If the remaining (unread) part of the parcelable contains binder
+         * objects we must "consume" those objects or else the parent reader
+         * won't be able to read any more objects.
+         */
+        if (p->objects) {
+            guint8*** objs = (guint8***)p->objects;
+
+            if (*objs) {
+                while ((*objs)[0] > p->start && (*objs)[0] < p->end) {
+                    (*objs)++;
+                }
+            }
+        }
+    } else {
+        GWARN("Invalid reader passed to gbinder_reader_finish_parcelable");
+    }
 }
 
 /* Helper for gbinder_reader_read_hidl_struct() macro */

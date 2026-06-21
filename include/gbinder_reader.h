@@ -1,8 +1,7 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
- *
- * You may use this file under the terms of BSD license as follows:
+ * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -146,6 +145,22 @@ const void*
 gbinder_reader_read_parcelable(
     GBinderReader* reader,
     gsize* size); /* Since 1.1.19 */
+
+const void*
+gbinder_reader_read_parcelable2(
+    GBinderReader* reader,
+    gsize* size,
+    gboolean* ok); /* Since 1.1.48 */
+
+gboolean
+gbinder_reader_start_parcelable(
+    GBinderReader* reader,
+    GBinderReader* parcelable,
+    gboolean* non_null); /* Since 1.1.48 */
+
+void
+gbinder_reader_finish_parcelable(
+    GBinderReader* parcelable); /* Since 1.1.48 */
 
 const void*
 gbinder_reader_read_hidl_struct1(

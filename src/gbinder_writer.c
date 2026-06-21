@@ -1,9 +1,7 @@
 /*
+ * Copyright (C) 2025-2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
- * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2024 Jolla Ltd.
- *
- * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,9 +52,6 @@ typedef struct gbinder_writer_priv {
     GBinderWriterData* data;
     guint offset;
 } GBinderWriterPriv;
-
-#define kNullParcelableFlag (0)
-#define kNonNullParcelableFlag (1)
 
 const GBinderWriterType gbinder_writer_type_byte = { "byte", 1, NULL };
 const GBinderWriterType gbinder_writer_type_int32 = { "int32", 4, NULL };

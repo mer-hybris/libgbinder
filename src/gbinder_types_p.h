@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -76,6 +75,10 @@ typedef struct gbinder_ipc_sync_api GBinderIpcSyncApi;
 
 /* As a special case, ServiceManager's handle is zero */
 #define GBINDER_SERVICEMANAGER_HANDLE (0)
+
+/* Parcelable flags */
+#define kNullParcelableFlag (0)
+#define kNonNullParcelableFlag (1)
 
 #endif /* GBINDER_TYPES_PRIVATE_H */
 
