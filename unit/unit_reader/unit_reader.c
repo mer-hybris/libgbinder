@@ -2109,6 +2109,8 @@ test_parcelable2(
     /* Skip binder object #2 */
     gbinder_reader_finish_parcelable(&p3); /* done with parcelable #3 */
     gbinder_reader_finish_parcelable(&p2); /* done with parcelable #2 */
+    g_assert_true(gbinder_reader_at_end(&p3));
+    g_assert_true(gbinder_reader_at_end(&p2));
 
     /* Read binder object #3 from parcelable #1 */
     g_assert_true(gbinder_reader_read_nullable_object(&p1, &obj));
