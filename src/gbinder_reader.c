@@ -629,6 +629,9 @@ gbinder_reader_finish_parcelable(
                 }
             }
         }
+
+        /* No more reads from this reader */
+        p->ptr = p->end;
     } else {
         GWARN("Invalid reader passed to gbinder_reader_finish_parcelable");
     }
