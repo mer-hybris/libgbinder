@@ -498,6 +498,44 @@ gbinder_reader_skip_buffer(
 }
 
 /* AIDL Parcelable */
+
+static
+gboolean
+gbinder_reader_read_parcelable_header(
+    GBinderReader* reader,
+    guint32* size,
+    gboolean* nullp)
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const guint8* saved_ptr = p->ptr;
+    guint32 flag;
+
+    if (gbinder_reader_read_uint32(reader, &flag)) {
+        if (flag == kNullParcelableFlag) {
+            *size = 0;
+            *nullp = TRUE;
+            return TRUE;
+        } else {
+            guint32 payload_size;
+
+            if (gbinder_reader_read_uint32(reader, &payload_size) &&
+                payload_size >= sizeof(payload_size)) {
+                payload_size -= sizeof(payload_size);
+                if (p->ptr + payload_size <= p->end) {
+                    /* Non-NULL parcelable */
+                    *size = payload_size;
+                    *nullp = FALSE;
+                    return TRUE;
+                }
+            }
+        }
+    }
+
+    /* Restore the state on failure */
+    p->ptr = saved_ptr;
+    return FALSE;
+}
+
 const void*
 gbinder_reader_read_parcelable(
     GBinderReader* reader,
@@ -516,51 +554,46 @@ gbinder_reader_read_parcelable2(
     gsize* size,
     gboolean* ok) /* Since 1.1.48 */
 {
-    GBinderReaderPriv* p = gbinder_reader_cast(reader);
-    const guint8* saved_ptr = p->ptr;
-    guint32 flag;
+    const void* out = NULL;
+    guint32 psize = 0;
+    gboolean nullp;
 
-    if (gbinder_reader_read_uint32(reader, &flag)) {
-        if (flag == kNullParcelableFlag) {
-            if (size) {
-                *size = 0;
-            }
-            if (ok) {
-                *ok = TRUE;
-            }
-            return NULL;
-        } else {
-            guint32 payload_size;
+    if (gbinder_reader_read_parcelable_header(reader, &psize, &nullp)) {
+        GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
-            if (gbinder_reader_read_uint32(reader, &payload_size) &&
-                payload_size >= sizeof(payload_size)) {
-                payload_size -= sizeof(payload_size);
-                if (p->ptr + payload_size <= p->end) {
-                    const void* out = p->ptr;
+        if (!nullp) {
+            out = p->ptr;
+            p->ptr += psize;
 
-                    /* Non-NULL parcelable */
-                    p->ptr += payload_size;
-                    if (size) {
-                        *size = payload_size;
+            /*
+             * If this parcelable contains binder objects we must skip those
+             * objects or else we won't be able to read next objects from this
+             * tx buffer.
+             */
+            if (p->objects) {
+                guint8*** objs = (guint8***)
+                    ((p->flags & GBINDER_READER_FLAG_HAS_PARENT) ?
+                     (void***) p->objects : &p->objects);
+
+                if (*objs) {
+                    while ((*objs)[0] && (*objs)[0] < p->ptr) {
+                        (*objs)++;
                     }
-                    if (ok) {
-                        *ok = TRUE;
-                    }
-                    return out;
                 }
             }
         }
-    }
 
-    /* Restore the state on failure */
-    p->ptr = saved_ptr;
-    if (size) {
-        *size = 0;
-    }
-    if (ok) {
+        if (ok) {
+            *ok = TRUE;
+        }
+    } else if (ok) {
         *ok = FALSE;
     }
-    return NULL;
+
+    if (size) {
+        *size = psize;
+    }
+    return out;
 }
 
 gboolean
@@ -569,9 +602,8 @@ gbinder_reader_start_parcelable(
     GBinderReader* parcelable,
     gboolean* non_null) /* Since 1.1.48 */
 {
-    gsize size;
-    gboolean ok;
-    const guint8* ptr = gbinder_reader_read_parcelable2(reader, &size, &ok);
+    guint32 size;
+    gboolean nullp;
 
     /*
      * gbinder_reader_finish_parcelable() should be invoked on every
@@ -579,29 +611,35 @@ gbinder_reader_start_parcelable(
      * important (if not to say mandatory) if the parcelable contains
      * binder objects.
      */
-    if (ok) {
-        if (ptr) {
-            GBinderReaderPriv* p = gbinder_reader_cast(reader);
-            const GBinderReaderData* data = p->data;
-
-            gbinder_reader_init2(parcelable, data,
-                (ptr - (guint8*)data->buffer->data), size,
-                (p->flags & GBINDER_READER_FLAG_HAS_PARENT) ?
-                (void***)p->objects : &p->objects);
-        } else {
+    if (gbinder_reader_read_parcelable_header(reader, &size, &nullp)) {
+        if (nullp) {
             /* NULL parcelable (with a parent) */
             gbinder_reader_init(parcelable, NULL, 0, 0);
             gbinder_reader_cast(parcelable)->flags |=
                 GBINDER_READER_FLAG_HAS_PARENT;
+        } else {
+            GBinderReaderPriv* p = gbinder_reader_cast(reader);
+            const GBinderReaderData* data = p->data;
+
+            gbinder_reader_init2(parcelable, data,
+                (p->ptr - (guint8*)data->buffer->data), size,
+                (p->flags & GBINDER_READER_FLAG_HAS_PARENT) ?
+                (void***)p->objects : &p->objects);
+
+            /* Move the pointer */
+            p->ptr += size;
         }
+        if (non_null) {
+            *non_null = !nullp;
+        }
+        return TRUE;
     } else {
         memset(parcelable, 0, sizeof(*parcelable));
+        if (non_null) {
+            *non_null = FALSE;
+        }
+        return FALSE;
     }
-
-    if (non_null) {
-        *non_null = ptr != NULL;
-    }
-    return ok;
 }
 
 void
@@ -624,7 +662,7 @@ gbinder_reader_finish_parcelable(
             guint8*** objs = (guint8***)p->objects;
 
             if (*objs) {
-                while ((*objs)[0] > p->start && (*objs)[0] < p->end) {
+                while ((*objs)[0] && (*objs)[0] < p->end) {
                     (*objs)++;
                 }
             }
