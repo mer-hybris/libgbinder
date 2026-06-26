@@ -164,6 +164,7 @@ test_empty(
     g_assert(!gbinder_reader_start_parcelable(&reader, &parcelable, &non_null));
     g_assert_false(non_null);
     gbinder_reader_finish_parcelable(&parcelable);
+    g_assert_false(gbinder_reader_skip_parcelable(&reader));
 }
 
 /*==========================================================================*
@@ -2020,6 +2021,11 @@ test_parcelable1(
     g_assert_cmpuint(size, == ,sizeof(input_non_null_payload));
     g_assert_true(gbinder_reader_at_end(&reader));
 
+    /* And gbinder_reader_skip_parcelable */
+    gbinder_reader_init(&reader, &data, 0, in_size);
+    g_assert_true(gbinder_reader_skip_parcelable(&reader));
+    g_assert_true(gbinder_reader_at_end(&reader));
+
     gbinder_buffer_free(data.buffer);
     gbinder_driver_unref(driver);
 }
@@ -2238,10 +2244,7 @@ test_parcelable2(
     gbinder_remote_object_unref(obj);
 
     /* Parcelable #6 */
-    ok = FALSE;
-    g_assert_nonnull(gbinder_reader_read_parcelable2(&reader, &size, &ok));
-    g_assert_cmpuint(size, == ,4 + BINDER_OBJECT_SIZE_64);
-    g_assert_true(ok);
+    g_assert_true(gbinder_reader_skip_parcelable(&reader));
     /* Object #6 gets skipped */
 
     /* obj7 */

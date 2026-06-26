@@ -675,6 +675,16 @@ gbinder_reader_finish_parcelable(
     }
 }
 
+gboolean
+gbinder_reader_skip_parcelable(
+    GBinderReader* reader) /* Since 1.1.49 */
+{
+    gboolean ok;
+
+    gbinder_reader_read_parcelable2(reader, NULL, &ok);
+    return ok;
+}
+
 /* Helper for gbinder_reader_read_hidl_struct() macro */
 const void*
 gbinder_reader_read_hidl_struct1(

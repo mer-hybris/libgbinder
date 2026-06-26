@@ -162,6 +162,10 @@ void
 gbinder_reader_finish_parcelable(
     GBinderReader* parcelable); /* Since 1.1.48 */
 
+gboolean
+gbinder_reader_skip_parcelable(
+    GBinderReader* reader); /* Since 1.1.49 */
+
 const void*
 gbinder_reader_read_hidl_struct1(
     GBinderReader* reader,
