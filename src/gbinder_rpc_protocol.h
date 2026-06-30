@@ -57,7 +57,8 @@ struct gbinder_rpc_protocol {
      * bytes are just skipped.
      */
     gsize flat_binder_object_extra;
-    void (*finish_flatten_binder)(void* out, GBinderLocalObject* obj);
+    void (*finish_flatten_binder)(void* out,
+        GBINDER_STABILITY_LEVEL stability);
     void (*finish_unflatten_binder)(const void* in, GBinderRemoteObject* obj);
     void (*write_fmq_descriptor)(GBinderWriter* writer, const GBinderFmq* queue);
 };

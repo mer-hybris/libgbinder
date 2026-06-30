@@ -112,8 +112,13 @@ gbinder_proxy_object_set_min_stability(
     GBinderLocalObject* local,
     GBINDER_STABILITY_LEVEL stability)
 {
-    if (local && local->stability < stability) {
-        local->stability = stability;
+    if (local && (local->stability & stability) != stability) {
+        if (local->stability && stability &&
+            stability != GBINDER_STABILITY_VINTF) {
+            local->stability = GBINDER_STABILITY_VINTF;
+        } else {
+            local->stability = stability;
+        }
     }
 }
 

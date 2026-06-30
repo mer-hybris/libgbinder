@@ -116,11 +116,20 @@ gbinder_writer_data_append_contents(
             }
             while (*objects) {
                 const guint8* obj = *objects++;
-                gsize objsize, offset = obj - bufdata;
+                gsize objsize, src_objsize, offset = obj - bufdata;
                 GBinderLocalObject* local;
                 guint32 handle;
 
                 GASSERT(offset >= off && offset < bufsize);
+                if (offset >= bufsize) {
+                    GWARN("Invalid object offset %u", (guint)offset);
+                    return;
+                }
+                src_objsize = io->object_size(obj, proto);
+                if (src_objsize > bufsize - offset) {
+                    GWARN("Invalid object at offset %u", (guint)offset);
+                    return;
+                }
                 if (offset > off) {
                     /* Copy serialized data preceeding this object */
                     g_byte_array_append(dest, bufdata + off, offset - off);
@@ -130,9 +139,10 @@ gbinder_writer_data_append_contents(
                 gutil_int_array_append(data->offsets, dest->len);
 
                 /* Convert remote object into local if necessary */
-                if (convert && io->decode_binder_handle(obj, &handle, proto) &&
-                    (local = gbinder_object_converter_handle_to_local
-                    (convert, handle))) {
+                if (src_objsize && convert && io->decode_binder_handle(obj,
+                    &handle, proto) && (local =
+                    gbinder_object_converter_handle_to_local(convert,
+                    handle))) {
                     const guint pos = dest->len;
 
                     g_byte_array_set_size(dest, pos +
@@ -145,13 +155,17 @@ gbinder_writer_data_append_contents(
                     data->cleanup = gbinder_cleanup_add(data->cleanup,
                         (GDestroyNotify) gbinder_local_object_unref, local);
                 } else {
-                    objsize = io->object_size(obj, proto);
-                    g_byte_array_append(dest, obj, objsize);
+                    objsize = src_objsize;
+                    if (src_objsize) {
+                        g_byte_array_append(dest, obj, src_objsize);
+                    }
                 }
 
                 /* Size of each buffer has to be 8-byte aligned */
-                data->buffers_size += G_ALIGN8(io->object_data_size(obj));
-                off += objsize;
+                if (src_objsize) {
+                    data->buffers_size += G_ALIGN8(io->object_data_size(obj));
+                }
+                off += src_objsize;
             }
         }
         if (off < bufsize) {
@@ -1319,7 +1333,7 @@ gbinder_writer_data_append_remote_object(
     /* Preallocate enough space */
     g_byte_array_set_size(buf, offset + GBINDER_MAX_BINDER_OBJECT_SIZE);
     /* Write the object */
-    n = data->io->encode_remote_object(buf->data + offset, obj);
+    n = data->io->encode_remote_object(buf->data + offset, obj, data->protocol);
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + n);
 

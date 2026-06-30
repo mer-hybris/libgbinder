@@ -327,13 +327,9 @@ static
 void
 gbinder_rpc_protocol_aidl3_finish_flatten_binder(
     void* out,
-    GBinderLocalObject* obj)
+    GBINDER_STABILITY_LEVEL stability)
 {
-    if (G_LIKELY(obj)) {
-        *(guint32*)out = obj->stability;
-    } else {
-        *(guint32*)out = GBINDER_STABILITY_UNDECLARED;
-    }
+    *(guint32*)out = stability;
 }
 
 static
@@ -378,12 +374,12 @@ static
 void
 gbinder_rpc_protocol_aidl4_finish_flatten_binder(
     void* out,
-    GBinderLocalObject* obj)
+    GBINDER_STABILITY_LEVEL stability)
 {
     struct stability_category cat = {
         .binder_wire_format_version = BINDER_WIRE_FORMAT_VERSION_AIDL4,
         .reserved = { 0, 0, },
-        .stability_level = obj ? obj->stability : GBINDER_STABILITY_UNDECLARED,
+        .stability_level = stability,
     };
 
     memcpy(out, &cat, sizeof(cat));

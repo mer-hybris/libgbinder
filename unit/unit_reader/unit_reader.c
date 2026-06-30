@@ -2367,6 +2367,38 @@ test_object_invalid(
     test_binder_exit_wait(&test_opt, NULL);
 }
 
+static
+void
+test_object_truncated_aidl(
+    void)
+{
+    /* AIDL3 requires a 4-byte stability trailer after flat_binder_object. */
+    static const guint8 input[] = { TEST_BINDER_OBJECT_64(1) };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, "aidl3");
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        g_memdup(input, sizeof(input)), sizeof(input), NULL);
+    GBinderRemoteObject* obj = NULL;
+    GBinderReaderData data;
+    GBinderReader reader;
+
+    g_assert(ipc);
+    memset(&data, 0, sizeof(data));
+    data.buffer = buf;
+    data.reg = gbinder_ipc_object_registry(ipc);
+    data.objects = g_new(void*, 2);
+    data.objects[0] = buf->data;
+    data.objects[1] = NULL;
+    gbinder_reader_init(&reader, &data, 0, buf->size);
+
+    g_assert(!gbinder_reader_read_nullable_object(&reader, &obj));
+    g_assert(!obj);
+
+    g_free(data.objects);
+    gbinder_buffer_free(buf);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
 /*==========================================================================*
  * vec
  *==========================================================================*/
@@ -2966,6 +2998,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("parcelable/2"), test_parcelable2);
     g_test_add_func(TEST_("object/valid"), test_object);
     g_test_add_func(TEST_("object/invalid"), test_object_invalid);
+    g_test_add_func(TEST_("object/truncated_aidl"), test_object_truncated_aidl);
     g_test_add_func(TEST_("object/no_reg"), test_object_no_reg);
     g_test_add_func(TEST_("vec"), test_vec);
     g_test_add_func(TEST_("hidl_string_vec/1"), test_hidl_string_vec1);

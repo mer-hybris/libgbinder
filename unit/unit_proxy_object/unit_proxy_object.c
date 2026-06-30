@@ -925,6 +925,7 @@ test_nested_register_cb(
 
     gbinder_remote_request_init_reader(req, &reader);
     g_assert((test->accessor = gbinder_reader_read_object(&reader)));
+    /* Default system stability plus outer vendor stability requires VINTF. */
     g_assert_cmpint(test->accessor->stability, == ,GBINDER_STABILITY_VINTF);
     g_assert(gbinder_reader_at_end(&reader));
 
@@ -993,10 +994,10 @@ test_nested_sync_run(
     remote_obj = gbinder_remote_object_new(ipc_obj,
         test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
         REMOTE_OBJECT_CREATE_ALIVE);
-    remote_obj->stability = GBINDER_STABILITY_VINTF;
+    remote_obj->stability = GBINDER_STABILITY_VENDOR;
 
     g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
-    g_assert_cmpint(proxy->parent.stability, == ,GBINDER_STABILITY_VINTF);
+    g_assert_cmpint(proxy->parent.stability, == ,GBINDER_STABILITY_VENDOR);
     proxy_remote = gbinder_remote_object_new(ipc_proxy,
         test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
         REMOTE_OBJECT_CREATE_ALIVE);
