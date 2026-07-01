@@ -37,6 +37,7 @@
 #include "gbinder_config.h"
 #include "gbinder_driver.h"
 #include "gbinder_proxy_object.h"
+#include "gbinder_client_p.h"
 #include "gbinder_remote_object_p.h"
 #include "gbinder_remote_request.h"
 #include "gbinder_remote_reply.h"
@@ -131,6 +132,8 @@ test_basic_reply(
     GBinderReader reader;
 
     GDEBUG("Reply received");
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
 
     /* No parameters are expected */
     gbinder_remote_reply_init_reader(reply, &reader);
@@ -161,9 +164,11 @@ test_basic_run(
     remote_obj = gbinder_remote_object_new(ipc_obj,
         test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
         REMOTE_OBJECT_CREATE_ALIVE);
+    remote_obj->stability = GBINDER_STABILITY_VINTF;
 
     g_assert(!gbinder_proxy_object_new(NULL, remote_obj));
     g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    g_assert_cmpint(proxy->parent.stability, == ,GBINDER_STABILITY_VINTF);
     client = gbinder_client_new(proxy->remote, TEST_IFACE);
 
     /* Perform a transaction via proxy */
@@ -191,6 +196,203 @@ test_basic(
     void)
 {
     test_run_in_context(&test_opt, test_basic_run);
+}
+
+/*==========================================================================*
+ * empty_reply
+ *==========================================================================*/
+
+typedef struct test_empty_reply {
+    GMainLoop* loop;
+    GThread* main_thread;
+    gboolean handled;
+} TestEmptyReply;
+
+static
+GBinderLocalReply*
+test_empty_reply_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestEmptyReply* test = user_data;
+    GBinderReader reader;
+
+    g_assert(test->main_thread == g_thread_self());
+    g_assert(!flags);
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_IFACE));
+    g_assert(code == TX_CODE);
+
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    *status = GBINDER_STATUS_OK;
+    test->handled = TRUE;
+    return gbinder_local_object_new_reply(obj);
+}
+
+static
+void
+test_empty_reply_done(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    TestEmptyReply* test = user_data;
+    GBinderReader reader;
+
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
+    gbinder_remote_reply_init_reader(reply, &reader);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    g_main_loop_quit(test->loop);
+}
+
+static
+void
+test_empty_reply_run(
+    void)
+{
+    GBinderLocalObject* obj;
+    GBinderProxyObject* proxy;
+    GBinderRemoteObject* remote_obj;
+    GBinderRemoteObject* proxy_remote;
+    GBinderClient* client;
+    GBinderIpc* ipc_obj;
+    GBinderIpc* ipc_proxy;
+    TestEmptyReply test;
+    int fd_obj, fd_proxy;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+    test.main_thread = g_thread_self();
+
+    ipc_proxy = gbinder_ipc_new(DEV, NULL);
+    ipc_obj = gbinder_ipc_new(DEV2, NULL);
+    fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
+    fd_obj = gbinder_driver_fd(ipc_obj->driver);
+    obj = gbinder_local_object_new(ipc_obj, TEST_IFACES,
+        test_empty_reply_cb, &test);
+    remote_obj = gbinder_remote_object_new(ipc_obj,
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+
+    g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    proxy_remote = gbinder_remote_object_new(ipc_proxy,
+        test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    client = gbinder_client_new(proxy_remote, TEST_IFACE);
+
+    g_assert(gbinder_client_transact(client, TX_CODE, 0, NULL,
+        test_empty_reply_done, NULL, &test));
+
+    test_run(&test_opt, test.loop);
+    g_assert(test.handled);
+
+    test_binder_unregister_objects(fd_obj);
+    test_binder_unregister_objects(fd_proxy);
+    gbinder_local_object_drop(obj);
+    gbinder_local_object_drop(&proxy->parent);
+    gbinder_remote_object_unref(proxy_remote);
+    gbinder_remote_object_unref(remote_obj);
+    gbinder_client_unref(client);
+    gbinder_ipc_unref(ipc_obj);
+    gbinder_ipc_unref(ipc_proxy);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_empty_reply(
+    void)
+{
+    test_run_in_context(&test_opt, test_empty_reply_run);
+}
+
+/*==========================================================================*
+ * interface
+ *==========================================================================*/
+
+static
+void
+test_interface_run(
+    void)
+{
+    GBinderLocalObject* obj;
+    GBinderProxyObject* proxy;
+    GBinderRemoteObject* remote_obj;
+    GBinderRemoteObject* proxy_remote;
+    GBinderRemoteReply* reply;
+    GBinderLocalRequest* req;
+    GBinderIpc* ipc_obj;
+    GBinderIpc* ipc_proxy;
+    char* iface;
+    gint32 result;
+    int fd_obj, fd_proxy, status = INT_MAX;
+
+    ipc_proxy = gbinder_ipc_new(DEV, "aidl");
+    ipc_obj = gbinder_ipc_new(DEV2, "aidl");
+    fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
+    fd_obj = gbinder_driver_fd(ipc_obj->driver);
+    obj = gbinder_local_object_new(ipc_obj, TEST_IFACES, NULL, NULL);
+    remote_obj = gbinder_remote_object_new(ipc_obj,
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+
+    g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    proxy_remote = gbinder_remote_object_new(ipc_proxy,
+        test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+
+    /*
+     * INTERFACE_TRANSACTION has no request payload. The proxy has to turn
+     * such bufferless incoming request into an empty local request.
+     */
+    req = gbinder_driver_local_request_new(ipc_proxy->driver, NULL);
+    reply = gbinder_ipc_sync_main.sync_reply(ipc_proxy, proxy_remote->handle,
+        GBINDER_INTERFACE_TRANSACTION, req, &status);
+    g_assert(reply);
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    iface = gbinder_remote_reply_read_string16(reply);
+    g_assert_cmpstr(iface, == ,TEST_IFACE);
+
+    g_free(iface);
+    gbinder_remote_reply_unref(reply);
+    gbinder_local_request_unref(req);
+
+    req = gbinder_driver_local_request_new(ipc_proxy->driver, NULL);
+    reply = gbinder_ipc_sync_main.sync_reply(ipc_proxy, proxy_remote->handle,
+        GBINDER_PING_TRANSACTION, req, &status);
+    g_assert(reply);
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(gbinder_remote_reply_read_int32(reply, &result));
+    g_assert_cmpint(result, == ,GBINDER_STATUS_OK);
+
+    gbinder_remote_reply_unref(reply);
+    gbinder_local_request_unref(req);
+    test_binder_unregister_objects(fd_obj);
+    test_binder_unregister_objects(fd_proxy);
+    gbinder_local_object_drop(obj);
+    gbinder_local_object_drop(&proxy->parent);
+    gbinder_remote_object_unref(proxy_remote);
+    gbinder_remote_object_unref(remote_obj);
+    gbinder_ipc_unref(ipc_obj);
+    gbinder_ipc_unref(ipc_proxy);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+static
+void
+test_interface(
+    void)
+{
+    test_run_in_context(&test_opt, test_interface_run);
 }
 
 /*==========================================================================*
@@ -602,6 +804,248 @@ test_obj(
 }
 
 /*==========================================================================*
+ * nested_sync
+ *==========================================================================*/
+
+typedef struct test_nested_sync_data {
+    GMainLoop* loop;
+    GThread* thread;
+    GBinderLocalObject* obj;
+    GBinderLocalObject* connection;
+    GBinderRemoteObject* accessor;
+    GBinderRemoteRequest* req;
+    gboolean register_handled;
+    gboolean connect_handled;
+    gboolean register_finished;
+} TestNestedSync;
+
+static
+GBinderLocalReply*
+test_nested_accessor_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestNestedSync* test = user_data;
+    GBinderReader reader;
+    GBinderRemoteObject* observer;
+
+    GDEBUG("Nested accessor request handled");
+    g_assert(!test->connect_handled);
+    test->connect_handled = TRUE;
+    g_assert(!flags);
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_IFACE2));
+    g_assert(code == TX_CODE2);
+
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert((observer = gbinder_reader_read_object(&reader)));
+    g_assert(gbinder_reader_at_end(&reader));
+    gbinder_remote_object_unref(observer);
+
+    test->connection = gbinder_local_object_new(obj->ipc, TEST_IFACES2,
+        NULL, NULL);
+    g_assert(test->connection);
+
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_reply_append_int32
+        (gbinder_local_reply_append_local_object
+            (gbinder_local_object_new_reply(obj), test->connection),
+            TX_RESULT2);
+}
+
+static
+gpointer
+test_nested_register_thread(
+    gpointer user_data)
+{
+    TestNestedSync* test = user_data;
+    GBinderReader reader;
+    GBinderRemoteObject* connection;
+    GBinderLocalObject* observer;
+    GBinderClient* client;
+    GBinderLocalRequest* req2;
+    GBinderRemoteReply* reply2;
+    GBinderLocalReply* complete;
+    gint32 result = 0;
+    int status2 = -1;
+
+    observer = gbinder_local_object_new(test->obj->ipc, TEST_IFACES2,
+        NULL, NULL);
+    g_assert(observer);
+
+    client = gbinder_client_new(test->accessor, TEST_IFACE2);
+    req2 = gbinder_client_new_request(client);
+    gbinder_local_request_append_local_object(req2, observer);
+    reply2 = gbinder_client_transact_sync_reply2(client, TX_CODE2, req2,
+        &status2, &gbinder_ipc_sync_worker);
+    g_assert_cmpint(status2, == ,GBINDER_STATUS_OK);
+    g_assert(reply2);
+
+    gbinder_remote_reply_init_reader(reply2, &reader);
+    g_assert((connection = gbinder_reader_read_object(&reader)));
+    g_assert(gbinder_reader_read_int32(&reader, &result));
+    g_assert_cmpint(result, == ,TX_RESULT2);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_remote_object_unref(connection);
+    gbinder_remote_reply_unref(reply2);
+    gbinder_local_request_unref(req2);
+    gbinder_client_unref(client);
+    gbinder_local_object_drop(observer);
+
+    complete = gbinder_local_reply_append_int32
+        (gbinder_local_object_new_reply(test->obj), TX_RESULT1);
+    gbinder_remote_request_complete(test->req, complete, GBINDER_STATUS_OK);
+    gbinder_local_reply_unref(complete);
+    return NULL;
+}
+
+static
+GBinderLocalReply*
+test_nested_register_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestNestedSync* test = user_data;
+    GBinderReader reader;
+
+    GDEBUG("Nested register request handled");
+    g_assert(!test->register_handled);
+    test->register_handled = TRUE;
+    g_assert(!flags);
+    g_assert(!g_strcmp0(gbinder_remote_request_interface(req), TEST_IFACE));
+    g_assert(code == TX_CODE);
+
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert((test->accessor = gbinder_reader_read_object(&reader)));
+    /* Default system stability plus outer vendor stability requires VINTF. */
+    g_assert_cmpint(test->accessor->stability, == ,GBINDER_STABILITY_VINTF);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    gbinder_remote_request_block(req);
+    test->obj = gbinder_local_object_ref(obj);
+    test->req = gbinder_remote_request_ref(req);
+    test->thread = g_thread_new("nested-register",
+        test_nested_register_thread, test);
+
+    *status = GBINDER_STATUS_OK;
+    return NULL;
+}
+
+static
+void
+test_nested_register_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* data)
+{
+    TestNestedSync* test = data;
+    GBinderReader reader;
+    gint32 result = 0;
+
+    GDEBUG("Nested register reply received");
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
+
+    gbinder_remote_reply_init_reader(reply, &reader);
+    g_assert(gbinder_reader_read_int32(&reader, &result));
+    g_assert_cmpint(result, == ,TX_RESULT1);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    test->register_finished = TRUE;
+    g_main_loop_quit(test->loop);
+}
+
+static
+void
+test_nested_sync_run(
+    void)
+{
+    TestNestedSync test;
+    GBinderLocalObject* obj;
+    GBinderLocalObject* accessor;
+    GBinderProxyObject* proxy;
+    GBinderRemoteObject* remote_obj;
+    GBinderRemoteObject* proxy_remote;
+    GBinderClient* client;
+    GBinderLocalRequest* req;
+    GBinderIpc* ipc_obj;
+    GBinderIpc* ipc_proxy;
+    int fd_obj, fd_proxy;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+
+    ipc_proxy = gbinder_ipc_new(DEV, "aidl3");
+    ipc_obj = gbinder_ipc_new(DEV2, "aidl3");
+    fd_proxy = gbinder_driver_fd(ipc_proxy->driver);
+    fd_obj = gbinder_driver_fd(ipc_obj->driver);
+
+    obj = gbinder_local_object_new(ipc_obj, TEST_IFACES,
+        test_nested_register_cb, &test);
+    remote_obj = gbinder_remote_object_new(ipc_obj,
+        test_binder_register_object(fd_obj, obj, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    remote_obj->stability = GBINDER_STABILITY_VENDOR;
+
+    g_assert((proxy = gbinder_proxy_object_new(ipc_proxy, remote_obj)));
+    g_assert_cmpint(proxy->parent.stability, == ,GBINDER_STABILITY_VENDOR);
+    proxy_remote = gbinder_remote_object_new(ipc_proxy,
+        test_binder_register_object(fd_proxy, &proxy->parent, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    client = gbinder_client_new(proxy_remote, TEST_IFACE);
+
+    accessor = gbinder_local_object_new(ipc_proxy, TEST_IFACES2,
+        test_nested_accessor_cb, &test);
+    req = gbinder_client_new_request(client);
+    gbinder_local_request_append_local_object(req, accessor);
+    g_assert(gbinder_client_transact(client, TX_CODE, 0, req,
+        test_nested_register_reply, NULL, &test));
+    gbinder_local_request_unref(req);
+
+    test_run(&test_opt, test.loop);
+
+    g_assert(test.register_handled);
+    g_assert(test.connect_handled);
+    g_assert(test.register_finished);
+
+    g_thread_join(test.thread);
+    test_binder_unregister_objects(fd_obj);
+    test_binder_unregister_objects(fd_proxy);
+
+    gbinder_local_object_drop(obj);
+    gbinder_local_object_drop(accessor);
+    gbinder_local_object_unref(test.obj);
+    gbinder_local_object_drop(test.connection);
+    gbinder_remote_object_unref(test.accessor);
+    gbinder_remote_request_unref(test.req);
+    gbinder_local_object_drop(&proxy->parent);
+    gbinder_remote_object_unref(proxy_remote);
+    gbinder_remote_object_unref(remote_obj);
+    gbinder_client_unref(client);
+    gbinder_ipc_unref(ipc_obj);
+    gbinder_ipc_unref(ipc_proxy);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_nested_sync(
+    void)
+{
+    test_run_in_context(&test_opt, test_nested_sync_run);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -619,8 +1063,11 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("empty_reply"), test_empty_reply);
+    g_test_add_func(TEST_("interface"), test_interface);
     g_test_add_func(TEST_("param"), test_param);
     g_test_add_func(TEST_("obj"), test_obj);
+    g_test_add_func(TEST_("nested_sync"), test_nested_sync);
 
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);

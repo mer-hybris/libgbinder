@@ -145,7 +145,8 @@ struct gbinder_io {
 #define GBINDER_MAX_BINDER_OBJECT_SIZE (28)
     guint (*encode_local_object)(void* out, GBinderLocalObject* obj,
         const GBinderRpcProtocol* protocol);
-    guint (*encode_remote_object)(void* out, GBinderRemoteObject* obj);
+    guint (*encode_remote_object)(void* out, GBinderRemoteObject* obj,
+        const GBinderRpcProtocol* protocol);
     guint (*encode_fd_object)(void* out, int fd);
     guint (*encode_fda_object)(void* out, const GBinderFds *fds,
         const GBinderParent* parent);

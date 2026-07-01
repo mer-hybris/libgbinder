@@ -181,7 +181,8 @@ GBINDER_IO_FN(encode_local_object)(
         dest->binder = (uintptr_t)obj;
     }
     if (protocol->finish_flatten_binder) {
-        protocol->finish_flatten_binder(dest + 1, obj);
+        protocol->finish_flatten_binder(dest + 1, obj ?
+            obj->stability : GBINDER_STABILITY_UNDECLARED);
     } else if (protocol->flat_binder_object_extra) {
         memset(dest + 1, 0, protocol->flat_binder_object_extra);
     }
@@ -192,7 +193,8 @@ static
 guint
 GBINDER_IO_FN(encode_remote_object)(
     void* out,
-    GBinderRemoteObject* obj)
+    GBinderRemoteObject* obj,
+    const GBinderRpcProtocol* protocol)
 {
     struct flat_binder_object* dest = out;
 
@@ -204,7 +206,13 @@ GBINDER_IO_FN(encode_remote_object)(
     } else {
         dest->hdr.type = BINDER_TYPE_BINDER;
     }
-    return sizeof(*dest);
+    if (protocol->finish_flatten_binder) {
+        protocol->finish_flatten_binder(dest + 1, obj ?
+            obj->stability : GBINDER_STABILITY_UNDECLARED);
+    } else if (protocol->flat_binder_object_extra) {
+        memset(dest + 1, 0, protocol->flat_binder_object_extra);
+    }
+    return sizeof(*dest) + protocol->flat_binder_object_extra;
 }
 
 static
@@ -533,7 +541,12 @@ GBINDER_IO_FN(decode_binder_object)(
 {
     const struct flat_binder_object* obj = data;
 
-    if (size >= sizeof(*obj)) {
+    if (size >= sizeof(struct binder_object_header)) {
+        const gsize objsize = GBINDER_IO_FN(object_size)(obj, protocol);
+
+        if (!objsize || objsize > size) {
+            return 0;
+        }
         switch (obj->hdr.type) {
         case BINDER_TYPE_HANDLE:
             if (out) {
@@ -543,14 +556,14 @@ GBINDER_IO_FN(decode_binder_object)(
                     protocol->finish_unflatten_binder(obj + 1, *out);
                 }
             }
-            return sizeof(*obj) + protocol->flat_binder_object_extra;
+            return objsize;
         case BINDER_TYPE_BINDER:
             if (!obj->binder) {
                 /* That's a NULL reference */
                 if (out) {
                     *out = NULL;
                 }
-                return sizeof(*obj) + protocol->flat_binder_object_extra;
+                return objsize;
             }
             /* fallthrough */
         default:

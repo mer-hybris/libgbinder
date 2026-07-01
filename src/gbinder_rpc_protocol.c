@@ -38,6 +38,7 @@
 #include "gbinder_config.h"
 #include "gbinder_log.h"
 #include "gbinder_local_object_p.h"
+#include "gbinder_remote_object_p.h"
 
 #include <gutil_misc.h>
 
@@ -326,13 +327,21 @@ static
 void
 gbinder_rpc_protocol_aidl3_finish_flatten_binder(
     void* out,
-    GBinderLocalObject* obj)
+    GBINDER_STABILITY_LEVEL stability)
 {
-    if (G_LIKELY(obj)) {
-        *(guint32*)out = obj->stability;
-    } else {
-        *(guint32*)out = GBINDER_STABILITY_UNDECLARED;
-    }
+    *(guint32*)out = stability;
+}
+
+static
+void
+gbinder_rpc_protocol_aidl3_finish_unflatten_binder(
+    const void* in,
+    GBinderRemoteObject* obj)
+{
+    guint32 stability;
+
+    memcpy(&stability, in, sizeof(stability));
+    obj->stability = stability;
 }
 
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
@@ -343,6 +352,8 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl3_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl3_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
 };
 
@@ -363,15 +374,27 @@ static
 void
 gbinder_rpc_protocol_aidl4_finish_flatten_binder(
     void* out,
-    GBinderLocalObject* obj)
+    GBINDER_STABILITY_LEVEL stability)
 {
     struct stability_category cat = {
         .binder_wire_format_version = BINDER_WIRE_FORMAT_VERSION_AIDL4,
         .reserved = { 0, 0, },
-        .stability_level = obj ? obj->stability : GBINDER_STABILITY_UNDECLARED,
+        .stability_level = stability,
     };
 
     memcpy(out, &cat, sizeof(cat));
+}
+
+static
+void
+gbinder_rpc_protocol_aidl4_finish_unflatten_binder(
+    const void* in,
+    GBinderRemoteObject* obj)
+{
+    struct stability_category cat;
+
+    memcpy(&cat, in, sizeof(cat));
+    obj->stability = cat.stability_level;
 }
 
 static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
@@ -382,6 +405,8 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl4_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl4_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
 };
 

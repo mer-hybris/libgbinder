@@ -176,6 +176,7 @@ gbinder_remote_object_new(
 
         self->ipc = gbinder_ipc_ref(ipc);
         self->handle = handle;
+        self->stability = GBINDER_STABILITY_SYSTEM;
         switch (create) {
         case REMOTE_OBJECT_CREATE_DEAD:
             self->dead = TRUE;
