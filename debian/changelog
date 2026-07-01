@@ -1,3 +1,9 @@
+libgbinder (1.1.50) unstable; urgency=low
+
+  * Fixed proxy issues
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 01 Jul 2026 17:51:34 +0300
+
 libgbinder (1.1.49) unstable; urgency=low
 
   * Added gbinder_reader_skip_parcelable() API
