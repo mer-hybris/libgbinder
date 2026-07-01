@@ -287,6 +287,12 @@ gbinder_proxy_object_handle_transaction(
     GBinderLocalRequest* fwd;
     GBinderProxyObjectConverter convert;
 
+    if (priv->dropped || remote->dead) {
+        GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
+        *status = (-EBADMSG);
+        return NULL;
+    }
+
     /*
      * Direct synchronous transactions don't have req->tx to block
      * and complete asynchronously. Forward them synchronously and
@@ -300,12 +306,6 @@ gbinder_proxy_object_handle_transaction(
         const gboolean oneway = !!(flags & GBINDER_TX_FLAG_ONEWAY);
         int tx_status;
 
-        if (priv->dropped || remote->dead) {
-            GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
-            *status = (-EBADMSG);
-            return NULL;
-        }
-
         gbinder_proxy_object_converter_init(&convert, self, object->ipc,
             remote->ipc);
         fwd = gbinder_remote_request_convert_to_local(req, &convert.pub);
@@ -317,10 +317,10 @@ gbinder_proxy_object_handle_transaction(
 
         if (oneway) {
             reply = NULL;
-            tx_status = gbinder_ipc_sync_worker.sync_oneway(remote->ipc,
+            tx_status = gbinder_ipc_transact_sync_oneway_main(remote->ipc,
                 remote->handle, code, fwd);
         } else {
-            reply = gbinder_ipc_sync_worker.sync_reply(remote->ipc,
+            reply = gbinder_ipc_transact_sync_reply_main(remote->ipc,
                 remote->handle, code, fwd, &tx_status);
         }
         gbinder_local_request_unref(fwd);
@@ -344,11 +344,6 @@ gbinder_proxy_object_handle_transaction(
         return fwd_reply;
     }
 
-    if (priv->dropped || remote->dead) {
-        GVERBOSE_("dropped: %d dead:%d", priv->dropped, remote->dead);
-        *status = (-EBADMSG);
-        return NULL;
-    }
     tx = g_slice_new0(GBinderProxyTx);
     g_object_ref(tx->proxy = self);
     tx->req = gbinder_remote_request_ref(req);

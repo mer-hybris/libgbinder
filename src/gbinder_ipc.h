@@ -172,6 +172,23 @@ gbinder_ipc_ping_sync(
     const GBinderIpcSyncApi* api)
     GBINDER_INTERNAL;
 
+GBinderRemoteReply*
+gbinder_ipc_transact_sync_reply_main(
+    GBinderIpc* ipc,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req,
+    int* status)
+    GBINDER_INTERNAL;
+
+int
+gbinder_ipc_transact_sync_oneway_main(
+    GBinderIpc* ipc,
+    guint32 handle,
+    guint32 code,
+    GBinderLocalRequest* req)
+    GBINDER_INTERNAL;
+
 gulong
 gbinder_ipc_transact(
     GBinderIpc* ipc,

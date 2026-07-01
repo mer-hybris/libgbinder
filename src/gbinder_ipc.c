@@ -1792,9 +1792,8 @@ const GBinderIpcSyncApi gbinder_ipc_sync_worker = {
  * GBinderIpcSyncApi for the main thread
  *==========================================================================*/
 
-static
 GBinderRemoteReply*
-gbinder_ipc_transact_sync_reply(
+gbinder_ipc_transact_sync_reply_main(
     GBinderIpc* self,
     guint32 handle,
     guint32 code,
@@ -1820,9 +1819,8 @@ gbinder_ipc_transact_sync_reply(
     return NULL;
 }
 
-static
 int
-gbinder_ipc_transact_sync_oneway(
+gbinder_ipc_transact_sync_oneway_main(
     GBinderIpc* self,
     guint32 handle,
     guint32 code,
@@ -1839,8 +1837,8 @@ gbinder_ipc_transact_sync_oneway(
 }
 
 const GBinderIpcSyncApi gbinder_ipc_sync_main = {
-    .sync_reply = gbinder_ipc_transact_sync_reply,
-    .sync_oneway = gbinder_ipc_transact_sync_oneway
+    .sync_reply = gbinder_ipc_transact_sync_reply_main,
+    .sync_oneway = gbinder_ipc_transact_sync_oneway_main
 };
 
 /*==========================================================================*
