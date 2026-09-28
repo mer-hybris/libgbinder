@@ -36,7 +36,9 @@
 #include "gbinder_types_p.h"
 
 typedef struct gbinder_object_converter_functions {
-    GBinderLocalObject* (*handle_to_local)(GBinderObjectConverter*, guint32);
+    GBinderLocalObject* (*handle_to_local)(GBinderObjectConverter*, guint32,
+        const GBinderRpcProtocol*, const void*);
+    GBinderRemoteObject* (*local_to_remote)(GBinderObjectConverter*, void*);
 } GBinderObjectConverterFunctions;
 
 struct gbinder_object_converter {
@@ -51,9 +53,22 @@ GBINDER_INLINE_FUNC
 GBinderLocalObject*
 gbinder_object_converter_handle_to_local(
     GBinderObjectConverter* convert,
-    guint32 handle)
+    guint32 handle,
+    const GBinderRpcProtocol* protocol,
+    const void* extra)
 {
-    return convert ? convert->f->handle_to_local(convert, handle) : NULL;
+    return convert ? convert->f->handle_to_local(convert, handle,
+        protocol, extra) : NULL;
+}
+
+GBINDER_INLINE_FUNC
+GBinderRemoteObject*
+gbinder_object_converter_local_to_remote(
+    GBinderObjectConverter* convert,
+    void* pointer)
+{
+    return (convert && convert->f->local_to_remote) ?
+        convert->f->local_to_remote(convert, pointer) : NULL;
 }
 
 #endif /* GBINDER_OBJECT_CONVERTER_H */

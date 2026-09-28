@@ -531,6 +531,18 @@ GBINDER_IO_FN(decode_binder_handle)(
 }
 
 static
+void*
+GBINDER_IO_FN(decode_binder_local)(
+    const void* data)
+{
+    const struct flat_binder_object* obj = data;
+
+    /* Caller guarantees that data points to an object */
+    return (obj->hdr.type == BINDER_TYPE_BINDER) ?
+        (void*)(uintptr_t)obj->binder : NULL;
+}
+
+static
 guint
 GBINDER_IO_FN(decode_binder_object)(
     const void* data,
@@ -694,6 +706,7 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .decode_cookie = GBINDER_IO_FN(decode_cookie),
     .decode_ptr_cookie = GBINDER_IO_FN(decode_ptr_cookie),
     .decode_binder_handle = GBINDER_IO_FN(decode_binder_handle),
+    .decode_binder_local = GBINDER_IO_FN(decode_binder_local),
     .decode_binder_object = GBINDER_IO_FN(decode_binder_object),
     .decode_buffer_object = GBINDER_IO_FN(decode_buffer_object),
     .decode_fd_object = GBINDER_IO_FN(decode_fd_object),

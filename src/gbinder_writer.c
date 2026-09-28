@@ -34,6 +34,7 @@
 #include "gbinder_fmq_p.h"
 #include "gbinder_local_object.h"
 #include "gbinder_object_converter.h"
+#include "gbinder_remote_object.h"
 #include "gbinder_rpc_protocol.h"
 #include "gbinder_io.h"
 #include "gbinder_log.h"
@@ -118,6 +119,8 @@ gbinder_writer_data_append_contents(
                 const guint8* obj = *objects++;
                 gsize objsize, src_objsize, offset = obj - bufdata;
                 GBinderLocalObject* local;
+                GBinderRemoteObject* remote;
+                void* pointer;
                 guint32 handle;
 
                 GASSERT(offset >= off && offset < bufsize);
@@ -142,7 +145,8 @@ gbinder_writer_data_append_contents(
                 if (src_objsize && convert && io->decode_binder_handle(obj,
                     &handle, proto) && (local =
                     gbinder_object_converter_handle_to_local(convert,
-                    handle))) {
+                    handle, proto, obj + src_objsize -
+                    proto->flat_binder_object_extra))) {
                     const guint pos = dest->len;
 
                     g_byte_array_set_size(dest, pos +
@@ -154,6 +158,20 @@ gbinder_writer_data_append_contents(
                     /* Keep the reference */
                     data->cleanup = gbinder_cleanup_add(data->cleanup,
                         (GDestroyNotify) gbinder_local_object_unref, local);
+                } else if (src_objsize && convert &&
+                    (pointer = io->decode_binder_local(obj)) &&
+                    (remote = gbinder_object_converter_local_to_remote
+                        (convert, pointer))) {
+                    const guint pos = dest->len;
+
+                    g_byte_array_set_size(dest, pos +
+                        GBINDER_MAX_BINDER_OBJECT_SIZE);
+                    objsize = io->encode_remote_object(dest->data + pos,
+                        remote, proto);
+                    g_byte_array_set_size(dest, pos + objsize);
+
+                    data->cleanup = gbinder_cleanup_add(data->cleanup,
+                        (GDestroyNotify) gbinder_remote_object_unref, remote);
                 } else {
                     objsize = src_objsize;
                     if (src_objsize) {

@@ -90,7 +90,7 @@ test_null(
     g_assert(!gbinder_remote_request_read_string8(NULL));
     g_assert(!gbinder_remote_request_read_string16(NULL));
     g_assert(!gbinder_remote_request_read_object(NULL));
-    g_assert(!gbinder_object_converter_handle_to_local(NULL, 0));
+    g_assert(!gbinder_object_converter_handle_to_local(NULL, 0, NULL, NULL));
 }
 
 /*==========================================================================*
@@ -258,7 +258,9 @@ static
 GBinderLocalObject*
 test_to_local_convert_none(
     GBinderObjectConverter* convert,
-    guint32 handle)
+    guint32 handle,
+    const GBinderRpcProtocol* protocol,
+    const void* extra)
 {
     return NULL;
 }

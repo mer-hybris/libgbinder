@@ -193,6 +193,7 @@ struct gbinder_io {
     guint (*decode_cookie)(const void* data, guint64* cookie);
     guint (*decode_binder_handle)(const void* obj, guint32* handle,
         const GBinderRpcProtocol* protocol);
+    void* (*decode_binder_local)(const void* obj);
     guint (*decode_binder_object)(const void* data, gsize size,
         GBinderObjectRegistry* reg, GBinderRemoteObject** obj,
         const GBinderRpcProtocol* protocol);

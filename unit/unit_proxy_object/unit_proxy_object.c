@@ -43,6 +43,14 @@
 #include "gbinder_remote_reply.h"
 #include "gbinder_local_request.h"
 #include "gbinder_local_reply.h"
+#include "gbinder_buffer_p.h"
+#include "gbinder_local_request_p.h"
+#include "gbinder_output_data.h"
+#include "gbinder_object_registry.h"
+#include "gbinder_remote_request_p.h"
+
+#include <gutil_intarray.h>
+#include <gutil_misc.h>
 
 #include <gutil_log.h>
 
@@ -1046,6 +1054,201 @@ test_nested_sync(
 }
 
 /*==========================================================================*
+ * return_object
+ *==========================================================================*/
+
+typedef struct test_return_object {
+    GBinderRemoteObject* original;
+    GBinderLocalObject* forwarded;
+    GBINDER_STABILITY_LEVEL stability;
+    guint calls;
+} TestReturnObject;
+
+static
+GBinderLocalReply*
+test_return_object_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestReturnObject* test = user_data;
+    GBinderReader reader;
+    GBinderRemoteObject* returned;
+    gint32 marker;
+
+    g_assert_cmpuint(code, == ,TX_CODE);
+    g_assert(!flags);
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert((returned = gbinder_reader_read_object(&reader)));
+    g_assert(returned->ipc == test->original->ipc);
+    g_assert_cmpuint(returned->handle, == ,test->original->handle);
+    g_assert_cmpint(returned->stability, == ,test->stability);
+    gbinder_remote_object_unref(returned);
+    g_assert(gbinder_reader_read_int32(&reader, &marker));
+    g_assert_cmpint(marker, == ,TX_PARAM1);
+    g_assert(gbinder_reader_at_end(&reader));
+    test->calls++;
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_object_new_reply(obj);
+}
+
+static
+GBinderLocalReply*
+test_forward_object_cb(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestReturnObject* test = user_data;
+    GBinderReader reader;
+    GBinderRemoteObject* forwarded;
+    GBinderProxyObject* proxy;
+
+    gbinder_remote_request_init_reader(req, &reader);
+    g_assert((forwarded = gbinder_reader_read_object(&reader)));
+    g_assert_cmpint(forwarded->stability, == ,GBINDER_STABILITY_VINTF);
+    g_assert(gbinder_reader_at_end(&reader));
+    test->forwarded = test_binder_object(gbinder_driver_fd(obj->ipc->driver),
+        forwarded->handle);
+    g_assert(test->forwarded);
+    proxy = GBINDER_PROXY_OBJECT(test->forwarded);
+    g_assert(proxy->remote == test->original);
+    g_assert_cmpint(proxy->remote->stability, == ,test->stability);
+    gbinder_remote_object_unref(forwarded);
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_object_new_reply(obj);
+}
+
+static
+void
+test_return_object_run(
+    gconstpointer param)
+{
+    GBinderIpc* src = gbinder_ipc_new(DEV, "aidl3");
+    GBinderIpc* dest = gbinder_ipc_new(DEV2, "aidl3");
+    int src_fd = gbinder_driver_fd(src->driver);
+    int dest_fd = gbinder_driver_fd(dest->driver);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderLocalObject* original = gbinder_local_object_new(dest,
+        TEST_IFACES2, NULL, NULL);
+    GBinderRemoteObject* remote = gbinder_object_registry_get_remote
+        (gbinder_ipc_object_registry(dest),
+        test_binder_register_object(dest_fd, original, 11),
+        REMOTE_REGISTRY_CAN_CREATE);
+    TestReturnObject test;
+    GBinderLocalObject* receiver;
+    GBinderRemoteObject* receiver_remote;
+    GBinderProxyObject* receiver_proxy;
+    GBinderLocalObject* forward_receiver;
+    GBinderRemoteObject* forward_remote;
+    GBinderProxyObject* forward_proxy;
+    GBinderRemoteObject* client_remote;
+    GBinderClient* client;
+    GBinderRemoteReply* forward_reply;
+    GBinderLocalRequest* local_req;
+    GBinderRemoteRequest* req;
+    GBinderLocalReply* reply;
+    GBinderOutputData* output;
+    GUtilIntArray* offsets;
+    guint8* bytes;
+    void** objects;
+    int status = -1;
+
+    memset(&test, 0, sizeof(test));
+    test.original = remote;
+    test.stability = original->stability = GPOINTER_TO_INT(param);
+    g_assert_cmpint(remote->stability, == ,GBINDER_STABILITY_SYSTEM);
+
+    /* Forward the original object through a VINTF service. The converter
+     * must retain its wire stability even when the proxy is promoted. */
+    forward_receiver = gbinder_local_object_new(src, TEST_IFACES,
+        test_forward_object_cb, &test);
+    forward_remote = gbinder_remote_object_new(src,
+        test_binder_register_object(src_fd, forward_receiver, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    forward_remote->stability = GBINDER_STABILITY_VINTF;
+    forward_proxy = gbinder_proxy_object_new(dest, forward_remote);
+    client_remote = gbinder_remote_object_new(dest,
+        test_binder_register_object(dest_fd, &forward_proxy->parent, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    client = gbinder_client_new(client_remote, TEST_IFACE);
+    local_req = gbinder_client_new_request(client);
+    gbinder_local_request_append_local_object(local_req, original);
+    forward_reply = gbinder_client_transact_sync_reply(client, TX_CODE,
+        local_req, &status);
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(forward_reply);
+    g_assert(test.forwarded);
+    gbinder_remote_reply_unref(forward_reply);
+    gbinder_local_request_unref(local_req);
+    receiver = gbinder_local_object_new(dest, TEST_IFACES,
+        test_return_object_cb, &test);
+    receiver_remote = gbinder_remote_object_new(dest,
+        test_binder_register_object(dest_fd, receiver, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    receiver_proxy = gbinder_proxy_object_new(src, receiver_remote);
+
+    /* Emulate the kernel returning a proxy as BINDER_TYPE_BINDER to its
+     * owner. The fake driver normally only converts BINDER to HANDLE. */
+    local_req = gbinder_local_request_new_iface(gbinder_ipc_io(src),
+        gbinder_ipc_protocol(src), TEST_IFACE);
+    gbinder_local_request_append_local_object(local_req, test.forwarded);
+    gbinder_local_request_append_int32(local_req, TX_PARAM1);
+    output = gbinder_local_request_data(local_req);
+    offsets = gbinder_output_data_offsets(output);
+    bytes = gutil_memdup(output->bytes->data, output->bytes->len);
+    g_assert_cmpuint(offsets->count, == ,1);
+    objects = g_new0(void*, 2);
+    objects[0] = bytes + offsets->data[0];
+    req = gbinder_remote_request_new(gbinder_ipc_object_registry(src),
+        gbinder_ipc_protocol(src), 0, 0);
+    gbinder_remote_request_set_data(req, TX_CODE,
+        gbinder_buffer_new(src->driver, bytes, output->bytes->len, objects));
+    gbinder_local_request_unref(local_req);
+
+    /* The receiver must get the original handle, not another proxy node. */
+    reply = gbinder_local_object_handle_transaction(&receiver_proxy->parent,
+        req, TX_CODE, 0, &status);
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
+    g_assert_cmpuint(test.calls, == ,1);
+    gbinder_local_reply_unref(reply);
+    gbinder_remote_request_unref(req);
+
+    test_binder_unregister_objects(src_fd);
+    test_binder_unregister_objects(dest_fd);
+    gbinder_local_object_drop(&receiver_proxy->parent);
+    gbinder_local_object_drop(test.forwarded);
+    gbinder_local_object_drop(&forward_proxy->parent);
+    gbinder_local_object_drop(forward_receiver);
+    gbinder_remote_object_unref(forward_remote);
+    gbinder_remote_object_unref(client_remote);
+    gbinder_client_unref(client);
+    gbinder_local_object_drop(receiver);
+    gbinder_local_object_drop(original);
+    gbinder_remote_object_unref(receiver_remote);
+    gbinder_remote_object_unref(remote);
+    gbinder_ipc_unref(src);
+    gbinder_ipc_unref(dest);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_return_object(
+    gconstpointer param)
+{
+    test_run_in_context_param(&test_opt, test_return_object_run, param);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1068,6 +1271,12 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("param"), test_param);
     g_test_add_func(TEST_("obj"), test_obj);
     g_test_add_func(TEST_("nested_sync"), test_nested_sync);
+    g_test_add_data_func(TEST_("return_object/system"),
+        GINT_TO_POINTER(GBINDER_STABILITY_SYSTEM), test_return_object);
+    g_test_add_data_func(TEST_("return_object/vendor"),
+        GINT_TO_POINTER(GBINDER_STABILITY_VENDOR), test_return_object);
+    g_test_add_data_func(TEST_("return_object/vintf"),
+        GINT_TO_POINTER(GBINDER_STABILITY_VINTF), test_return_object);
 
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);
