@@ -327,6 +327,28 @@ test_empty_reply(
  * interface
  *==========================================================================*/
 
+typedef struct test_interface {
+    GMainLoop* loop;
+    GBinderRemoteReply* reply;
+} TestInterface;
+
+static
+void
+test_interface_reply(
+    GBinderIpc* ipc,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    TestInterface* test = user_data;
+
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
+    g_assert(!test->reply);
+    test->reply = gbinder_remote_reply_ref(reply);
+    g_main_loop_quit(test->loop);
+}
+
 static
 void
 test_interface_run(
@@ -336,13 +358,16 @@ test_interface_run(
     GBinderProxyObject* proxy;
     GBinderRemoteObject* remote_obj;
     GBinderRemoteObject* proxy_remote;
-    GBinderRemoteReply* reply;
     GBinderLocalRequest* req;
     GBinderIpc* ipc_obj;
     GBinderIpc* ipc_proxy;
     char* iface;
     gint32 result;
-    int fd_obj, fd_proxy, status = INT_MAX;
+    int fd_obj, fd_proxy;
+    TestInterface test;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
 
     ipc_proxy = gbinder_ipc_new(DEV, "aidl");
     ipc_obj = gbinder_ipc_new(DEV2, "aidl");
@@ -363,27 +388,27 @@ test_interface_run(
      * such bufferless incoming request into an empty local request.
      */
     req = gbinder_driver_local_request_new(ipc_proxy->driver, NULL);
-    reply = gbinder_ipc_sync_main.sync_reply(ipc_proxy, proxy_remote->handle,
-        GBINDER_INTERFACE_TRANSACTION, req, &status);
-    g_assert(reply);
-    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
-    iface = gbinder_remote_reply_read_string16(reply);
+    g_assert(gbinder_ipc_transact(ipc_proxy, proxy_remote->handle,
+        GBINDER_INTERFACE_TRANSACTION, 0, req, test_interface_reply, NULL,
+        &test));
+    gbinder_local_request_unref(req);
+    test_run(&test_opt, test.loop);
+    iface = gbinder_remote_reply_read_string16(test.reply);
     g_assert_cmpstr(iface, == ,TEST_IFACE);
 
     g_free(iface);
-    gbinder_remote_reply_unref(reply);
-    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(test.reply);
+    test.reply = NULL;
 
     req = gbinder_driver_local_request_new(ipc_proxy->driver, NULL);
-    reply = gbinder_ipc_sync_main.sync_reply(ipc_proxy, proxy_remote->handle,
-        GBINDER_PING_TRANSACTION, req, &status);
-    g_assert(reply);
-    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
-    g_assert(gbinder_remote_reply_read_int32(reply, &result));
+    g_assert(gbinder_ipc_transact(ipc_proxy, proxy_remote->handle,
+        GBINDER_PING_TRANSACTION, 0, req, test_interface_reply, NULL, &test));
+    gbinder_local_request_unref(req);
+    test_run(&test_opt, test.loop);
+    g_assert(gbinder_remote_reply_read_int32(test.reply, &result));
     g_assert_cmpint(result, == ,GBINDER_STATUS_OK);
 
-    gbinder_remote_reply_unref(reply);
-    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(test.reply);
     test_binder_unregister_objects(fd_obj);
     test_binder_unregister_objects(fd_proxy);
     gbinder_local_object_drop(obj);
@@ -392,7 +417,8 @@ test_interface_run(
     gbinder_remote_object_unref(remote_obj);
     gbinder_ipc_unref(ipc_obj);
     gbinder_ipc_unref(ipc_proxy);
-    test_binder_exit_wait(&test_opt, NULL);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
 }
 
 static
@@ -1058,10 +1084,14 @@ test_nested_sync(
  *==========================================================================*/
 
 typedef struct test_return_object {
+    GMainLoop* loop;
+    GBinderProxyObject* proxy;
+    GBinderBuffer* buffer;
     GBinderRemoteObject* original;
     GBinderLocalObject* forwarded;
     GBINDER_STABILITY_LEVEL stability;
     guint calls;
+    guint replies;
 } TestReturnObject;
 
 static
@@ -1127,6 +1157,44 @@ test_forward_object_cb(
 
 static
 void
+test_return_object_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    TestReturnObject* test = user_data;
+
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    g_assert(reply);
+    test->replies++;
+    g_main_loop_quit(test->loop);
+}
+
+static
+GBinderLocalReply*
+test_return_object_forward(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status,
+    void* user_data)
+{
+    TestReturnObject* test = user_data;
+
+    /* Keep the live transaction so the proxy can complete asynchronously,
+     * replacing only the payload with the returning local Binder object. */
+    g_assert(req->tx);
+    g_assert(test->buffer);
+    gbinder_remote_request_set_data(req, code, test->buffer);
+    test->buffer = NULL;
+    return gbinder_local_object_handle_transaction(&test->proxy->parent,
+        req, code, flags, status);
+}
+
+static
+void
 test_return_object_run(
     gconstpointer param)
 {
@@ -1145,22 +1213,20 @@ test_return_object_run(
     GBinderLocalObject* receiver;
     GBinderRemoteObject* receiver_remote;
     GBinderProxyObject* receiver_proxy;
+    GBinderLocalObject* return_sender;
     GBinderLocalObject* forward_receiver;
     GBinderRemoteObject* forward_remote;
     GBinderProxyObject* forward_proxy;
     GBinderRemoteObject* client_remote;
     GBinderClient* client;
-    GBinderRemoteReply* forward_reply;
     GBinderLocalRequest* local_req;
-    GBinderRemoteRequest* req;
-    GBinderLocalReply* reply;
     GBinderOutputData* output;
     GUtilIntArray* offsets;
     guint8* bytes;
     void** objects;
-    int status = -1;
 
     memset(&test, 0, sizeof(test));
+    test.loop = loop;
     test.original = remote;
     test.stability = original->stability = GPOINTER_TO_INT(param);
     g_assert_cmpint(remote->stability, == ,GBINDER_STABILITY_SYSTEM);
@@ -1180,19 +1246,21 @@ test_return_object_run(
     client = gbinder_client_new(client_remote, TEST_IFACE);
     local_req = gbinder_client_new_request(client);
     gbinder_local_request_append_local_object(local_req, original);
-    forward_reply = gbinder_client_transact_sync_reply(client, TX_CODE,
-        local_req, &status);
-    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
-    g_assert(forward_reply);
-    g_assert(test.forwarded);
-    gbinder_remote_reply_unref(forward_reply);
+    /* The mock may deliver to a looper, which needs the main context. */
+    g_assert(gbinder_client_transact(client, TX_CODE, 0, local_req,
+        test_return_object_reply, NULL, &test));
     gbinder_local_request_unref(local_req);
+    test_run(&test_opt, loop);
+    g_assert_cmpuint(test.replies, == ,1);
+    g_assert(test.forwarded);
+    gbinder_client_unref(client);
+    gbinder_remote_object_unref(client_remote);
     receiver = gbinder_local_object_new(dest, TEST_IFACES,
         test_return_object_cb, &test);
     receiver_remote = gbinder_remote_object_new(dest,
         test_binder_register_object(dest_fd, receiver, AUTO_HANDLE),
         REMOTE_OBJECT_CREATE_ALIVE);
-    receiver_proxy = gbinder_proxy_object_new(src, receiver_remote);
+    test.proxy = receiver_proxy = gbinder_proxy_object_new(src, receiver_remote);
 
     /* Emulate the kernel returning a proxy as BINDER_TYPE_BINDER to its
      * owner. The fake driver normally only converts BINDER to HANDLE. */
@@ -1206,23 +1274,28 @@ test_return_object_run(
     g_assert_cmpuint(offsets->count, == ,1);
     objects = g_new0(void*, 2);
     objects[0] = bytes + offsets->data[0];
-    req = gbinder_remote_request_new(gbinder_ipc_object_registry(src),
-        gbinder_ipc_protocol(src), 0, 0);
-    gbinder_remote_request_set_data(req, TX_CODE,
-        gbinder_buffer_new(src->driver, bytes, output->bytes->len, objects));
+    test.buffer = gbinder_buffer_new(src->driver, bytes, output->bytes->len,
+        objects);
     gbinder_local_request_unref(local_req);
 
-    /* The receiver must get the original handle, not another proxy node. */
-    reply = gbinder_local_object_handle_transaction(&receiver_proxy->parent,
-        req, TX_CODE, 0, &status);
-    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
-    g_assert(reply);
+    /* Inject the return payload into an asynchronous transaction. The
+     * receiver must get the original handle, not another proxy node. */
+    return_sender = gbinder_local_object_new(src, TEST_IFACES,
+        test_return_object_forward, &test);
+    client_remote = gbinder_remote_object_new(src,
+        test_binder_register_object(src_fd, return_sender, AUTO_HANDLE),
+        REMOTE_OBJECT_CREATE_ALIVE);
+    client = gbinder_client_new(client_remote, TEST_IFACE);
+    g_assert(gbinder_client_transact(client, TX_CODE, 0, NULL,
+        test_return_object_reply, NULL, &test));
+    test_run(&test_opt, loop);
+    g_assert_cmpuint(test.replies, == ,2);
     g_assert_cmpuint(test.calls, == ,1);
-    gbinder_local_reply_unref(reply);
-    gbinder_remote_request_unref(req);
+    g_assert(!test.buffer);
 
     test_binder_unregister_objects(src_fd);
     test_binder_unregister_objects(dest_fd);
+    gbinder_local_object_drop(return_sender);
     gbinder_local_object_drop(&receiver_proxy->parent);
     gbinder_local_object_drop(test.forwarded);
     gbinder_local_object_drop(&forward_proxy->parent);
