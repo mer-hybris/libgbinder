@@ -39,6 +39,7 @@
 #include "gbinder_remote_reply_p.h"
 #include "gbinder_object_converter.h"
 #include "gbinder_object_registry.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_driver.h"
 #include "gbinder_eventloop_p.h"
 #include "gbinder_ipc.h"
@@ -113,8 +114,7 @@ gbinder_proxy_object_set_min_stability(
     GBINDER_STABILITY_LEVEL stability)
 {
     if (local && (local->stability & stability) != stability) {
-        if (local->stability && stability &&
-            stability != GBINDER_STABILITY_VINTF) {
+        if (local->stability && stability) {
             local->stability = GBINDER_STABILITY_VINTF;
         } else {
             local->stability = stability;
@@ -126,24 +126,59 @@ static
 GBinderLocalObject*
 gbinder_proxy_object_converter_handle_to_local(
     GBinderObjectConverter* pub,
-    guint32 handle)
+    guint32 handle,
+    const GBinderRpcProtocol* protocol,
+    const void* extra)
 {
     GBinderProxyObjectConverter* c = gbinder_proxy_object_converter_cast(pub);
     GBinderObjectRegistry* reg = gbinder_ipc_object_registry(c->remote);
     GBinderRemoteObject* remote = gbinder_object_registry_get_remote(reg,
         handle, REMOTE_REGISTRY_CAN_CREATE /* but don't acquire */);
-    GBinderLocalObject* local = gbinder_ipc_find_local_object(c->local,
-        gbinder_proxy_object_converter_check, remote);
+    GBinderLocalObject* local;
 
+    /* Retain the original stability before the proxy can be promoted. */
+    if (protocol->finish_unflatten_binder) {
+        protocol->finish_unflatten_binder(extra, remote);
+    }
+    local = gbinder_ipc_find_local_object(c->local,
+        gbinder_proxy_object_converter_check, remote);
     if (!local && !remote->dead) {
         /* GBinderProxyObject will reference GBinderRemoteObject */
         local = &gbinder_proxy_object_new(c->local, remote)->parent;
     }
+    /* The proxy must satisfy both the original object's stability and the
+     * forwarding service's stability. SYSTEM and VENDOR combine as VINTF. */
+    gbinder_proxy_object_set_min_stability(local, remote->stability);
     gbinder_proxy_object_set_min_stability(local, c->stability);
 
     /* Release the reference returned by gbinder_object_registry_get_remote */
     gbinder_remote_object_unref(remote);
     return local;
+}
+
+static
+GBinderRemoteObject*
+gbinder_proxy_object_converter_local_to_remote(
+    GBinderObjectConverter* pub,
+    void* pointer)
+{
+    GBinderProxyObjectConverter* c = gbinder_proxy_object_converter_cast(pub);
+    GBinderLocalObject* local = gbinder_object_registry_get_local
+        (gbinder_ipc_object_registry(c->remote), pointer);
+    GBinderRemoteObject* remote = NULL;
+
+    if (local) {
+        if (GBINDER_IS_PROXY_OBJECT(local)) {
+            GBinderRemoteObject* target = THIS(local)->remote;
+
+            /* Returning a proxy to its original domain restores its handle. */
+            if (target->ipc == c->local) {
+                remote = gbinder_remote_object_ref(target);
+            }
+        }
+        gbinder_local_object_unref(local);
+    }
+    return remote;
 }
 
 static
@@ -155,7 +190,8 @@ gbinder_proxy_object_converter_init(
     GBinderIpc* local)
 {
     static const GBinderObjectConverterFunctions gbinder_converter_fn = {
-        .handle_to_local = gbinder_proxy_object_converter_handle_to_local
+        .handle_to_local = gbinder_proxy_object_converter_handle_to_local,
+        .local_to_remote = gbinder_proxy_object_converter_local_to_remote
     };
 
     GBinderObjectConverter* pub = &convert->pub;
