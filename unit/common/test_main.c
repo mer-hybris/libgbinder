@@ -36,6 +36,8 @@
 
 #include <gutil_log.h>
 
+#include <unistd.h>
+
 typedef struct test_quit_later_data{
     GMainLoop* loop;
     guint n;
@@ -46,15 +48,6 @@ typedef struct test_context_data{
     GTestDataFunc func;
     gconstpointer param;
 } TestContextData;
-
-static
-gboolean
-test_timeout_expired(
-    gpointer data)
-{
-    g_assert(!"TIMEOUT");
-    return G_SOURCE_REMOVE;
-}
 
 static
 void
@@ -172,11 +165,17 @@ test_run(
     if (opt->flags & TEST_FLAG_DEBUG) {
         g_main_loop_run(loop);
     } else {
-        const guint timeout_id = g_timeout_add_seconds(TEST_TIMEOUT_SEC,
-            test_timeout_expired, NULL);
+        static guint depth;
 
+        /* SIGALRM terminates the process even if the main thread is stuck.
+         * Nested loops must neither extend nor cancel the outer timeout. */
+        if (!depth++) {
+            alarm(TEST_TIMEOUT_SEC);
+        }
         g_main_loop_run(loop);
-        g_source_remove(timeout_id);
+        if (!--depth) {
+            alarm(0);
+        }
     }
 }
 
