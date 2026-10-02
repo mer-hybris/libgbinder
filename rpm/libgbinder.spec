@@ -1,6 +1,6 @@
 Name: libgbinder
 
-Version: 1.1.52
+Version: 1.1.53
 Release: 0
 Summary: Binder client library
 License: BSD
@@ -72,14 +72,12 @@ make -C unit test
 %postun -n %{libname} -p /sbin/ldconfig
 
 %files -n %{libname}
-%defattr(-,root,root,-)
 %{_libdir}/%{name}.so.*
 %if %{license_support} == 0
 %license LICENSE
 %endif
 
 %files devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/gbinder
 %{_libdir}/pkgconfig/*.pc
 %{_libdir}/%{name}.so
@@ -97,7 +95,6 @@ Requires: %{libname} >= %{version}
 Binder command line utilities
 
 %files tools
-%defattr(-,root,root,-)
 %{_bindir}/binder-bridge
 %{_bindir}/binder-list
 %{_bindir}/binder-ping
