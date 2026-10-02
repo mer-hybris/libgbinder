@@ -32,6 +32,10 @@
 
 #define _GNU_SOURCE  /* pthread_*_np */
 
+#ifdef HAS_CONFIG_H
+#include "config.h"
+#endif
+
 #include "gbinder_ipc.h"
 #include "gbinder_driver.h"
 #include "gbinder_handler.h"
@@ -976,6 +980,9 @@ gbinder_ipc_looper_join(
         int err = clock_gettime(CLOCK_REALTIME, &ts);
 
         if (!err) {
+#if defined(HAS_PTHREAD_TIMEDJOIN_NP) && HAS_PTHREAD_TIMEDJOIN_NP == 0
+            err = pthread_join(looper->thread, NULL);
+#else
             const long ms = 1000000;
             const long sec = 1000 * ms;
             const long ns = ts.tv_nsec + GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS*ms;
@@ -983,6 +990,7 @@ gbinder_ipc_looper_join(
             ts.tv_sec += ns / sec;
             ts.tv_nsec = ns % sec;
             err = pthread_timedjoin_np(looper->thread, NULL, &ts);
+#endif
         }
 
         if (err) {
