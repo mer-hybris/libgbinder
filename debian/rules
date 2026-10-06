@@ -1,18 +1,15 @@
 #!/usr/bin/make -f
-# -*- makefile -*-
 
-# Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Avoid blhc complaining
+export DEB_CFLAGS_MAINT_APPEND = -D_FORTIFY_SOURCE=2
 
 LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
-override_dh_auto_build:
-	dh_auto_build -- LIBDIR=$(LIBDIR) release pkgconfig debian/libgbinder.install debian/libgbinder-dev.install
-	dh_auto_build -- -C tools release
+%:
+	dh $@
 
 override_dh_auto_install:
 	dh_auto_install -- LIBDIR=$(LIBDIR) install-dev
 	dh_auto_install -- -C tools
-
-%:
-	dh $@

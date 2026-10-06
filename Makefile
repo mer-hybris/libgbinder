@@ -238,10 +238,7 @@ clean:
 	rm -fr test/coverage/results test/coverage/*.gcov
 	rm -f *~ $(SRC_DIR)/*~ $(INCLUDE_DIR)/*~
 	rm -fr $(BUILD_DIR) RPMS installroot
-	rm -fr debian/tmp debian/libgbinder debian/libgbinder-dev
-	rm -f documentation.list debian/files debian/*.substvars
-	rm -f debian/*.debhelper.log debian/*.debhelper debian/*~
-	rm -f debian/libgbinder.install debian/libgbinder-dev.install
+	rm -f documentation.list
 
 test:
 	$(MAKE) -C unit test
@@ -310,9 +307,6 @@ ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
 
 $(PKGCONFIG): $(LIB_NAME).pc.in Makefile
 	sed -e 's|@version@|$(PCVERSION)|g' -e 's|@libdir@|$(ABS_LIBDIR)|g' $< > $@
-
-debian/%.install: debian/%.install.in
-	sed 's|@LIBDIR@|$(LIBDIR)|g' $< > $@
 
 #
 # Install
