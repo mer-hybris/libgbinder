@@ -77,7 +77,6 @@ LIB = $(LIB_NAME).a
 SRC = \
   gbinder_bridge.c \
   gbinder_buffer.c \
-  gbinder_cleanup.c \
   gbinder_client.c \
   gbinder_config.c \
   gbinder_driver.c \

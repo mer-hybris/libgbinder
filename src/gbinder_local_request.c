@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd.
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
@@ -38,6 +39,7 @@
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
+#include <gutil_cleanup.h>
 #include <gutil_intarray.h>
 #include <gutil_macros.h>
 
@@ -161,7 +163,7 @@ gbinder_local_request_free(
 
     g_byte_array_free(data->bytes, TRUE);
     gutil_int_array_free(data->offsets, TRUE);
-    gbinder_cleanup_free(data->cleanup);
+    gutil_cleanup_free(data->cleanup);
     g_slice_free(GBinderLocalRequest, self);
 }
 
@@ -204,7 +206,10 @@ gbinder_local_request_cleanup(
     if (G_LIKELY(self)) {
         GBinderWriterData* data = &self->data;
 
-        data->cleanup = gbinder_cleanup_add(data->cleanup, destroy, pointer);
+        if (!data->cleanup) {
+            data->cleanup = gutil_cleanup_new();
+        }
+        gutil_cleanup_add(data->cleanup, destroy, pointer);
     } else if (destroy) {
         destroy(pointer);
     }

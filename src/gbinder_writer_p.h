@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2025-2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
- * Copyright (C) 2025 Jolla Mobile Ltd.
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -36,7 +36,7 @@
 
 #include <gbinder_writer.h>
 
-#include "gbinder_cleanup.h"
+#include "gbinder_types_p.h"
 
 typedef struct gbinder_writer_data {
     const GBinderIo* io;
@@ -44,7 +44,7 @@ typedef struct gbinder_writer_data {
     GByteArray* bytes;
     GUtilIntArray* offsets;
     gsize buffers_size;
-    GBinderCleanup* cleanup;
+    GUtilCleanup* cleanup;
 } GBinderWriterData;
 
 void
