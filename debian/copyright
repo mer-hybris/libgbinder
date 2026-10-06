@@ -1,11 +1,86 @@
-Copyright (C) 2025-2026 Jolla Mobile Ltd.
-Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
-Copyright (C) 2018-2024 Jolla Ltd.
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: https://github.com/mer-hybris/libgbinder
+Upstream-Name: libgbinder
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
+Files:
+ *
+Copyright:
+ 2014-2024 Jolla Ltd.
+ 2025-2026 Jolla Mobile Ltd.
+ 2018-2026 Slava Monich <slava@monich.com>
+ 2021 Gary Wang <gary.wang@canonical.com>
+ 2021 Madhushan Nishantha <jlmadushan@gmail.com>
+ 2021 Franz-Josef Haider <franz.haider@jolla.com>
+ Matti Lehtimäki <matti.lehtimaki@gmail.com>
+ Juho Hämäläinen <juho.hamalainen@jolla.com>
+ Andrew Branson <andrew.branson@jolla.com>
+ Rinigus <rinigus.git@gmail.com>
+ George Hopkins <george-hopkins@null.net>
+ Bart Ribbers <bribbers@disroot.org>
+ Eugenio Paolantonio <me@medesimo.eu>
+ Alessandro Astone <ales.astone@gmail.com>
+ Martin Kampas <martin.kampas@seafarix.com>
+ Nikita Ukhrenkov <nikita.ukhrenkov@seafarix.com>
+ Ratchanan Srirattanamet <ratchanan@ubports.com>
+ Takuya Wakazono <pastalian46@gmail.com>
+License: BSD-3-clause
+Comment: See the AUTHORS file.
 
+Files:
+ test/rild-card-status/rild-card-status.c
+ src/gbinder_io_64.c
+ src/gbinder_io_32.c
+ include/gbinder_local_request.h
+ include/gbinder_buffer.h
+Copyright:
+ 2018 Jolla Ltd.
+ 2018 Slava Monich <slava.monich@jolla.com>
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+   1. Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+   3. Neither the name of Jolla Ltd nor the names of its contributors may
+      be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
+ BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: src/binder.h
+Copyright:
+ 2008 Google, Inc.
+ 2005 Palmsource, Inc.
+License: GPL-2 with Linux-syscall-note exception
+Comment:
+ This header is derived from the Linux kernel (include/uapi/linux/android/binder.h)
+ via the Android Bionic project, and retains the original license.
+
+Files:
+ debian/*
+Copyright:
+ 2026 Seyed Mohamad Amin Modaresi <modaresisofthard@proton.me>
+License: BSD-3-clause
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
   1. Redistributions of source code must retain the above copyright
      notice, this list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright
@@ -14,15 +89,30 @@ are met:
   3. Neither the names of the copyright holders nor the names of its
      contributors may be used to endorse or promote products derived
      from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
+ BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
-BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
+License: GPL-2 with Linux-syscall-note exception
+ This program is free software; you can redistribute it
+ and/or modify it under the terms of the GNU General Public
+ License version 2 as published by the Free Software Foundation.
+ .
+ On Debian systems, the full text of the GNU General Public
+ License version 2 can be found in the file
+ `/usr/share/common-licenses/GPL-2'.
+ .
+ This header was automatically generated from a Linux kernel header
+ of the same name, to make information necessary for userspace to
+ call into the kernel available to libc.  It contains only constants,
+ structures, and macros generated from the original header, and thus,
+ contains no copyrightable information.
