@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
@@ -32,7 +33,6 @@
 
 #include "gbinder_driver.h"
 #include "gbinder_buffer_p.h"
-#include "gbinder_cleanup.h"
 #include "gbinder_handler.h"
 #include "gbinder_io.h"
 #include "gbinder_local_object_p.h"
@@ -48,6 +48,7 @@
 #include "gbinder_writer.h"
 #include "gbinder_log.h"
 
+#include <gutil_cleanup.h>
 #include <gutil_intarray.h>
 #include <gutil_macros.h>
 #include <gutil_misc.h>
@@ -101,8 +102,8 @@ typedef struct gbinder_driver_context {
     GBinderDriverReadBuf* rbuf;
     GBinderObjectRegistry* reg;
     GBinderHandler* handler;
-    GBinderCleanup* unrefs;
     GBinderBufferContentsList* bufs;
+    GUtilCleanup* cleanup;
 } GBinderDriverContext;
 
 static
@@ -402,8 +403,21 @@ gbinder_driver_context_init(
     context->rbuf = rbuf;
     context->reg = reg;
     context->handler = handler;
-    context->unrefs = NULL;
+    context->cleanup = NULL;
     context->bufs = NULL;
+}
+
+static
+void
+gbinder_driver_context_cleanup_add(
+    GBinderDriverContext* context,
+    GDestroyNotify destroy,
+    gpointer pointer)
+{
+    if (!context->cleanup) {
+        context->cleanup = gutil_cleanup_new();
+    }
+    gutil_cleanup_add(context->cleanup, destroy, pointer);
 }
 
 static
@@ -411,7 +425,7 @@ void
 gbinder_driver_context_cleanup(
     GBinderDriverContext* context)
 {
-    gbinder_cleanup_free(context->unrefs);
+    gutil_cleanup_free(context->cleanup);
     gbinder_buffer_contents_list_free(context->bufs);
 }
 
@@ -659,7 +673,7 @@ gbinder_driver_handle_command(
              * Unrefs must be processed only after clearing the incoming
              * command queue.
              */
-            context->unrefs = gbinder_cleanup_add(context->unrefs,
+            gbinder_driver_context_cleanup_add(context,
                 gbinder_driver_cleanup_decrefs, obj);
         }
     } else if (cmd == io->br.acquire) {
@@ -687,7 +701,7 @@ gbinder_driver_handle_command(
              * Unrefs must be processed only after clearing the incoming
              * command queue.
              */
-            context->unrefs = gbinder_cleanup_add(context->unrefs,
+            gbinder_driver_context_cleanup_add(context,
                 gbinder_driver_cleanup_release, obj);
         }
     } else if (cmd == io->br.transaction) {

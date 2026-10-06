@@ -8,7 +8,7 @@ URL: https://github.com/mer-hybris/libgbinder
 Source: %{name}-%{version}.tar.bz2
 
 %define glib_version 2.32
-%define libglibutil_version 1.0.52
+%define libglibutil_version 1.0.83
 
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}

@@ -39,6 +39,7 @@
 #include "gbinder_io.h"
 #include "gbinder_log.h"
 
+#include <gutil_cleanup.h>
 #include <gutil_intarray.h>
 #include <gutil_macros.h>
 #include <gutil_strv.h>
@@ -75,6 +76,28 @@ GBINDER_INLINE_FUNC GBinderWriterPriv* gbinder_writer_cast(GBinderWriter* pub)
 GBINDER_INLINE_FUNC GBinderWriterData* gbinder_writer_data(GBinderWriter* pub)
     { return G_LIKELY(pub) ? gbinder_writer_cast(pub)->data : NULL; }
 
+static
+gpointer
+gbinder_writer_cleanup_add(
+    GBinderWriterData* data,
+    GDestroyNotify destroy,
+    gpointer pointer)
+{
+    if (!data->cleanup) {
+        data->cleanup = gutil_cleanup_new();
+    }
+    return gutil_cleanup_add(data->cleanup, destroy, pointer);
+}
+
+static
+void
+gbinder_writer_cleanup_add_ptr(
+    GBinderWriterData* data,
+    gpointer pointer)
+{
+    gbinder_writer_cleanup_add(data, g_free, pointer);
+}
+
 void
 gbinder_writer_data_set_contents(
     GBinderWriterData* data,
@@ -84,7 +107,7 @@ gbinder_writer_data_set_contents(
     g_byte_array_set_size(data->bytes, 0);
     gutil_int_array_set_count(data->offsets, 0);
     data->buffers_size = 0;
-    gbinder_cleanup_reset(data->cleanup);
+    gutil_cleanup_clear(data->cleanup);
     gbinder_writer_data_append_contents(data, buffer, 0, convert);
 }
 
@@ -103,7 +126,7 @@ gbinder_writer_data_append_contents(
         const guint8* bufdata = gbinder_buffer_data(buffer, &bufsize);
         void** objects = gbinder_buffer_objects(buffer);
 
-        data->cleanup = gbinder_cleanup_add(data->cleanup, (GDestroyNotify)
+        gbinder_writer_cleanup_add(data, (GDestroyNotify)
             gbinder_buffer_contents_unref,
             gbinder_buffer_contents_ref(contents));
         if (objects && *objects) {
@@ -156,8 +179,8 @@ gbinder_writer_data_append_contents(
                     g_byte_array_set_size(dest, pos + objsize);
 
                     /* Keep the reference */
-                    data->cleanup = gbinder_cleanup_add(data->cleanup,
-                        (GDestroyNotify) gbinder_local_object_unref, local);
+                    gbinder_writer_cleanup_add(data, (GDestroyNotify)
+                        gbinder_local_object_unref, local);
                 } else if (src_objsize && convert &&
                     (pointer = io->decode_binder_local(obj)) &&
                     (remote = gbinder_object_converter_local_to_remote
@@ -170,8 +193,8 @@ gbinder_writer_data_append_contents(
                         remote, proto);
                     g_byte_array_set_size(dest, pos + objsize);
 
-                    data->cleanup = gbinder_cleanup_add(data->cleanup,
-                        (GDestroyNotify) gbinder_remote_object_unref, remote);
+                    gbinder_writer_cleanup_add(data, (GDestroyNotify)
+                        gbinder_remote_object_unref, remote);
                 } else {
                     objsize = src_objsize;
                     if (src_objsize) {
@@ -714,8 +737,8 @@ gbinder_writer_data_append_fd(
         written = data->io->encode_fd_object(buf->data + offset, fd);
     } else {
         written = data->io->encode_fd_object(buf->data + offset, dupfd);
-        data->cleanup = gbinder_cleanup_add(data->cleanup,
-            gbinder_writer_data_close_fd, GINT_TO_POINTER(dupfd));
+        gbinder_writer_cleanup_add(data, gbinder_writer_data_close_fd,
+            GINT_TO_POINTER(dupfd));
     }
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + written);
@@ -1091,10 +1114,10 @@ gbinder_writer_data_append_hidl_vec(
     if (buf) {
         vec->data.ptr = buf;
         vec->count = count;
-        data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, buf);
+        gbinder_writer_cleanup_add_ptr(data, buf);
     }
     vec->owns_buffer = TRUE;
-    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec);
+    gbinder_writer_cleanup_add_ptr(data, vec);
 
     /* Every vector, even the one without data, requires two buffer objects */
     vec_parent.offset = GBINDER_HIDL_VEC_BUFFER_OFFSET;
@@ -1130,7 +1153,7 @@ gbinder_writer_data_append_hidl_string(
     hidl_string->data.str = str;
     hidl_string->len = len;
     hidl_string->owns_buffer = TRUE;
-    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, hidl_string);
+    gbinder_writer_cleanup_add_ptr(data, hidl_string);
 
     /* Write the buffer object pointing to the string descriptor */
     str_parent.offset = GBINDER_HIDL_STRING_BUFFER_OFFSET;
@@ -1181,11 +1204,11 @@ gbinder_writer_data_append_hidl_string_vec(
     if (count > 0) {
         strings = g_new0(GBinderHidlString, count);
         vec->data.ptr = strings;
-        data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, strings);
+        gbinder_writer_cleanup_add_ptr(data, strings);
     }
     vec->count = count;
     vec->owns_buffer = TRUE;
-    data->cleanup = gbinder_cleanup_add(data->cleanup, g_free, vec);
+    gbinder_writer_cleanup_add_ptr(data, vec);
 
     /* Fill in string descriptors */
     for (i = 0; i < count; i++) {
@@ -1372,10 +1395,7 @@ gbinder_writer_alloc(
     GBinderWriterData* data = gbinder_writer_data(self);
 
     if (G_LIKELY(data)) {
-        void* ptr = alloc(size);
-
-        data->cleanup = gbinder_cleanup_add(data->cleanup, dealloc, ptr);
-        return ptr;
+        return gbinder_writer_cleanup_add(data, dealloc, alloc(size));
     }
     return NULL;
 }
@@ -1431,7 +1451,7 @@ gbinder_writer_add_cleanup(
         GBinderWriterData* data = gbinder_writer_data(self);
 
         if (G_LIKELY(data)) {
-            data->cleanup = gbinder_cleanup_add(data->cleanup, destroy, ptr);
+            gbinder_writer_cleanup_add(data, destroy, ptr);
         }
     }
 }
