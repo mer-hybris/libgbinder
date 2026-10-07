@@ -238,10 +238,7 @@ clean:
 	rm -fr test/coverage/results test/coverage/*.gcov
 	rm -f *~ $(SRC_DIR)/*~ $(INCLUDE_DIR)/*~
 	rm -fr $(BUILD_DIR) RPMS installroot
-	rm -fr debian/tmp debian/libgbinder debian/libgbinder-dev
-	rm -f documentation.list debian/files debian/*.substvars
-	rm -f debian/*.debhelper.log debian/*.debhelper debian/*~
-	rm -f debian/libgbinder.install debian/libgbinder-dev.install
+	rm -f documentation.list
 
 test:
 	$(MAKE) -C unit test
@@ -311,9 +308,6 @@ ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
 $(PKGCONFIG): $(LIB_NAME).pc.in Makefile
 	sed -e 's|@version@|$(PCVERSION)|g' -e 's|@libdir@|$(ABS_LIBDIR)|g' $< > $@
 
-debian/%.install: debian/%.install.in
-	sed 's|@LIBDIR@|$(LIBDIR)|g' $< > $@
-
 #
 # Install
 #
@@ -331,12 +325,12 @@ INSTALL_PKGCONFIG_DIR = $(DESTDIR)$(ABS_LIBDIR)/pkgconfig
 install: $(INSTALL_LIB_DIR)
 	$(INSTALL) -m 755 $(RELEASE_SO) $(INSTALL_LIB_DIR)
 	ln -sf $(LIB_SO) $(INSTALL_LIB_DIR)/$(LIB_SYMLINK2)
-	ln -sf $(LIB_SYMLINK2) $(INSTALL_LIB_DIR)/$(LIB_SYMLINK1)
+	ln -sf $(LIB_SO) $(INSTALL_LIB_DIR)/$(LIB_SYMLINK1)
 
 install-dev: install $(INSTALL_INCLUDE_DIR) $(INSTALL_PKGCONFIG_DIR)
 	$(INSTALL_FILES) $(INCLUDE_DIR)/*.h $(INSTALL_INCLUDE_DIR)
 	$(INSTALL_FILES) $(PKGCONFIG) $(INSTALL_PKGCONFIG_DIR)
-	ln -sf $(LIB_SYMLINK1) $(INSTALL_LIB_DIR)/$(LIB_DEV_SYMLINK)
+	ln -sf $(LIB_SO) $(INSTALL_LIB_DIR)/$(LIB_DEV_SYMLINK)
 
 $(INSTALL_LIB_DIR):
 	$(INSTALL_DIRS) $@
