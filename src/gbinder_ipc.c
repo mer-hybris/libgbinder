@@ -93,6 +93,14 @@ G_DEFINE_TYPE(GBinderIpc, gbinder_ipc, G_TYPE_OBJECT)
 static GHashTable* gbinder_ipc_table = NULL;
 static pthread_mutex_t gbinder_ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * Set by gbinder_ipc_exit() before it tears the IPC objects down. Callbacks
+ * that were registered by the code which submitted a pending transaction are
+ * not invoked then: that code may already be unloaded (a dlclose'd plugin
+ * library, for example) and calling into it would jump into unmapped memory.
+ */
+static gboolean gbinder_ipc_exiting = FALSE;
+
 #define GBINDER_IPC_MAX_TX_THREADS (15)
 #define GBINDER_IPC_MAX_PRIMARY_LOOPERS (5)
 #define GBINDER_IPC_LOOPER_START_TIMEOUT_SEC (2)
@@ -1566,7 +1574,7 @@ gbinder_ipc_tx_internal_free(
 
     gbinder_local_request_unref(tx->req);
     gbinder_remote_reply_unref(tx->reply);
-    if (tx->fn_destroy) {
+    if (tx->fn_destroy && !gbinder_ipc_exiting) {
         tx->fn_destroy(pub->user_data);
     }
     g_slice_free(GBinderIpcTxInternal, tx);
@@ -1648,7 +1656,7 @@ gbinder_ipc_tx_custom_free(
 {
     GBinderIpcTxCustom* tx = gbinder_ipc_tx_custom_cast(priv);
 
-    if (tx->fn_custom_destroy) {
+    if (tx->fn_custom_destroy && !gbinder_ipc_exiting) {
         tx->fn_custom_destroy(priv->pub.user_data);
     }
     g_slice_free(GBinderIpcTxCustom, tx);
@@ -2173,6 +2181,8 @@ gbinder_ipc_exit()
     gpointer key, value;
     GSList* ipcs = NULL;
     GSList* i;
+
+    gbinder_ipc_exiting = TRUE;
 
     /* Lock */
     pthread_mutex_lock(&gbinder_ipc_mutex);
