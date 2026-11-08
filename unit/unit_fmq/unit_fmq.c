@@ -256,6 +256,12 @@ test_read_write_gint64(
     /* Try to read when there is no data */
     g_assert(!gbinder_fmq_read(fmq, &out_data, 1));
 
+    /* Reject counts whose byte size would overflow. */
+    g_assert(!gbinder_fmq_read(fmq, out_data,
+        G_MAXSIZE / test->item_size + 1));
+    g_assert(!gbinder_fmq_write(fmq, in_data,
+        G_MAXSIZE / test->item_size + 1));
+
     memset(out_data, 0, test->max_num_items);
 
     /* Fill whole buffer with data */

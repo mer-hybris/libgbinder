@@ -102,10 +102,10 @@ gbinder_fmq_available_to_write_bytes(
     GBinderFmq* self,
     gboolean contiguous)
 {
-    const guint32 size = gbinder_fmq_get_grantor_descriptor(self,
+    const gsize size = gbinder_fmq_get_grantor_descriptor(self,
         DATA_PTR_POS)->extent;
-    const gsize available_total = size -
-        gbinder_fmq_available_to_read_bytes(self, FALSE);
+    const gsize used = gbinder_fmq_available_to_read_bytes(self, FALSE);
+    const gsize available_total = used > size ? 0 : size - used;
 
     if (contiguous) {
         /*
@@ -173,7 +173,7 @@ gbinder_fmq_map_grantor_descriptor(
             gbinder_fmq_get_grantor_descriptor(self, index);
         /* Offset for mmap must be a multiple of PAGE_SIZE */
         const guint32 map_offset = (desc->offset & ~(getpagesize()-1));
-        const guint32 map_length = desc->offset - map_offset + desc->extent;
+        const gsize map_length = desc->offset - map_offset + desc->extent;
         const GBinderFds* fds = self->desc->data.fds;
         void* address = mmap(0, map_length, PROT_READ | PROT_WRITE, MAP_SHARED,
             gbinder_fds_get_fd(fds, desc->fd_index), map_offset);
@@ -445,7 +445,8 @@ gbinder_fmq_begin_read(
             GWARN("Unable to write data because of misaligned pointer");
         } else if (write_ptr - read_ptr > size) {
             __atomic_store_n(self->read_ptr, write_ptr, __ATOMIC_RELEASE);
-        } else if (write_ptr - read_ptr < bytes_desired) {
+        } else if (items > size / item_size ||
+            write_ptr - read_ptr < bytes_desired) {
             /* Not enough data to read in FMQ. */
         } else {
             ptr = self->ring + (read_ptr % size);
@@ -672,7 +673,7 @@ gbinder_fmq_wake(
 
             if (~old_value & bit_mask) {
                 ret = syscall(__NR_futex, self->event_flag_ptr,
-                    FUTEX_WAKE_BITSET, G_MAXUINT32, NULL, NULL, bit_mask);
+                    FUTEX_WAKE_BITSET, G_MAXINT, NULL, NULL, bit_mask);
             }
 
             if (ret == -1) {
