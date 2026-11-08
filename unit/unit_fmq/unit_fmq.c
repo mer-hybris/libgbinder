@@ -38,6 +38,7 @@
 #include "gbinder_log.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -534,6 +535,117 @@ test_zero_copy(
     gbinder_fmq_unref(fmq);
 }
 
+/*==========================================================================*
+ * Import
+ *==========================================================================*/
+
+static
+void
+test_import_invalid(
+    void)
+{
+    GBinderFmq* owner = gbinder_fmq_new(sizeof(guint64), 8,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE,
+        GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
+    const GBinderMQDescriptor* original = gbinder_fmq_get_descriptor(owner);
+    const int fd = gbinder_fds_get_fd(original->data.fds, 0);
+    guint i;
+
+    for (i = 0; i < 9; i++) {
+        GBinderMQDescriptor desc = *original;
+        GBinderFmqGrantorDescriptor grantors[4];
+
+        memcpy(grantors, desc.grantors.data.ptr, sizeof(grantors));
+        desc.grantors.data.ptr = grantors;
+        switch (i) {
+        case 0:
+            desc.quantum = 0;
+            break;
+        case 1:
+            desc.flags = 3;
+            break;
+        case 2:
+            grantors[0].extent = 4;
+            break;
+        case 3:
+            grantors[1].offset = 1;
+            break;
+        case 4:
+            grantors[2].extent = 63;
+            break;
+        case 5:
+            grantors[2].extent = G_MAXUINT64;
+            break;
+        case 6:
+            grantors[3].extent = 1;
+            break;
+        case 7:
+            grantors[2].fd_index = original->data.fds->num_fds;
+            break;
+        case 8:
+            grantors[2].offset = 2 * getpagesize();
+            break;
+        }
+        g_assert_null(gbinder_fmq_new_from_descriptor(&desc, 0));
+        g_assert_cmpint(fcntl(fd, F_GETFD), >= ,0);
+    }
+    gbinder_fmq_unref(owner);
+    close(fd);
+}
+
+static
+void
+test_import_reset(
+    void)
+{
+    GBinderFmq* owner = gbinder_fmq_new(sizeof(guint64), 8,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE, 0, -1, 0);
+    const GBinderMQDescriptor* desc = gbinder_fmq_get_descriptor(owner);
+    const int fd = gbinder_fds_get_fd(desc->data.fds, 0);
+    GBinderFmq* copy;
+    guint64 input = 42, output = 0;
+
+    g_assert(gbinder_fmq_write(owner, &input, 1));
+    copy = gbinder_fmq_new_from_descriptor(desc, 0);
+    g_assert(copy);
+    g_assert_cmpuint(gbinder_fmq_available_to_read(copy), == ,0);
+    g_assert(gbinder_fmq_write(owner, &input, 1));
+    g_assert(gbinder_fmq_read(copy, &output, 1));
+    g_assert_cmpuint(output, == ,input);
+    gbinder_fmq_unref(copy);
+    gbinder_fmq_unref(owner);
+    close(fd);
+}
+
+static
+void
+test_import_ints(
+    void)
+{
+    GBinderFmq* owner = gbinder_fmq_new(sizeof(guint64), 8,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE, 0, -1, 0);
+    GBinderMQDescriptor desc = *gbinder_fmq_get_descriptor(owner);
+    const int fd = gbinder_fds_get_fd(desc.data.fds, 0);
+    GBinderFds* handle = g_malloc0(sizeof(*handle) + 2 * sizeof(int));
+    const GBinderFds* copied_handle;
+    GBinderFmq* copy;
+
+    handle->version = sizeof(*handle);
+    handle->num_fds = handle->num_ints = 1;
+    ((int*)(handle + 1))[0] = fd;
+    ((int*)(handle + 1))[1] = 12345;
+    desc.data.fds = handle;
+    copy = gbinder_fmq_new_from_descriptor(&desc, 0);
+    g_assert(copy);
+    copied_handle = gbinder_fmq_get_descriptor(copy)->data.fds;
+    g_assert_cmpuint(copied_handle->num_ints, == ,1);
+    g_assert_cmpint(gbinder_fds_get_fd(copied_handle, 1), == ,12345);
+    gbinder_fmq_unref(copy);
+    g_free(handle);
+    gbinder_fmq_unref(owner);
+    close(fd);
+}
+
 #endif /* GBINDER_FMQ_SUPPORTED */
 
 /*==========================================================================*
@@ -587,6 +699,9 @@ int main(int argc, char* argv[])
         g_test_add_func(TEST_("ref"), test_ref);
         g_test_add_func(TEST_("wait_wake"), test_wait_wake);
         g_test_add_func(TEST_("zero_copy"), test_zero_copy);
+        g_test_add_func(TEST_("import_invalid"), test_import_invalid);
+        g_test_add_func(TEST_("import_reset"), test_import_reset);
+        g_test_add_func(TEST_("import_ints"), test_import_ints);
     }
 #else /* GBINDER_FMQ_SUPPORTED */
     g_test_init(&argc, &argv, NULL);

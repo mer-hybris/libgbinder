@@ -43,6 +43,7 @@
 #include "gbinder_reader_p.h"
 #include "gbinder_writer_p.h"
 #include "gbinder_ipc.h"
+#include "gbinder_driver.h"
 #include "gbinder_io.h"
 
 #include <gutil_intarray.h>
@@ -52,6 +53,7 @@
 
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 
 static TestOpt test_opt;
 static const char TMP_DIR_TEMPLATE[] = "gbinder-test-writer-XXXXXX";
@@ -1546,6 +1548,96 @@ test_fmq_descriptor_aidl(
     gbinder_fmq_unref(fmq);
 }
 
+static
+void
+test_fmq_import(
+    gconstpointer data)
+{
+    const char* protocol = data;
+    const char* dev = !strcmp(protocol, "hidl") ?
+        GBINDER_DEFAULT_HWBINDER : GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, protocol);
+    GBinderLocalRequest* req = gbinder_local_request_new(
+        gbinder_driver_io(ipc->driver), gbinder_rpc_protocol_by_name(protocol),
+        NULL);
+    GBinderFmq* owner = gbinder_fmq_new(sizeof(guint64), 8,
+        GBINDER_FMQ_TYPE_SYNC_READ_WRITE,
+        GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
+    GBinderFmq* imported;
+    GBinderWriter writer;
+    GBinderOutputData* output;
+    const GUtilIntArray* offsets;
+    GBinderReader reader;
+    GBinderReaderData rd;
+    guint64 input[] = {1, 2, 3, 4, 5, 6};
+    guint64 values[8];
+    guint32 state = 0;
+    gint32 sentinel;
+    int imported_fd, owner_fd;
+    guint i;
+
+    g_assert_nonnull(owner);
+    g_assert_true(gbinder_fmq_write(owner, input, 6));
+    owner_fd =
+        gbinder_fds_get_fd(gbinder_fmq_get_descriptor(owner)->data.fds, 0);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_fmq_descriptor(&writer, owner);
+    gbinder_writer_append_int32(&writer, 12345);
+    output = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(output);
+    memset(&rd, 0, sizeof(rd));
+    rd.buffer = gbinder_buffer_new(ipc->driver,
+        gutil_memdup(output->bytes->data, output->bytes->len),
+        output->bytes->len, NULL);
+    rd.reg = gbinder_ipc_object_registry(ipc);
+    rd.objects = g_new0(void*, offsets->count + 1);
+    for (i = 0; i < offsets->count; i++) {
+        rd.objects[i] = (guint8*)rd.buffer->data + offsets->data[i];
+    }
+    for (i = 0; i < rd.buffer->size - sizeof(gint32); i++) {
+        gbinder_reader_init(&reader, &rd, 0, i);
+        g_assert_null(gbinder_reader_read_fmq_descriptor(&reader,
+            GBINDER_FMQ_FLAG_NO_RESET_POINTERS));
+    }
+    gbinder_reader_init(&reader, &rd, 0, rd.buffer->size);
+    imported = gbinder_reader_read_fmq_descriptor(&reader,
+        GBINDER_FMQ_FLAG_NO_RESET_POINTERS);
+    g_assert_nonnull(imported);
+    g_assert_true(gbinder_reader_read_int32(&reader, &sentinel));
+    g_assert_cmpint(sentinel, == ,12345);
+    g_assert_true(gbinder_reader_at_end(&reader));
+    g_assert_cmpuint(gbinder_fmq_get_item_size(imported), == ,sizeof(guint64));
+    g_assert_cmpuint(gbinder_fmq_get_capacity(imported), == ,8);
+    imported_fd =
+        gbinder_fds_get_fd(gbinder_fmq_get_descriptor(imported)->data.fds, 0);
+    g_assert_cmpint(imported_fd, != ,owner_fd);
+
+    g_free(rd.objects);
+    gbinder_buffer_free(rd.buffer);
+    gbinder_local_request_unref(req);
+    g_assert_true(gbinder_fmq_read(imported, values, 4));
+    g_assert(!memcmp(values, input, 4 * sizeof(guint64)));
+    g_assert_true(gbinder_fmq_write(imported, input, 6));
+    g_assert_true(gbinder_fmq_read(owner, values, 8));
+    g_assert_cmpuint(values[0], == ,5);
+    g_assert_cmpuint(values[1], == ,6);
+    g_assert(!memcmp(values + 2, input, sizeof(input)));
+    g_assert_cmpint(gbinder_fmq_wake(owner, 2), == ,0);
+    g_assert_cmpint(gbinder_fmq_try_wait(imported, 2, &state), == ,0);
+    g_assert_cmpuint(state, == ,2);
+    g_assert_cmpint(gbinder_fmq_wait_timeout(imported, 2, &state, 1), == ,
+        -ETIMEDOUT);
+
+    gbinder_fmq_unref(imported);
+    g_assert_cmpint(fcntl(imported_fd, F_GETFD), == ,-1);
+    g_assert_cmpint(errno, == ,EBADF);
+    g_assert_cmpint(fcntl(owner_fd, F_GETFD), >= ,0);
+    gbinder_fmq_unref(owner);
+    close(owner_fd);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
 #endif /* GBINDER_FMQ_SUPPORTED */
 
 /*==========================================================================*
@@ -1667,12 +1759,22 @@ int main(int argc, char* argv[])
 
 #if GBINDER_FMQ_SUPPORTED
     {
+        static const char* protocols[] = {
+            "aidl", "aidl2", "aidl3", "aidl4", "hidl"
+        };
         int test_fd = syscall(__NR_memfd_create, "test", MFD_CLOEXEC);
 
         if (test_fd < 0 && errno == ENOSYS) {
             GINFO("Skipping tests that rely on memfd_create");
         } else {
             close(test_fd);
+            for (i = 0; i < G_N_ELEMENTS(protocols); i++) {
+                char* path = g_strconcat(TEST_("fmq_import/"),
+                    protocols[i], NULL);
+
+                g_test_add_data_func(path, protocols[i], test_fmq_import);
+                g_free(path);
+            }
             g_test_add_func(TEST_("fmq_descriptor"), test_fmq_descriptor);
             g_test_add_func(TEST_("fmq_descriptor_aidl"),
                 test_fmq_descriptor_aidl);

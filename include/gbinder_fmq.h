@@ -65,6 +65,14 @@ void
 gbinder_fmq_unref(
     GBinderFmq* fmq);
 
+gsize
+gbinder_fmq_get_item_size(
+    const GBinderFmq* fmq);
+
+gsize
+gbinder_fmq_get_capacity(
+    const GBinderFmq* fmq);
+
 /* Functions for checking how many items are available in queue */
 gsize
 gbinder_fmq_available_to_read(
