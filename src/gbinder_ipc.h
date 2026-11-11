@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -212,6 +211,12 @@ gbinder_ipc_transact_custom(
 
 void
 gbinder_ipc_cancel(
+    GBinderIpc* ipc,
+    gulong id)
+    GBINDER_INTERNAL;
+
+gpointer
+gbinder_ipc_get_tx_user_data(
     GBinderIpc* ipc,
     gulong id)
     GBINDER_INTERNAL;
