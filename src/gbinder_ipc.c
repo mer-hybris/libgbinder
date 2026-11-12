@@ -971,32 +971,39 @@ gbinder_ipc_looper_join(
 {
     /* Caller checks looper for NULL */
     if (looper->thread && looper->thread != pthread_self()) {
-        struct timespec ts;
-        int err = clock_gettime(CLOCK_REALTIME, &ts);
+        int err;
 
-        if (!err) {
-            const long ms = 1000000;
-            const long sec = 1000 * ms;
-            const long ns = ts.tv_nsec + GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS*ms;
+        do {
+            struct timespec ts;
 
-            ts.tv_sec += ns / sec;
-            ts.tv_nsec = ns % sec;
-            err = pthread_timedjoin_np(looper->thread, NULL, &ts);
-        }
+            err = clock_gettime(CLOCK_REALTIME, &ts);
+            if (!err) {
+                const long ms = 1000000;
+                const long sec = 1000 * ms;
+                const long ns = ts.tv_nsec +
+                    GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS * ms;
+
+                ts.tv_sec += ns / sec;
+                ts.tv_nsec = ns % sec;
+                err = pthread_timedjoin_np(looper->thread, NULL, &ts);
+                if (err == ETIMEDOUT) {
+                    /*
+                     * Assume that looper is stuck in read, or waiting
+                     * for a reply which is never going to arrive. Shut
+                     * the driver down and kick the looper out of it.
+                     * Don't close the descriptor or unmap the buffers,
+                     * the looper may still be handling a transaction
+                     * which lives in that mapping. If it's stuck in a
+                     * transaction handler, keep waiting, the same as an
+                     * untimed join would.
+                     */
+                    GDEBUG("Looper %s is stuck", looper->name);
+                    gbinder_driver_shutdown(looper->driver);
+                }
+            }
+        } while (err == ETIMEDOUT);
 
         if (err) {
-            /* Assume that looper is stuck in read */
-            GBinderIpc* ipc = looper->ipc;
-            GBinderIpcPriv* priv = ipc->priv;
-
-            GDEBUG("Looper %s is stuck", looper->name);
-
-            /* Lock */
-            g_mutex_lock(&priv->looper_mutex);
-            gbinder_driver_close(ipc->driver);
-            g_mutex_unlock(&priv->looper_mutex);
-            /* Unlock */
-
             pthread_join(looper->thread, NULL);
         }
         looper->joined = TRUE;

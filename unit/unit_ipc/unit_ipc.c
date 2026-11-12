@@ -1339,6 +1339,209 @@ test_cancel_on_exit(
 }
 
 /*==========================================================================*
+ * exit_busy_looper
+ * exit_stuck_looper
+ *==========================================================================*/
+
+/* Longer than two GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS */
+#define TEST_BUSY_LOOPER_MS (1200)
+#define TEST_STUCK_HANDLE (0x7fff)
+
+typedef GBinderLocalObjectClass TestBusyObjectClass;
+typedef struct test_busy_object {
+    GBinderLocalObject parent;
+    GMutex mutex;
+    GCond cond;
+    gboolean stuck;
+    gboolean entered;
+    int status;
+    int fd;
+} TestBusyObject;
+
+G_DEFINE_TYPE(TestBusyObject, test_busy_object, GBINDER_TYPE_LOCAL_OBJECT)
+#define TEST_TYPE_BUSY_OBJECT (test_busy_object_get_type())
+#define TEST_BUSY_OBJECT(obj) G_TYPE_CHECK_INSTANCE_CAST((obj), \
+    TEST_TYPE_BUSY_OBJECT, TestBusyObject)
+
+static
+GBINDER_LOCAL_TRANSACTION_SUPPORT
+test_busy_object_can_handle_transaction(
+    GBinderLocalObject* obj,
+    const char* iface,
+    guint code)
+{
+    return GBINDER_LOCAL_TRANSACTION_LOOPER;
+}
+
+static
+GBinderLocalReply*
+test_busy_object_handle_looper_transaction(
+    GBinderLocalObject* obj,
+    GBinderRemoteRequest* req,
+    guint code,
+    guint flags,
+    int* status)
+{
+    TestBusyObject* self = TEST_BUSY_OBJECT(obj);
+
+    g_mutex_lock(&self->mutex);
+    self->entered = TRUE;
+    g_cond_broadcast(&self->cond);
+    g_mutex_unlock(&self->mutex);
+
+    if (self->stuck) {
+        /* Wait for a reply which never arrives */
+        GBinderLocalRequest* call = test_local_request_new(obj->ipc);
+        GBinderRemoteReply* reply = gbinder_ipc_sync_main.sync_reply
+            (obj->ipc, TEST_STUCK_HANDLE, 1, call, &self->status);
+
+        g_assert(!reply);
+        gbinder_local_request_unref(call);
+    } else {
+        /* Keep the looper busy while the main thread is trying to join it */
+        g_usleep(TEST_BUSY_LOOPER_MS * 1000);
+    }
+
+    /* The mapping and the descriptor must still be there */
+    self->fd = gbinder_driver_fd(obj->ipc->driver);
+    *status = GBINDER_STATUS_OK;
+    return gbinder_local_object_new_reply(obj);
+}
+
+static
+void
+test_busy_object_finalize(
+    GObject* object)
+{
+    TestBusyObject* self = TEST_BUSY_OBJECT(object);
+
+    g_cond_clear(&self->cond);
+    g_mutex_clear(&self->mutex);
+    G_OBJECT_CLASS(test_busy_object_parent_class)->finalize(object);
+}
+
+static
+void
+test_busy_object_init(
+    TestBusyObject* self)
+{
+    g_mutex_init(&self->mutex);
+    g_cond_init(&self->cond);
+    self->status = GBINDER_STATUS_OK;
+    self->fd = -1;
+}
+
+static
+void
+test_busy_object_class_init(
+    TestBusyObjectClass* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = test_busy_object_finalize;
+    klass->can_handle_transaction = test_busy_object_can_handle_transaction;
+    klass->handle_looper_transaction =
+        test_busy_object_handle_looper_transaction;
+}
+
+static
+gboolean
+test_exit_looper_exit(
+    gpointer loop)
+{
+    /* Runs under the test timeout, unlike the test function itself */
+    gbinder_ipc_exit();
+    g_main_loop_quit(loop);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_exit_looper(
+    gboolean stuck)
+{
+    static const char* const ifaces[] = { "test", NULL };
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    const GBinderRpcProtocol* prot =
+        gbinder_rpc_protocol_for_device(gbinder_driver_dev(ipc->driver));
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderLocalObject* obj = gbinder_local_object_new_with_type
+        (TEST_TYPE_BUSY_OBJECT, ipc, ifaces, NULL, NULL);
+    TestBusyObject* busy = TEST_BUSY_OBJECT(obj);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const guint flushes = test_binder_flush_count();
+    GBinderWriter writer;
+
+    busy->stuck = stuck;
+    if (stuck) {
+        test_binder_ignore_dead_object(fd);
+    }
+    gbinder_local_request_init_writer(req, &writer);
+    prot->write_rpc_header(&writer, "test");
+    test_binder_br_transaction(fd, LOOPER_THREAD, obj, 1,
+        gbinder_local_request_data(req)->bytes);
+    test_binder_br_transaction_complete(fd, LOOPER_THREAD); /* For reply */
+    gbinder_ipc_looper_check(ipc);
+
+    /* Wait until the looper is inside the transaction handler */
+    g_mutex_lock(&busy->mutex);
+    while (!busy->entered) {
+        g_cond_wait(&busy->cond, &busy->mutex);
+    }
+    g_mutex_unlock(&busy->mutex);
+
+    /*
+     * The looper doesn't exit within the join timeout. It must get
+     * kicked out of the driver, not have the driver closed under it.
+     */
+    g_idle_add(test_exit_looper_exit, loop);
+    test_run(&test_opt, loop);
+    g_assert_cmpint(busy->fd, == ,fd);
+    g_assert_cmpuint(test_binder_flush_count(), > ,flushes);
+    if (stuck) {
+        /* The reply it has been waiting for has been given up on */
+        g_assert_cmpint(busy->status, == ,-EBADF);
+    }
+
+    gbinder_local_object_unref(obj);
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_exit_busy_looper_run(
+    void)
+{
+    test_exit_looper(FALSE);
+}
+
+static
+void
+test_exit_busy_looper(
+    void)
+{
+    test_run_in_context(&test_opt, test_exit_busy_looper_run);
+}
+
+static
+void
+test_exit_stuck_looper_run(
+    void)
+{
+    test_exit_looper(TRUE);
+}
+
+static
+void
+test_exit_stuck_looper(
+    void)
+{
+    test_run_in_context(&test_opt, test_exit_stuck_looper_run);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1378,6 +1581,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transact_async_sync"), test_transact_async_sync);
     g_test_add_func(TEST_("drop_remote_refs"), test_drop_remote_refs);
     g_test_add_func(TEST_("cancel_on_exit"), test_cancel_on_exit);
+    g_test_add_func(TEST_("exit_busy_looper"), test_exit_busy_looper);
+    g_test_add_func(TEST_("exit_stuck_looper"), test_exit_stuck_looper);
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);
     result = g_test_run();

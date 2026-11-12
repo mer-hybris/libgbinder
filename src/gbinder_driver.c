@@ -86,6 +86,7 @@ struct gbinder_driver {
     const char* name;
     const GBinderIo* io;
     const GBinderRpcProtocol* protocol;
+    gint shutdown;
 };
 
 typedef struct gbinder_driver_read_buf {
@@ -232,6 +233,11 @@ gbinder_driver_write(
     int err = (-EAGAIN);
 
     while (err == (-EAGAIN)) {
+        if (g_atomic_int_get(&self->shutdown)) {
+            /* What a closed descriptor would return */
+            err = (-EBADF);
+            break;
+        }
         gbinder_driver_verbose_dump('<',
             buf->ptr +  buf->consumed,
             buf->size - buf->consumed);
@@ -266,6 +272,11 @@ gbinder_driver_write_read(
     }
 
     while (err == (-EAGAIN)) {
+        if (g_atomic_int_get(&self->shutdown)) {
+            /* What a closed descriptor would return */
+            err = (-EBADF);
+            break;
+        }
 
 #if GUTIL_LOG_VERBOSE
         const gsize were_consumed = read ? read->consumed : 0;
@@ -938,6 +949,21 @@ gbinder_driver_new(
     return NULL;
 }
 
+static
+void
+gbinder_driver_close(
+    GBinderDriver* self)
+{
+    if (self->vm) {
+        GDEBUG("Closing %s", self->dev);
+        gbinder_system_munmap(self->vm, self->vmsize);
+        gbinder_system_close(self->fd);
+        self->fd = -1;
+        self->vm = NULL;
+        self->vmsize = 0;
+    }
+}
+
 GBinderDriver*
 gbinder_driver_ref(
     GBinderDriver* self)
@@ -960,16 +986,26 @@ gbinder_driver_unref(
 }
 
 void
-gbinder_driver_close(
+gbinder_driver_shutdown(
     GBinderDriver* self)
 {
-    if (self->vm) {
-        GDEBUG("Closing %s", self->dev);
-        gbinder_system_munmap(self->vm, self->vmsize);
-        gbinder_system_close(self->fd);
-        self->fd = -1;
-        self->vm = NULL;
-        self->vmsize = 0;
+    /*
+     * Make all further reads and writes fail, as if the descriptor had
+     * been closed, so that threads waiting for something that is never
+     * going to arrive give up.
+     */
+    g_atomic_int_set(&self->shutdown, TRUE);
+
+    /*
+     * Then get the threads that are blocked in BINDER_WRITE_READ out of
+     * there. Every close() of a binder descriptor, not just the last one,
+     * makes the kernel (binder_flush) send all threads of this process
+     * that are waiting in BINDER_WRITE_READ back to user space. Closing
+     * a duplicate does that and leaves self->fd and the mapping alone,
+     * which other threads may still be using.
+     */
+    if (self->fd >= 0 && gbinder_system_flush(self->fd) < 0) {
+        GWARN("Failed to wake up %s threads: %s", self->dev, strerror(errno));
     }
 }
 

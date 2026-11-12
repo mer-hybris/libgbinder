@@ -60,11 +60,13 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 
 static GHashTable* test_fd_map = NULL; /* fd => TestBinderFd */
 static GHashTable* test_path_map = NULL; /* path => TestBinderNode */
-static GPrivate test_tx_stack = G_PRIVATE_INIT(NULL);
+static void test_binder_tx_stack_free(gpointer stack);
+static GPrivate test_tx_stack = G_PRIVATE_INIT(test_binder_tx_stack_free);
 static gint32 last_auto_handle = 0;
 
 G_LOCK_DEFINE_STATIC(test_binder);
 static GMainLoop* test_binder_exit_loop = NULL;
+static gint test_binder_flushes = 0;
 
 #define public_fd  fd[0]
 #define private_fd fd[1]
@@ -253,6 +255,15 @@ test_binder_destroy_data_free(
 
 static GPrivate test_destroy_data = G_PRIVATE_INIT
     (test_binder_destroy_data_free);
+
+static
+void
+test_binder_tx_stack_free(
+    gpointer stack)
+{
+    /* The thread exited with transactions it never replied to */
+    gutil_int_array_free(stack, TRUE);
+}
 
 static
 void
@@ -1252,6 +1263,39 @@ test_binder_push_data(
     }
 }
 
+/*
+ * Like test_binder_push_data() but for BR_TRANSACTION_64 and BR_REPLY_64
+ * carrying the data allocated by the caller. Normally the data is freed
+ * by BC_FREE_BUFFER_64, failing that, together with the node, the same
+ * way as the kernel releases the buffers of a closed binder file.
+ */
+static
+void
+test_binder_push_tx_data(
+    int fd,
+    TEST_BR_THREAD dest,
+    const void* data)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    const BinderTransactionData64* tr = (const BinderTransactionData64*)
+        ((const guint8*)data + sizeof(guint32));
+    gpointer buf = GSIZE_TO_POINTER(tr->data_buffer);
+
+    if (node) {
+        /* Lock */
+        test_binder_node_lock(node);
+        g_hash_table_replace(node->destroy_map, buf, NULL);
+        test_binder_node_unlock(node);
+        /* Unlock */
+
+        test_binder_node_queue_cmd_data(node, (dest == THIS_THREAD) ?
+            gettid() : dest, data);
+        test_binder_node_unref(node);
+    } else {
+        g_free(buf);
+    }
+}
+
 static
 void
 test_binder_push_ptr_cookie(
@@ -1430,7 +1474,7 @@ test_binder_br_transaction(
     test_binder_fill_transaction_data((void*)(br + sizeof(cmd)), &target,
         code, bytes);
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 void
@@ -1453,7 +1497,7 @@ test_binder_br_reply(
     test_binder_fill_transaction_data((void*)(br + sizeof(cmd)), &target,
         code, bytes);
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 void
@@ -1473,7 +1517,7 @@ test_binder_br_reply_status(
     /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
     tr->data_buffer = (gsize) gutil_memdup(&status, sizeof(status));
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 int
@@ -1698,6 +1742,30 @@ gbinder_system_close(
         test_binder_fd_free(binder_fd);
     }
     return ret;
+}
+
+int
+gbinder_system_flush(
+    int fd)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+
+    if (node) {
+        /* Reads never block here, there's nobody to wake up */
+        g_atomic_int_inc(&test_binder_flushes);
+        test_binder_node_unref(node);
+        return 0;
+    } else {
+        errno = EBADF;
+        return -1;
+    }
+}
+
+guint
+test_binder_flush_count(
+    void)
+{
+    return (guint) g_atomic_int_get(&test_binder_flushes);
 }
 
 int
