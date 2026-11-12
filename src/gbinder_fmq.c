@@ -223,7 +223,18 @@ gbinder_fmq_free(
             EVENT_FLAG_PTR_POS);
 
         g_free((GBinderFmqGrantorDescriptor*)self->desc->grantors.data.ptr);
-        g_free((GBinderFds*)self->desc->data.fds);
+        if (self->desc->data.fds) {
+            const GBinderFds* fds = self->desc->data.fds;
+
+            /*
+             * The first fd is the memfd allocated by gbinder_fmq_new(),
+             * the second one (if any) belongs to the caller.
+             */
+            if (fds->num_fds > 0) {
+                close(((const int*)(fds + 1))[0]);
+            }
+            g_free((GBinderFds*)fds);
+        }
 
         g_free(self->desc);
     }
@@ -365,6 +376,9 @@ gbinder_fmq_new(
         }
 
         GWARN("Failed to allocate shared memory: %s", strerror(errno));
+        if (shmem_fd >= 0) {
+            close(shmem_fd);
+        }
         gbinder_fmq_free(self);
     }
 
@@ -533,21 +547,21 @@ gbinder_fmq_read(
 
         if (in_data) {
             /*
-             * The number of messages that can be read contiguously without
-             * wrapping around the ring buffer.
+             * The counters live in memory shared with the other side,
+             * which can change them at any time. Don't load them again,
+             * derive the contiguous part from where begin_read() pointed
+             * us (it has checked that total fits into the ring).
              */
-            const gsize contiguous_messages =
-                gbinder_fmq_available_to_read_contiguous(self);
-            const gsize item_size = self->desc->quantum;
+            const gsize size = gbinder_fmq_get_grantor_descriptor(self,
+                DATA_PTR_POS)->extent;
+            const gsize total = items * self->desc->quantum;
+            const gsize offset = (const guint8*)in_data - self->ring;
+            const gsize first = MIN(total, size - offset);
 
-            if (contiguous_messages < items) {
+            memcpy(data, in_data, first);
+            if (first < total) {
                 /* A wrap around is required */
-                memcpy(data, in_data, contiguous_messages * item_size);
-                memcpy((char*)data + contiguous_messages * item_size,
-                    self->ring, (items - contiguous_messages) * item_size);
-            } else {
-                /* A wrap around is not required */
-                memcpy(data, in_data, items * item_size);
+                memcpy((guint8*)data + first, self->ring, total - first);
             }
 
             gbinder_fmq_end_read(self, items);
@@ -567,23 +581,17 @@ gbinder_fmq_write(
         void *out_data = gbinder_fmq_begin_write(self, items);
 
         if (out_data) {
-            /*
-             * The number of messages that can be written contiguously without
-             * wrapping around the ring buffer.
-             */
-            const gsize contiguous_messages =
-                gbinder_fmq_available_to_write_contiguous(self);
-            const gsize item_size = self->desc->quantum;
+            /* Same as in gbinder_fmq_read(), don't reload the counters */
+            const gsize size = gbinder_fmq_get_grantor_descriptor(self,
+                DATA_PTR_POS)->extent;
+            const gsize total = items * self->desc->quantum;
+            const gsize offset = (guint8*)out_data - self->ring;
+            const gsize first = MIN(total, size - offset);
 
-            if (contiguous_messages < items) {
-                /* A wrap around is required. */
-                memcpy(out_data, data, contiguous_messages * item_size);
-                memcpy(self->ring, (char *)data + contiguous_messages *
-                    item_size / sizeof(char),
-                    (items - contiguous_messages) * item_size);
-            } else {
-                /* A wrap around is not required to write items */
-                memcpy(out_data, data, items * item_size);
+            memcpy(out_data, data, first);
+            if (first < total) {
+                /* A wrap around is required */
+                memcpy(self->ring, (const guint8*)data + first, total - first);
             }
 
             gbinder_fmq_end_write(self, items);
