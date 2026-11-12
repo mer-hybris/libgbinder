@@ -1460,7 +1460,8 @@ gbinder_ipc_object_registry_get_remote(
 
 static
 gulong
-gbinder_ipc_tx_new_id()
+gbinder_ipc_tx_new_id(
+    void)
 {
     static gint gbinder_ipc_next_id = 1;
     gulong id = (guint)g_atomic_int_add(&gbinder_ipc_next_id, 1);
@@ -2181,7 +2182,8 @@ gbinder_ipc_class_init(
 
 /* Runs at exit */
 void
-gbinder_ipc_exit()
+gbinder_ipc_exit(
+    void)
 {
     GHashTableIter it;
     gpointer key, value;

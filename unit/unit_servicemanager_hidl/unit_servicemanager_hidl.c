@@ -51,7 +51,8 @@ static const char DEFAULT_CONFIG_DATA[] =
     DEV " = hidl\n";
 
 GType
-gbinder_servicemanager_aidl_get_type()
+gbinder_servicemanager_aidl_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl */
     g_assert_not_reached();
@@ -59,7 +60,8 @@ gbinder_servicemanager_aidl_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl2_get_type()
+gbinder_servicemanager_aidl2_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
     g_assert_not_reached();
@@ -67,7 +69,8 @@ gbinder_servicemanager_aidl2_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl3_get_type()
+gbinder_servicemanager_aidl3_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
     g_assert_not_reached();
@@ -75,7 +78,8 @@ gbinder_servicemanager_aidl3_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl5_get_type()
+gbinder_servicemanager_aidl5_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
     g_assert_not_reached();
@@ -83,7 +87,8 @@ gbinder_servicemanager_aidl5_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl6_get_type()
+gbinder_servicemanager_aidl6_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
     g_assert_not_reached();
@@ -155,7 +160,8 @@ test_get_cb(
 
 static
 void
-test_get_run()
+test_get_run(
+    void)
 {
     GBinderIpc* ipc;
     TestServiceManagerHidl* smsvc;
@@ -208,7 +214,8 @@ test_get_run()
 
 static
 void
-test_get()
+test_get(
+    void)
 {
     test_run_in_context(&test_opt, test_get_run);
 }
@@ -240,7 +247,8 @@ test_list_cb(
 
 static
 void
-test_list_run()
+test_list_run(
+    void)
 {
     TestList test;
     GBinderIpc* ipc;
@@ -296,7 +304,8 @@ test_list_run()
 
 static
 void
-test_list()
+test_list(
+    void)
 {
     test_run_in_context(&test_opt, test_list_run);
 }
@@ -371,7 +380,8 @@ test_notify_cb(
 
 static
 void
-test_notify_run()
+test_notify_run(
+    void)
 {
     TestNotify test;
     GBinderIpc* ipc;
@@ -432,7 +442,8 @@ test_notify_run()
 
 static
 void
-test_notify()
+test_notify(
+    void)
 {
     test_run_in_context(&test_opt, test_notify_run);
 }

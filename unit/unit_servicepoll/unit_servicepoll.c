@@ -188,37 +188,43 @@ test_servicemanager_class_init(
 /* Avoid pulling in the actual objects */
 
 GType
-gbinder_servicemanager_aidl_get_type()
+gbinder_servicemanager_aidl_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl2_get_type()
+gbinder_servicemanager_aidl2_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl3_get_type()
+gbinder_servicemanager_aidl3_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl5_get_type()
+gbinder_servicemanager_aidl5_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl6_get_type()
+gbinder_servicemanager_aidl6_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_hidl_get_type()
+gbinder_servicemanager_hidl_get_type(
+    void)
 {
     return TEST_TYPE_SERVICEMANAGER;
 }

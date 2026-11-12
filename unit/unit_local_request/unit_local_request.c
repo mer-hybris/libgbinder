@@ -81,7 +81,8 @@ test_buffer_from_bytes_and_objects(
 
 static
 GBinderLocalRequest*
-test_local_request_new()
+test_local_request_new(
+    void)
 {
     return gbinder_local_request_new(&gbinder_io_32,
         gbinder_rpc_protocol_for_device(NULL), NULL);

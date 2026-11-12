@@ -549,7 +549,8 @@ gbinder_rpc_protocol_value_map(
 
 static
 GHashTable*
-gbinder_rpc_protocol_load_config()
+gbinder_rpc_protocol_load_config(
+    void)
 {
     GHashTable* map = gbinder_config_load(CONF_GROUP,
         gbinder_rpc_protocol_value_map);
@@ -565,7 +566,8 @@ gbinder_rpc_protocol_load_config()
 
 /* Runs at exit */
 void
-gbinder_rpc_protocol_exit()
+gbinder_rpc_protocol_exit(
+    void)
 {
     if (gbinder_rpc_protocol_map) {
         g_hash_table_destroy(gbinder_rpc_protocol_map);

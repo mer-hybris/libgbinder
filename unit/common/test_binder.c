@@ -270,7 +270,8 @@ test_binder_destroy_data_add(
 
 static
 void
-test_binder_destroy_data_flush()
+test_binder_destroy_data_flush(
+    void)
 {
     GSList* list = g_private_get(&test_destroy_data);
 
@@ -647,7 +648,8 @@ test_binder_node_fix_affinity(
 
 static
 void
-test_binder_short_wait()
+test_binder_short_wait(
+    void)
 {
     usleep(100000); /* 100 ms */
 }
