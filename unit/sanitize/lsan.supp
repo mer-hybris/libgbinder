@@ -1,0 +1,6 @@
+# LeakSanitizer suppressions for unit/sanitize/run
+# GType registration data lives for the lifetime of the process.
+leak:g_type_register_static
+leak:g_type_register_fundamental
+leak:g_type_class_ref
+leak:g_type_add_interface_static

@@ -1,0 +1,4 @@
+# ThreadSanitizer suppressions for unit/sanitize/run
+# GLib itself is not instrumented and synchronises with futexes.
+called_from_lib:libglib-2.0.so
+called_from_lib:libgobject-2.0.so

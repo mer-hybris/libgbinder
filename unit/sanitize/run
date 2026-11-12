@@ -1,0 +1,157 @@
+#!/bin/bash
+#
+# Builds the library and the unit tests with a sanitizer (or for valgrind)
+# and runs them. Any sanitizer report or valgrind error fails the run.
+#
+# Usage: run [-c gcc|clang] [-m asan|tsan|valgrind] [-O level] [unit_xxx ...]
+#
+#   asan      AddressSanitizer + LeakSanitizer + UndefinedBehaviorSanitizer
+#   tsan      ThreadSanitizer (GMutex/GCond go through tsan_glib.c)
+#   valgrind  memcheck on the release build, leaks and errors are fatal
+#
+# Needs the libglibutil and glib development packages, plus valgrind for
+# the valgrind mode. Build output goes into the usual build/ directories,
+# which are cleaned first, so don't run two modes in one tree at once.
+#
+
+TESTS="\
+unit_bridge \
+unit_buffer \
+unit_client \
+unit_config \
+unit_driver \
+unit_eventloop \
+unit_fmq \
+unit_ipc \
+unit_local_object \
+unit_local_reply \
+unit_local_request \
+unit_log \
+unit_protocol \
+unit_proxy_object \
+unit_reader \
+unit_remote_object \
+unit_remote_reply \
+unit_remote_request \
+unit_servicemanager \
+unit_servicemanager_aidl \
+unit_servicemanager_aidl2 \
+unit_servicemanager_aidl3 \
+unit_servicemanager_aidl5 \
+unit_servicemanager_aidl6 \
+unit_servicemanager_hidl \
+unit_servicename \
+unit_servicepoll \
+unit_writer"
+
+COMPILER=gcc
+MODE=asan
+OPT=1
+
+function err() {
+    echo "*** ERROR!" $1
+    exit 1
+}
+
+while getopts "c:m:O:h" opt ; do
+    case $opt in
+    c) COMPILER="$OPTARG" ;;
+    m) MODE="$OPTARG" ;;
+    O) OPT="$OPTARG" ;;
+    *) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//' ; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# If specific tests are provided on the command line, only run those
+if [ $# -gt 0 ] ; then
+    TESTS="$@"
+fi
+
+which dirname >> /dev/null || err "Please install dirname"
+which $COMPILER >> /dev/null || err "Please install $COMPILER"
+
+pushd `dirname $0` > /dev/null
+SAN_DIR="$PWD"
+pushd .. > /dev/null
+TEST_DIR="$PWD"
+pushd .. > /dev/null
+TOP_DIR="$PWD"
+popd > /dev/null
+popd > /dev/null
+popd > /dev/null
+
+BASE_CFLAGS="-O$OPT -g -fno-omit-frame-pointer"
+BUILD=debug
+
+# GSlice is gone from recent GLib, but older ones need to be told to use
+# malloc, otherwise freed memory is recycled behind the sanitizer's back.
+export G_SLICE=always-malloc
+export G_DEBUG=gc-friendly
+
+case "$MODE" in
+asan)
+    SAN="-fsanitize=address,undefined -fno-sanitize-recover=all"
+    SAN="$SAN -fsanitize=float-divide-by-zero"
+    # The binder protocol packs 8-byte aligned kernel structures (e.g.
+    # binder_transaction_data) right after a 4-byte command code, and
+    # gbinder_io.c accesses them in place, like Android's Parcel does.
+    # That is only 4-byte aligned and every test would trip over it.
+    SAN="$SAN -fno-sanitize=alignment"
+    [ "$COMPILER" = clang ] && SAN="$SAN -fsanitize=integer-divide-by-zero"
+    export CFLAGS="$BASE_CFLAGS $SAN"
+    export LDFLAGS="$SAN"
+    export ASAN_OPTIONS="detect_leaks=1:abort_on_error=1:strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:halt_on_error=1"
+    export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
+    export LSAN_OPTIONS="suppressions=$SAN_DIR/lsan.supp:print_suppressions=0"
+    ;;
+tsan)
+    SAN="-fsanitize=thread"
+    SHIM="$SAN_DIR/build/tsan_glib.o"
+    mkdir -p "$SAN_DIR/build"
+    $COMPILER $BASE_CFLAGS $SAN `pkg-config --cflags glib-2.0` -c \
+        "$SAN_DIR/tsan_glib.c" -o "$SHIM" || exit 1
+    export CFLAGS="$BASE_CFLAGS $SAN"
+    export LDFLAGS="$SAN $SHIM"
+    export TSAN_OPTIONS="halt_on_error=1:second_deadlock_stack=1:suppressions=$SAN_DIR/tsan.supp"
+    # The debug build's GASSERT(x->refcount > 0) reads atomic refcounts
+    # non-atomically all over the place. Those checks are compiled out
+    # of the release build, which is what gets shipped.
+    BUILD=release
+    ;;
+valgrind)
+    which valgrind >> /dev/null || err "Please install valgrind"
+    export CFLAGS="$BASE_CFLAGS"
+    export LDFLAGS=""
+    BUILD=release
+    ;;
+*)
+    err "Unknown mode $MODE"
+    ;;
+esac
+
+export CC=$COMPILER
+
+make -C "$TOP_DIR" clean > /dev/null
+FAILED=""
+for t in $TESTS ; do
+    pushd "$TEST_DIR/$t" > /dev/null
+    make -C "$TEST_DIR/$t" clean $BUILD > /dev/null || exit 1
+    EXE="build/$BUILD/$t"
+    echo "=== $t ($MODE, $COMPILER)"
+    if [ "$MODE" = valgrind ] ; then
+        valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no \
+            --errors-for-leak-kinds=definite,indirect --error-exitcode=99 \
+            --track-fds=yes --suppressions="$SAN_DIR/valgrind.supp" \
+            -q "$EXE" || FAILED="$FAILED $t"
+    else
+        "$EXE" || FAILED="$FAILED $t"
+    fi
+    popd > /dev/null
+done
+
+if [ -n "$FAILED" ] ; then
+    echo "*** FAILED:$FAILED"
+    exit 1
+fi
+echo "All tests passed ($MODE, $COMPILER)"
