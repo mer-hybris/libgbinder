@@ -525,6 +525,156 @@ test_transact_failed(
 }
 
 /*==========================================================================*
+ * transact_frozen
+ *
+ * The driver sends BR_FROZEN_REPLY instead of a reply when the target
+ * process is frozen. That has to complete the transaction with an error,
+ * like BR_FAILED_REPLY, rather than leave it waiting for a reply.
+ *==========================================================================*/
+
+static
+void
+test_transact_frozen(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    gulong id;
+
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_frozen_reply(fd, TX_THREAD);
+
+    /* test_transact_failed_done() expects GBINDER_STATUS_FAILED */
+    id = gbinder_ipc_transact(ipc, 1, 2, 0, req, test_transact_failed_done,
+        NULL, loop);
+    g_assert(id);
+
+    test_run(&test_opt, loop);
+
+    gbinder_ipc_cancel(ipc, id);
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * sync_reply_frozen
+ *==========================================================================*/
+
+static
+void
+test_sync_reply_frozen(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    int status = INT_MAX;
+
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_transaction_complete(fd, TX_THREAD);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_frozen_reply(fd, TX_THREAD);
+    g_assert(!gbinder_ipc_sync_main.sync_reply(ipc, 1, 2, req, &status));
+    g_assert_cmpint(status, == ,GBINDER_STATUS_FAILED);
+
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
+ * sync_reply_br_error
+ *
+ * BR_ERROR carries an error code from the driver and terminates the
+ * transaction (like Android's IPCThreadState::waitForResponse).
+ *==========================================================================*/
+
+static
+void
+test_sync_reply_br_error(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    int status = INT_MAX;
+
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_error(fd, TX_THREAD, -ENOMEM);
+    g_assert(!gbinder_ipc_sync_main.sync_reply(ipc, 1, 2, req, &status));
+    g_assert_cmpint(status, == ,-ENOMEM);
+
+    /* -EAGAIN and non-negative values become GBINDER_STATUS_FAILED */
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_error(fd, TX_THREAD, -EAGAIN);
+    g_assert(!gbinder_ipc_sync_main.sync_reply(ipc, 1, 2, req, &status));
+    g_assert_cmpint(status, == ,GBINDER_STATUS_FAILED);
+
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_error(fd, TX_THREAD, 1);
+    g_assert(!gbinder_ipc_sync_main.sync_reply(ipc, 1, 2, req, &status));
+    g_assert_cmpint(status, == ,GBINDER_STATUS_FAILED);
+
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
+ * oneway_frozen
+ *
+ * A oneway transaction to a frozen process gets BR_TRANSACTION_PENDING_FROZEN
+ * instead of BR_TRANSACTION_COMPLETE. The transaction is queued by the
+ * driver and is considered successfully sent.
+ *==========================================================================*/
+
+static
+void
+test_async_oneway_frozen(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    gulong id;
+
+    test_binder_br_transaction_pending_frozen(fd, TX_THREAD);
+    id = gbinder_ipc_transact(ipc, 0, 1, GBINDER_TX_FLAG_ONEWAY,
+        req, test_async_oneway_done, NULL, loop);
+    g_assert(id);
+    test_run(&test_opt, loop);
+
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_sync_oneway_frozen(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderLocalRequest* req = test_local_request_new(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+
+    test_binder_br_transaction_pending_frozen(fd, THIS_THREAD);
+    g_assert_cmpint(gbinder_ipc_sync_main.sync_oneway(ipc, 0, 1, req), == ,0);
+    gbinder_local_request_unref(req);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
  * transact_status
  *==========================================================================*/
 
@@ -1365,6 +1515,11 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transact_dead"), test_transact_dead);
     g_test_add_func(TEST_("transact_failed"), test_transact_failed);
     g_test_add_func(TEST_("transact_status"), test_transact_status);
+    g_test_add_func(TEST_("transact_frozen"), test_transact_frozen);
+    g_test_add_func(TEST_("sync_reply_frozen"), test_sync_reply_frozen);
+    g_test_add_func(TEST_("sync_reply_br_error"), test_sync_reply_br_error);
+    g_test_add_func(TEST_("async_oneway_frozen"), test_async_oneway_frozen);
+    g_test_add_func(TEST_("sync_oneway_frozen"), test_sync_oneway_frozen);
     g_test_add_func(TEST_("transact_custom"), test_transact_custom);
     g_test_add_func(TEST_("transact_custom2"), test_transact_custom2);
     g_test_add_func(TEST_("transact_custom3"), test_transact_custom3);

@@ -737,7 +737,7 @@ gbinder_driver_handle_command(
         }
 #endif /* GUTIL_LOG_VERBOSE */
     } else {
-#pragma message("TODO: handle more commands from the driver")
+        /* BR_ACQUIRE_RESULT, BR_ATTEMPT_ACQUIRE, BR_SPAWN_LOOPER etc. */
         GWARN("Unexpected command 0x%08x", cmd);
     }
 }
@@ -809,11 +809,39 @@ gbinder_driver_txstatus(
         rbuf->offset += total;
 
         /* Handle the command */
-        if (cmd == io->br.transaction_complete) {
+        if (cmd == io->br.transaction_complete ||
+            /* Only sent if spam detection is enabled, which we don't do */
+            cmd == io->br.oneway_spam_suspect) {
             GVERBOSE("> BR_TRANSACTION_COMPLETE");
             if (!reply) {
                 txstatus = GBINDER_STATUS_OK;
             }
+        } else if (cmd == io->br.transaction_pending_frozen) {
+            /*
+             * Sent instead of BR_TRANSACTION_COMPLETE for a oneway
+             * transaction to a frozen process. The transaction has been
+             * queued and will be delivered when the process is thawed.
+             * There's no reply coming, ever. Android's IPCThreadState
+             * also treats this as success.
+             */
+            GWARN("Oneway transaction to a frozen process");
+            txstatus = GBINDER_STATUS_OK;
+        } else if (cmd == io->br.frozen_reply) {
+            /*
+             * Sent instead of a reply to a synchronous transaction to
+             * a frozen process. Without handling it, we would wait for
+             * the reply forever. Android maps it to FAILED_TRANSACTION.
+             */
+            GWARN("Transaction to a frozen process");
+            txstatus = GBINDER_STATUS_FAILED;
+        } else if (cmd == io->br.error) {
+            /* The driver failed to handle the command, e.g. ENOMEM */
+            const gint32 err = *(const gint32*)data;
+
+            GWARN("> BR_ERROR %d", err);
+            /* -EAGAIN would mean "keep waiting" here */
+            txstatus = (err < 0 && err != (-EAGAIN)) ? err :
+                GBINDER_STATUS_FAILED;
         } else if (cmd == io->br.dead_reply) {
             GVERBOSE("> BR_DEAD_REPLY");
             txstatus = GBINDER_STATUS_DEAD_OBJECT;

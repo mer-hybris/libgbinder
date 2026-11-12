@@ -34,6 +34,7 @@
 
 #include "gbinder_driver.h"
 #include "gbinder_handler.h"
+#include "gbinder_io.h"
 #include "gbinder_local_request_p.h"
 #include "gbinder_output_data.h"
 #include "gbinder_rpc_protocol.h"
@@ -137,6 +138,70 @@ test_local_request(
 }
 
 /*==========================================================================*
+ * status_code
+ *==========================================================================*/
+
+/* struct binder_transaction_data as seen by a 64-bit kernel */
+typedef struct test_tx_data_64 {
+    guint64 target;
+    guint64 cookie;
+    guint32 code;
+    guint32 flags;
+    gint32 sender_pid;
+    guint32 sender_euid;
+    guint64 data_size;
+    guint64 offsets_size;
+    guint64 buffer;
+    guint64 offsets;
+} TestTxData64;
+
+#define TEST_TF_ONE_WAY 0x01
+#define TEST_TF_STATUS_CODE 0x08
+
+static
+void
+test_status_code(
+    void)
+{
+    const gint32 status = -5;
+    guint8 shortbuf[2] = { 0, 0 };
+    TestTxData64 tr;
+    GBinderIoTxData tx;
+
+    G_STATIC_ASSERT(sizeof(tr) == 64);
+
+    /* A oneway transaction may carry TF_STATUS_CODE too */
+    memset(&tr, 0, sizeof(tr));
+    tr.flags = TEST_TF_ONE_WAY | TEST_TF_STATUS_CODE;
+    tr.data_size = sizeof(status);
+    tr.buffer = GPOINTER_TO_SIZE(&status);
+    memset(&tx, 0, sizeof(tx));
+    gbinder_io_64.decode_transaction_data(&tr, &tx);
+    g_assert_cmpint(tx.status, == , status);
+    g_assert_cmpuint(tx.size, == , 0);
+    g_assert(tx.flags & GBINDER_TX_FLAG_ONEWAY);
+
+    /* The size comes from the other side, too short is invalid */
+    memset(&tr, 0, sizeof(tr));
+    tr.flags = TEST_TF_STATUS_CODE;
+    tr.data_size = sizeof(shortbuf);
+    tr.buffer = GPOINTER_TO_SIZE(shortbuf);
+    memset(&tx, 0, sizeof(tx));
+    gbinder_io_64.decode_transaction_data(&tr, &tx);
+    g_assert_cmpint(tx.status, == , GBINDER_STATUS_FAILED);
+    g_assert_cmpuint(tx.size, == , 0);
+    g_assert(!(tx.flags & GBINDER_TX_FLAG_ONEWAY));
+
+    /* So is no buffer at all */
+    memset(&tr, 0, sizeof(tr));
+    tr.flags = TEST_TF_STATUS_CODE;
+    tr.data_size = sizeof(status);
+    memset(&tx, 0, sizeof(tx));
+    gbinder_io_64.decode_transaction_data(&tr, &tx);
+    g_assert_cmpint(tx.status, == , GBINDER_STATUS_FAILED);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -151,6 +216,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "noop", test_noop);
     g_test_add_func(TEST_PREFIX "local_request", test_local_request);
+    g_test_add_func(TEST_PREFIX "status_code", test_status_code);
     test_init(&test_opt, argc, argv);
     test_config_init(&test_config, TMP_DIR_TEMPLATE);
     result = g_test_run();

@@ -216,6 +216,9 @@ typedef  struct binder_buffer_64 {
 #define BR_DEAD_BINDER_64       _IOR('r', 15, guint64)
 #define BR_CLEAR_DEATH_NOTIFICATION_DONE_64 _IOR('r', 16, guint64)
 #define BR_FAILED_REPLY          _IO('r', 17)
+#define BR_FROZEN_REPLY          _IO('r', 18)
+#define BR_ERROR                _IOR('r', 0, gint32)
+#define BR_TRANSACTION_PENDING_FROZEN _IO('r', 20)
 
 typedef enum cmd_dequeue_flags {
     CMD_DEQUEUE_FLAGS_NONE = 0,
@@ -565,6 +568,7 @@ test_binder_node_dequeue_cmd_locked(
                 }
                 break;
             case BR_TRANSACTION_COMPLETE:
+            case BR_TRANSACTION_PENDING_FROZEN:
                 if (flags & CMD_DEQUEUE_FLAG_STOP_AT_TRANSACTION_COMPLETE) {
                     cmd = NULL;
                 }
@@ -577,6 +581,8 @@ test_binder_node_dequeue_cmd_locked(
                 }
                 break;
             case BR_FAILED_REPLY:
+            case BR_FROZEN_REPLY:
+            case BR_ERROR:
             case BR_DEAD_REPLY:
                 if (flags & CMD_DEQUEUE_FLAG_STOP_AT_REPLY) {
                     cmd = NULL;
@@ -1165,10 +1171,13 @@ test_binder_io_handle_write_read_64(
                 test_binder_cmd_payload(cmd));
             break;
         case BR_TRANSACTION_COMPLETE:
+        case BR_TRANSACTION_PENDING_FROZEN:
             flags |= CMD_DEQUEUE_FLAG_STOP_AT_TRANSACTION_COMPLETE;
             break;
         case BR_REPLY_64:
         case BR_FAILED_REPLY:
+        case BR_FROZEN_REPLY:
+        case BR_ERROR:
         case BR_DEAD_REPLY:
             flags |= CMD_DEQUEUE_FLAG_STOP_AT_REPLY;
             break;
@@ -1386,6 +1395,40 @@ test_binder_br_failed_reply(
     TEST_BR_THREAD dest)
 {
     guint32 cmd = BR_FAILED_REPLY;
+
+    test_binder_push_data(fd, dest, &cmd);
+}
+
+void
+test_binder_br_frozen_reply(
+    int fd,
+    TEST_BR_THREAD dest)
+{
+    guint32 cmd = BR_FROZEN_REPLY;
+
+    test_binder_push_data(fd, dest, &cmd);
+}
+
+void
+test_binder_br_error(
+    int fd,
+    TEST_BR_THREAD dest,
+    gint32 err)
+{
+    guint32 cmd = BR_ERROR;
+    guint8 br[sizeof(cmd) + sizeof(err)];
+
+    memcpy(br, &cmd, sizeof(cmd));
+    memcpy(br + sizeof(cmd), &err, sizeof(err));
+    test_binder_push_data(fd, dest, br);
+}
+
+void
+test_binder_br_transaction_pending_frozen(
+    int fd,
+    TEST_BR_THREAD dest)
+{
+    guint32 cmd = BR_TRANSACTION_PENDING_FROZEN;
 
     test_binder_push_data(fd, dest, &cmd);
 }
