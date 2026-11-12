@@ -764,6 +764,197 @@ test_notify2()
     test_run_in_context(&test_opt, test_notify2_run);
 }
 
+
+/*==========================================================================*
+ * rewatch
+ *
+ * Unwatch and watch the same name back to back. The completion of the
+ * old (unregister) call must not remove the new (register) call.
+ *==========================================================================*/
+
+typedef struct test_rewatch {
+    GMainLoop* loop;
+    gboolean notified;
+    gboolean timed_out;
+} TestRewatch;
+
+static
+void
+test_rewatch_cb(
+    GBinderServiceManager* sm,
+    const char* name,
+    void* user_data)
+{
+    TestRewatch* test = user_data;
+
+    GDEBUG("'%s' is registered", name);
+    test->notified = TRUE;
+    g_main_loop_quit(test->loop);
+}
+
+static
+gboolean
+test_rewatch_timeout(
+    gpointer user_data)
+{
+    TestRewatch* test = user_data;
+
+    test->timed_out = TRUE;
+    g_main_loop_quit(test->loop);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_rewatch_run(
+    void)
+{
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    ServiceManagerAidl* svc = servicemanager_aidl_new2(dev, TRUE);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    GBinderServiceManager* sm;
+    TestRewatch test;
+    gulong id;
+    guint timer;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+    test_binder_register_object(fd, obj, AUTO_HANDLE);
+    sm = gbinder_servicemanager_new(dev);
+    gbinder_ipc_set_max_threads(ipc, 1);
+
+    /* Register the first watch and let it complete */
+    id = gbinder_servicemanager_add_registration_handler(sm, "test",
+        test_rewatch_cb, &test);
+    g_assert(id);
+    timer = g_timeout_add(1000, test_rewatch_timeout, &test);
+    test_run(&test_opt, test.loop);
+    g_assert(test.timed_out);
+    test.timed_out = FALSE;
+
+    /*
+     * unwatch -> watch again. The fake servicemanager is kept busy (its
+     * mutex is held) so that unregisterForNotifications is already in
+     * progress (can't be cancelled) when the new registerForNotifications
+     * replaces it in registration_call_table.
+     */
+    g_mutex_lock(&svc->mutex);
+    gbinder_servicemanager_remove_handler(sm, id);
+    g_usleep(200000); /* Let the worker pick up the unregister call */
+    id = gbinder_servicemanager_add_registration_handler(sm, "test",
+        test_rewatch_cb, &test);
+    g_assert(id);
+    g_mutex_unlock(&svc->mutex);
+
+    /* Let all the (un)registration calls complete */
+    timer = g_timeout_add(2000, test_rewatch_timeout, &test);
+    test_run(&test_opt, test.loop);
+    test.timed_out = FALSE;
+    g_mutex_lock(&svc->mutex);
+    GDEBUG("fake servicemanager has %u watch(es)", svc->watches->len);
+    /* The unregister removed the 1st registration, the 2nd register
+     * must have re-added it. Without the fix the 2nd one is cancelled. */
+    g_assert_cmpuint(svc->watches->len, == ,1);
+    g_mutex_unlock(&svc->mutex);
+
+    /* Now register the service, the handler must be notified */
+    g_assert_cmpint(gbinder_servicemanager_add_service_sync(sm, "test", obj),
+        == ,0);
+    timer = g_timeout_add(3000, test_rewatch_timeout, &test);
+    test_run(&test_opt, test.loop);
+    if (!test.timed_out) g_source_remove(timer);
+    GDEBUG("notified=%d timed_out=%d", test.notified, test.timed_out);
+    g_assert(test.notified);
+
+    gbinder_servicemanager_remove_handler(sm, id);
+    test_binder_unregister_objects(fd);
+    gbinder_local_object_unref(obj);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(svc));
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_rewatch(
+    void)
+{
+    test_run_in_context(&test_opt, test_rewatch_run);
+}
+
+
+/*==========================================================================*
+ * fallback2
+ *
+ * Two names watched back to back on a servicemanager without working
+ * registerForNotifications. Both must fall back to polling.
+ *==========================================================================*/
+
+static
+void
+test_fallback2_run(
+    void)
+{
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
+    ServiceManagerAidl* svc = servicemanager_aidl_new2(dev, FALSE);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderLocalObject* obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    GBinderServiceManager* sm;
+    TestRewatch test;
+    gulong id1, id2;
+    guint timer;
+
+    memset(&test, 0, sizeof(test));
+    test.loop = g_main_loop_new(NULL, FALSE);
+    test_binder_register_object(fd, obj, AUTO_HANDLE);
+    sm = gbinder_servicemanager_new(dev);
+    gbinder_ipc_set_max_threads(ipc, 1);
+
+    id1 = gbinder_servicemanager_add_registration_handler(sm, "a",
+        test_rewatch_cb, &test);
+    id2 = gbinder_servicemanager_add_registration_handler(sm, "b",
+        test_rewatch_cb, &test);
+    g_assert(id1);
+    g_assert(id2);
+
+    /* Let both registerForNotifications calls fail */
+    timer = g_timeout_add(1000, test_rewatch_timeout, &test);
+    test_run(&test_opt, test.loop);
+    test.timed_out = FALSE;
+
+    /* "b" must be detected (by polling) */
+    g_assert_cmpint(gbinder_servicemanager_add_service_sync(sm, "b", obj),
+        == ,0);
+    timer = g_timeout_add(5000, test_rewatch_timeout, &test);
+    test_run(&test_opt, test.loop);
+    if (!test.timed_out) g_source_remove(timer);
+    GDEBUG("notified=%d timed_out=%d", test.notified, test.timed_out);
+    g_assert(test.notified);
+
+    gbinder_servicemanager_remove_handler(sm, id1);
+    gbinder_servicemanager_remove_handler(sm, id2);
+    test_binder_unregister_objects(fd);
+    gbinder_local_object_unref(obj);
+    gbinder_local_object_unref(GBINDER_LOCAL_OBJECT(svc));
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+static
+void
+test_fallback2(
+    void)
+{
+    test_run_in_context(&test_opt, test_fallback2_run);
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/
@@ -784,6 +975,8 @@ int main(int argc, char* argv[])
     g_test_add_data_func(TEST_("notify/1"), GINT_TO_POINTER(1), test_notify);
     g_test_add_data_func(TEST_("notify/2"), GINT_TO_POINTER(0), test_notify);
     g_test_add_func(TEST_("notify/3"), test_notify2);
+    g_test_add_func(TEST_("rewatch"), test_rewatch);
+    g_test_add_func(TEST_("fallback2"), test_fallback2);
     test_init(&test_opt, argc, argv);
     test_config_init(&config, TMP_DIR_TEMPLATE);
     result = g_test_run();

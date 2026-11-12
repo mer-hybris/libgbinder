@@ -449,6 +449,8 @@ gbinder_servicemanager_autorelease_cb(
     GBinderServiceManagerPriv* priv = self->priv;
     GSList* list = priv->autorelease;
 
+    /* The callback has fired, drop the reference held by priv */
+    gbinder_idle_callback_unref(priv->autorelease_cb);
     priv->autorelease_cb = NULL;
     priv->autorelease = NULL;
     g_slist_free_full(list, g_object_unref);

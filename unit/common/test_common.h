@@ -97,6 +97,20 @@ test_run_in_context_param(
     GTestDataFunc func,
     gconstpointer param);
 
+/*
+ * Event loop integration which counts live callbacks, i.e. the ones
+ * created and not unreferenced yet. A scheduled callback holds a
+ * reference until it has been invoked or cancelled, just like the
+ * default GLib implementation does.
+ */
+void
+test_eventloop_counting_set(
+    void);
+
+int
+test_eventloop_counting_callbacks(
+    void);
+
 #define TEST_TIMEOUT_SEC (20)
 
 /* Helper macros */

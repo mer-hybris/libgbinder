@@ -32,6 +32,7 @@
 #include "test_binder.h"
 
 #include "gbinder_driver.h"
+#include "gbinder_eventloop.h"
 #include "gbinder_client_p.h"
 #include "gbinder_config.h"
 #include "gbinder_remote_object_p.h"
@@ -1220,6 +1221,56 @@ test_get(
 }
 
 /*==========================================================================*
+ * autorelease
+ *==========================================================================*/
+
+static
+void
+test_autorelease(
+    void)
+{
+    const char* dev = GBINDER_DEFAULT_BINDER;
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderIpc* ipc;
+    GBinderServiceManager* sm;
+    GBinderLocalObject* obj;
+    int status = -1;
+    TestConfig config;
+
+    /* Every callback must be gone by the end of the test */
+    test_eventloop_counting_set();
+    test_config_init(&config, TMP_DIR_TEMPLATE);
+    ipc = gbinder_ipc_new(dev, NULL);
+    test_setup_ping(ipc);
+    sm = gbinder_servicemanager_new(dev);
+    obj = gbinder_servicemanager_new_local_object(sm, "foo.bar",
+       test_transact_func, NULL);
+    g_assert(gbinder_servicemanager_add_service_sync(sm, "foo", obj) ==
+        GBINDER_STATUS_OK);
+    gbinder_local_object_unref(obj);
+
+    /* The object returned by get_service_sync is released when idle */
+    g_assert(gbinder_servicemanager_get_service_sync(sm, "foo", &status));
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    test_quit_later_n(loop, 2);
+    test_run(&test_opt, loop);
+
+    /* And again, after the previous batch has been released */
+    g_assert(gbinder_servicemanager_get_service_sync(sm, "foo", &status));
+    g_assert_cmpint(status, == ,GBINDER_STATUS_OK);
+    test_quit_later_n(loop, 2);
+    test_run(&test_opt, loop);
+
+    gbinder_servicemanager_unref(sm);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_assert_cmpint(test_eventloop_counting_callbacks(), == ,0);
+    gbinder_eventloop_set(NULL);
+    test_config_cleanup(&config);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
  * add
  *==========================================================================*/
 
@@ -1298,6 +1349,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("notify"), test_notify);
     g_test_add_func(TEST_("list"), test_list);
     g_test_add_func(TEST_("get"), test_get);
+    g_test_add_func(TEST_("autorelease"), test_autorelease);
     g_test_add_func(TEST_("add"), test_add);
     test_init(&test_opt, argc, argv);
     return g_test_run();

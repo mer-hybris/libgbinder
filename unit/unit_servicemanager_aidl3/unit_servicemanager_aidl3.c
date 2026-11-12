@@ -88,6 +88,9 @@ enum servicemanager_aidl_tx {
 
 const char* const servicemanager_aidl_ifaces[] = { SVCMGR_IFACE, NULL };
 
+/* Non-zero to send a bogus count in the list reply */
+static gint32 test_list_count;
+
 typedef GBinderLocalObjectClass ServiceManagerAidl3Class;
 typedef struct service_manager_aidl3 {
     GBinderLocalObject parent;
@@ -166,7 +169,7 @@ servicemanager_aidl3_handler(
             if (g_hash_table_size(self->objects) == 1) {
                 GList* keys = g_hash_table_get_keys(self->objects);
                 GList* l = g_list_nth(keys, 0);
-                gint32 srv_size = 1;
+                gint32 srv_size = test_list_count ? test_list_count : 1;
                 GBinderWriter writer;
 
                 reply = gbinder_local_object_new_reply(obj);
@@ -459,6 +462,47 @@ test_list()
 }
 
 /*==========================================================================*
+ * list_bad_count
+ *==========================================================================*/
+
+static
+void
+test_list_bad_count_run(
+    void)
+{
+    TestContext test;
+    const char* name = "name";
+    char** list;
+
+    test_context_init(&test);
+    g_assert_cmpint(gbinder_servicemanager_add_service_sync(test.client,
+        name, test.object), == ,GBINDER_STATUS_OK);
+    test_context_wait_ref(&test);
+
+    /*
+     * The count comes from the other side. A huge count with one name
+     * behind it must not make us allocate and fill a huge array.
+     */
+    test_list_count = 0x7fffffff;
+    list = gbinder_servicemanager_list_sync(test.client);
+    test_list_count = 0;
+
+    g_assert_cmpuint(gutil_strv_length(list), == ,1);
+    g_assert_cmpstr(list[0], == ,name);
+    g_strfreev(list);
+
+    test_context_deinit(&test);
+}
+
+static
+void
+test_list_bad_count(
+    void)
+{
+    test_run_in_context(&test_opt, test_list_bad_count_run);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -472,6 +516,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("get"), test_get);
     g_test_add_func(TEST_("list"), test_list);
+    g_test_add_func(TEST_("list_bad_count"), test_list_bad_count);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
