@@ -44,6 +44,9 @@
 #include "gbinder_writer_p.h"
 #include "gbinder_ipc.h"
 #include "gbinder_io.h"
+#include "gbinder_local_object_p.h"
+#include "gbinder_object_registry.h"
+#include "gbinder_remote_object_p.h"
 
 #include <gutil_intarray.h>
 #include <gutil_macros.h>
@@ -1407,6 +1410,53 @@ test_local_object(
 }
 
 /*==========================================================================*
+ * object_ref
+ *
+ * The data holds raw pointers (or handles) to the objects, so the objects
+ * must stay alive as long as the data does, even if the caller drops its
+ * own references right after writing them.
+ *==========================================================================*/
+
+static
+void
+test_object_ref(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GBinderLocalObject* local = gbinder_local_object_new(ipc, NULL,
+        NULL, NULL);
+    GBinderRemoteObject* remote = gbinder_object_registry_get_remote(reg,
+        1, REMOTE_REGISTRY_CAN_CREATE);
+    GBinderLocalRequest* req = test_local_request_new_64();
+    gpointer local_ptr = local;
+    gpointer remote_ptr = remote;
+    GBinderWriter writer;
+
+    g_assert(local);
+    g_assert(remote);
+    g_object_add_weak_pointer(G_OBJECT(local), &local_ptr);
+    g_object_add_weak_pointer(G_OBJECT(remote), &remote_ptr);
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_local_object(&writer, local);
+    gbinder_writer_append_remote_object(&writer, remote);
+    gbinder_local_object_unref(local);
+    gbinder_remote_object_unref(remote);
+
+    /* Still alive, the request holds them */
+    g_assert(local_ptr);
+    g_assert(remote_ptr);
+
+    gbinder_local_request_unref(req);
+    g_assert(!local_ptr);
+    g_assert(!remote_ptr);
+
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*==========================================================================*
  * remote_object
  *==========================================================================*/
 
@@ -1669,6 +1719,7 @@ int main(int argc, char* argv[])
     }
 
     g_test_add_func(TEST_("remote_object"), test_remote_object);
+    g_test_add_func(TEST_("object_ref"), test_object_ref);
     g_test_add_func(TEST_("byte_array"), test_byte_array);
     g_test_add_func(TEST_("bytes_written"), test_bytes_written);
 
