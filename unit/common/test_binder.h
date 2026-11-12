@@ -167,6 +167,19 @@ test_binder_exit_wait(
     const TestOpt* opt,
     GMainLoop* loop);
 
+guint
+test_binder_flush_count(
+    void);
+
+guint
+test_binder_stray_dead_binder_done(
+    int fd);
+
+gboolean
+test_binder_death_requested(
+    int fd,
+    guint32 handle);
+
 #endif /* TEST_BINDER_H */
 
 /*

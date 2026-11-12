@@ -178,7 +178,7 @@ GBINDER_IO_FN(encode_local_object)(
     dest->hdr.type = BINDER_TYPE_BINDER;
     if (obj) {
         dest->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
-        dest->binder = (uintptr_t)obj;
+        dest->binder = (uintptr_t)gbinder_local_object_node(obj);
     }
     if (protocol->finish_flatten_binder) {
         protocol->finish_flatten_binder(dest + 1, obj ?
@@ -293,7 +293,7 @@ GBINDER_IO_FN(encode_ptr_cookie)(
     struct binder_ptr_cookie* dest = out;
 
     /* We never send these cookies and don't expect them back */
-    dest->ptr = (uintptr_t)obj;
+    dest->ptr = (uintptr_t)gbinder_local_object_node(obj);
     dest->cookie = 0;
     return sizeof(*dest);
 }

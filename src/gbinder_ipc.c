@@ -71,7 +71,7 @@ struct gbinder_ipc_priv {
     GHashTable* remote_objects;
 
     GMutex local_objects_mutex;
-    GHashTable* local_objects;
+    GHashTable* local_objects; /* GBinderLocalObjectNode* => itself */
 
     GMutex looper_mutex;
     GBinderIpcLooper* primary_loopers;
@@ -971,32 +971,39 @@ gbinder_ipc_looper_join(
 {
     /* Caller checks looper for NULL */
     if (looper->thread && looper->thread != pthread_self()) {
-        struct timespec ts;
-        int err = clock_gettime(CLOCK_REALTIME, &ts);
+        int err;
 
-        if (!err) {
-            const long ms = 1000000;
-            const long sec = 1000 * ms;
-            const long ns = ts.tv_nsec + GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS*ms;
+        do {
+            struct timespec ts;
 
-            ts.tv_sec += ns / sec;
-            ts.tv_nsec = ns % sec;
-            err = pthread_timedjoin_np(looper->thread, NULL, &ts);
-        }
+            err = clock_gettime(CLOCK_REALTIME, &ts);
+            if (!err) {
+                const long ms = 1000000;
+                const long sec = 1000 * ms;
+                const long ns = ts.tv_nsec +
+                    GBINDER_IPC_LOOPER_JOIN_TIMEOUT_MS * ms;
+
+                ts.tv_sec += ns / sec;
+                ts.tv_nsec = ns % sec;
+                err = pthread_timedjoin_np(looper->thread, NULL, &ts);
+                if (err == ETIMEDOUT) {
+                    /*
+                     * Assume that looper is stuck in read, or waiting
+                     * for a reply which is never going to arrive. Shut
+                     * the driver down and kick the looper out of it.
+                     * Don't close the descriptor or unmap the buffers,
+                     * the looper may still be handling a transaction
+                     * which lives in that mapping. If it's stuck in a
+                     * transaction handler, keep waiting, the same as an
+                     * untimed join would.
+                     */
+                    GDEBUG("Looper %s is stuck", looper->name);
+                    gbinder_driver_shutdown(looper->driver);
+                }
+            }
+        } while (err == ETIMEDOUT);
 
         if (err) {
-            /* Assume that looper is stuck in read */
-            GBinderIpc* ipc = looper->ipc;
-            GBinderIpcPriv* priv = ipc->priv;
-
-            GDEBUG("Looper %s is stuck", looper->name);
-
-            /* Lock */
-            g_mutex_lock(&priv->looper_mutex);
-            gbinder_driver_close(ipc->driver);
-            g_mutex_unlock(&priv->looper_mutex);
-            /* Unlock */
-
             pthread_join(looper->thread, NULL);
         }
         looper->joined = TRUE;
@@ -1121,19 +1128,42 @@ gbinder_ipc_tx_handler_transact(
 
 static
 void
+gbinder_ipc_local_node_check_locked(
+    GBinderIpcPriv* priv,
+    GBinderLocalObjectNode* node)
+{
+    /* Caller holds priv->local_objects_mutex */
+    if (!node->object && !node->weak_refs) {
+        /*
+         * Nothing can reach the node through the kernel anymore. If
+         * the object is gone too, so is the node.
+         */
+        if (priv->local_objects &&
+            g_hash_table_remove(priv->local_objects, node)) {
+            GVERBOSE_("node %p %s", node, priv->name);
+            if (g_hash_table_size(priv->local_objects) == 0) {
+                g_hash_table_unref(priv->local_objects);
+                priv->local_objects = NULL;
+            }
+        }
+        if (node->orphan) {
+            g_free(node);
+        }
+    }
+}
+
+static
+void
 gbinder_ipc_invalidate_local_object_locked(
     GBinderIpc* self,
     GBinderLocalObject* obj)
 {
-    GBinderIpcPriv* priv = self->priv;
+    GBinderLocalObjectNode* node = gbinder_local_object_node(obj);
 
-    if (priv->local_objects && g_hash_table_remove(priv->local_objects, obj)) {
-        GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
-        if (g_hash_table_size(priv->local_objects) == 0) {
-            g_hash_table_unref(priv->local_objects);
-            priv->local_objects = NULL;
-        }
-    }
+    /* The object can no longer be found, but the node may live on */
+    GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
+    node->object = NULL;
+    gbinder_ipc_local_node_check_locked(self->priv, node);
 }
 
 static
@@ -1173,6 +1203,42 @@ gbinder_ipc_invalidate_local_object(
     gbinder_ipc_invalidate_local_object_locked(self, obj);
     g_mutex_unlock(&priv->local_objects_mutex);
     /* Unlock */
+}
+
+void
+gbinder_ipc_release_local_node(
+    GBinderIpc* self,
+    GBinderLocalObjectNode* node)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    /*
+     * Invoked by the object's finalize(). From now on the node belongs
+     * to GBinderIpc, it's freed when the kernel lets go of it.
+     */
+
+    /* Lock */
+    g_mutex_lock(&priv->local_objects_mutex);
+    node->object = NULL;
+    node->orphan = TRUE;
+    gbinder_ipc_local_node_check_locked(priv, node);
+    g_mutex_unlock(&priv->local_objects_mutex);
+    /* Unlock */
+}
+
+void
+gbinder_ipc_invalidate_remote_object(
+    GBinderIpc* self,
+    GBinderRemoteObject* obj)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    g_mutex_lock(&priv->remote_objects_mutex);
+    if (priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
+        gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
+    }
+    g_mutex_unlock(&priv->remote_objects_mutex);
 }
 
 void
@@ -1257,9 +1323,35 @@ gbinder_ipc_remote_object_disposed(
 
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
-    if (g_atomic_int_get(&obj->object.ref_count) == 1) {
+    if (g_atomic_int_get(&obj->object.ref_count) == 1 &&
+        priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
+        gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
+        /*
+         * Nobody can find the object anymore. Let go of the node before
+         * a new object can be created for the same handle.
+         */
+        gbinder_remote_object_detach_locked(obj);
+    }
+    g_mutex_unlock(&priv->remote_objects_mutex);
+    /* Unlock */
+}
+
+void
+gbinder_ipc_remote_object_finalized(
+    GBinderIpc* self,
+    GBinderRemoteObject* obj)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    /* Lock */
+    g_mutex_lock(&priv->remote_objects_mutex);
+    if (priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
         gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
     }
+    /* Does nothing if gbinder_ipc_remote_object_disposed() has done it */
+    gbinder_remote_object_detach_locked(obj);
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
 }
@@ -1276,9 +1368,12 @@ gbinder_ipc_register_local_object(
     if (!priv->local_objects) {
         priv->local_objects = g_hash_table_new(g_direct_hash, g_direct_equal);
     }
-    if (!g_hash_table_contains(priv->local_objects, obj)) {
-        g_hash_table_insert(priv->local_objects, obj, obj);
-        GVERBOSE_("%p %s", obj, gbinder_ipc_name(self));
+    if (!g_hash_table_contains(priv->local_objects,
+        gbinder_local_object_node(obj))) {
+        GBinderLocalObjectNode* node = gbinder_local_object_node(obj);
+
+        g_hash_table_insert(priv->local_objects, node, node);
+        GVERBOSE_("%p node %p %s", obj, node, gbinder_ipc_name(self));
     }
     g_mutex_unlock(&priv->local_objects_mutex);
     /* Unlock */
@@ -1290,25 +1385,40 @@ static
 GBinderLocalObject*
 gbinder_ipc_priv_get_local_object(
     GBinderIpcPriv* priv,
-    void* pointer)
+    void* pointer,
+    int weak_refs_delta)
 {
     GBinderLocalObject* obj = NULL;
 
     if (pointer) {
+        /*
+         * The pointer comes from the kernel and is only dereferenced
+         * if it's one of ours.
+         */
+        GBinderLocalObjectNode* node = NULL;
+
         /* Lock */
         g_mutex_lock(&priv->local_objects_mutex);
         if (priv->local_objects) {
-            obj = g_hash_table_lookup(priv->local_objects, pointer);
-            if (obj) {
-                gbinder_local_object_ref(obj);
-            } else {
-                GWARN("Unknown local object %p %s", pointer, priv->name);
+            node = g_hash_table_lookup(priv->local_objects, pointer);
+        }
+        if (node) {
+            obj = gbinder_local_object_ref(node->object);
+            if (weak_refs_delta > 0) {
+                node->weak_refs++;
+            } else if (weak_refs_delta < 0 && node->weak_refs > 0) {
+                node->weak_refs--;
+                gbinder_ipc_local_node_check_locked(priv, node);
             }
-        } else {
-            GWARN("Unknown local object %p %s", pointer, priv->name);
         }
         g_mutex_unlock(&priv->local_objects_mutex);
         /* Unlock */
+
+        if (!node) {
+            GWARN("Unknown local object %p %s", pointer, priv->name);
+        } else if (!obj) {
+            GDEBUG("Local object %p is gone %s", pointer, priv->name);
+        }
     }
 
     return obj;
@@ -1377,9 +1487,10 @@ gbinder_ipc_find_local_object(
 
             g_hash_table_iter_init(&it, priv->local_objects);
             while (g_hash_table_iter_next(&it, NULL, &value)) {
-                GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(value);
+                GBinderLocalObject* obj = ((GBinderLocalObjectNode*)
+                    value)->object;
 
-                if (func(obj, user_data)) {
+                if (obj && func(obj, user_data)) {
                     found = gbinder_local_object_ref(obj);
                     break;
                 }
@@ -1440,7 +1551,27 @@ gbinder_ipc_object_registry_get_local(
     void* pointer)
 {
     return gbinder_ipc_priv_get_local_object
-        (gbinder_ipc_priv_from_object_registry(reg), pointer);
+        (gbinder_ipc_priv_from_object_registry(reg), pointer, 0);
+}
+
+static
+GBinderLocalObject*
+gbinder_ipc_object_registry_increfs(
+    GBinderObjectRegistry* reg,
+    void* pointer)
+{
+    return gbinder_ipc_priv_get_local_object
+        (gbinder_ipc_priv_from_object_registry(reg), pointer, 1);
+}
+
+static
+GBinderLocalObject*
+gbinder_ipc_object_registry_decrefs(
+    GBinderObjectRegistry* reg,
+    void* pointer)
+{
+    return gbinder_ipc_priv_get_local_object
+        (gbinder_ipc_priv_from_object_registry(reg), pointer, -1);
 }
 
 static
@@ -2063,7 +2194,9 @@ gbinder_ipc_init(
         .ref = gbinder_ipc_object_registry_ref,
         .unref = gbinder_ipc_object_registry_unref,
         .get_local = gbinder_ipc_object_registry_get_local,
-        .get_remote = gbinder_ipc_object_registry_get_remote
+        .get_remote = gbinder_ipc_object_registry_get_remote,
+        .increfs = gbinder_ipc_object_registry_increfs,
+        .decrefs = gbinder_ipc_object_registry_decrefs
     };
     GBinderIpcPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         GBinderIpcPriv);
@@ -2151,7 +2284,25 @@ gbinder_ipc_finalize(
     GBinderIpc* self = THIS(object);
     GBinderIpcPriv* priv = self->priv;
 
-    GASSERT(!priv->local_objects);
+    if (priv->local_objects) {
+        /*
+         * Nodes of the objects which are gone, still referenced by the
+         * kernel. The descriptor is closed by now, and the kernel won't
+         * be sending BR_DECREFS for those anymore.
+         */
+        GHashTableIter it;
+        gpointer value;
+
+        g_hash_table_iter_init(&it, priv->local_objects);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            GBinderLocalObjectNode* node = value;
+
+            GASSERT(node->orphan);
+            g_free(node);
+        }
+        g_hash_table_unref(priv->local_objects);
+        priv->local_objects = NULL;
+    }
     GASSERT(!priv->remote_objects);
     g_mutex_clear(&priv->looper_mutex);
     g_mutex_clear(&priv->local_objects_mutex);
@@ -2244,8 +2395,13 @@ gbinder_ipc_exit()
         if (priv->local_objects) {
             g_hash_table_iter_init(&it, priv->local_objects);
             while (g_hash_table_iter_next(&it, NULL, &value)) {
-                local_objs = g_slist_append(local_objs,
-                    gbinder_local_object_ref(value));
+                GBinderLocalObject* obj = ((GBinderLocalObjectNode*)
+                    value)->object;
+
+                if (obj) {
+                    local_objs = g_slist_append(local_objs,
+                        gbinder_local_object_ref(obj));
+                }
             }
         }
         g_mutex_unlock(&priv->local_objects_mutex);

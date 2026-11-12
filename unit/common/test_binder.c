@@ -60,11 +60,13 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 
 static GHashTable* test_fd_map = NULL; /* fd => TestBinderFd */
 static GHashTable* test_path_map = NULL; /* path => TestBinderNode */
-static GPrivate test_tx_stack = G_PRIVATE_INIT(NULL);
+static void test_binder_tx_stack_free(gpointer stack);
+static GPrivate test_tx_stack = G_PRIVATE_INIT(test_binder_tx_stack_free);
 static gint32 last_auto_handle = 0;
 
 G_LOCK_DEFINE_STATIC(test_binder);
 static GMainLoop* test_binder_exit_loop = NULL;
+static gint test_binder_flushes = 0;
 
 #define public_fd  fd[0]
 #define private_fd fd[1]
@@ -112,6 +114,9 @@ struct test_binder_node {
     GHashTable* object_map;   /* GBinderLocalObject* => handle */
     GHashTable* handle_map;   /* handle => GBinderLocalObject* */
     GHashTable* destroy_map;  /* gpointer => GDestroyNotify */
+    GHashTable* deaths;       /* Cookies of delivered BR_DEAD_BINDER */
+    GHashTable* death_requests; /* handle => cookie */
+    guint stray_dead_binder_done;
     TestBinderCmd* cmd_first;
     TestBinderCmd* cmd_last;
 };
@@ -256,6 +261,15 @@ static GPrivate test_destroy_data = G_PRIVATE_INIT
 
 static
 void
+test_binder_tx_stack_free(
+    gpointer stack)
+{
+    /* The thread exited with transactions it never replied to */
+    gutil_int_array_free(stack, TRUE);
+}
+
+static
+void
 test_binder_destroy_data_add(
     GDestroyNotify destroy,
     void* data)
@@ -298,6 +312,8 @@ test_binder_node_new(
     node->object_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->handle_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    node->deaths = g_hash_table_new(g_direct_hash, g_direct_equal);
+    node->death_requests = g_hash_table_new(g_direct_hash, g_direct_equal);
     GDEBUG("Created node %s (%d)", path, node->public_fd);
     return node;
 }
@@ -337,6 +353,8 @@ test_binder_node_free(
     g_hash_table_unref(node->object_map);
     g_hash_table_unref(node->handle_map);
     g_hash_table_unref(node->destroy_map);
+    g_hash_table_unref(node->deaths);
+    g_hash_table_unref(node->death_requests);
     gutil_int_array_free(node->loopers, TRUE);
     g_assert(!close(node->fd[0]));
     g_assert(!close(node->fd[1]));
@@ -688,6 +706,33 @@ test_binder_node_br_dead_object_64(
     test_binder_node_queue_cmd_data(node, ANY_THREAD, br);
 }
 
+/*
+ * The kernel knows local objects by their nodes (GBinderLocalObjectNode),
+ * this file and the tests by GBinderLocalObject pointers. Convert at the
+ * boundary. Tests pass other pointers too, to test unknown objects.
+ */
+static
+guint64
+test_binder_object_to_ptr(
+    gconstpointer obj)
+{
+    if (obj && G_TYPE_CHECK_INSTANCE_TYPE(obj, GBINDER_TYPE_LOCAL_OBJECT)) {
+        return GPOINTER_TO_SIZE(gbinder_local_object_node
+            ((GBinderLocalObject*)obj));
+    }
+    return GPOINTER_TO_SIZE(obj);
+}
+
+static
+guint64
+test_binder_ptr_to_object(
+    guint64 ptr)
+{
+    /* Only called for the pointers written by libgbinder */
+    return ptr ? GPOINTER_TO_SIZE(((GBinderLocalObjectNode*)
+        GSIZE_TO_POINTER(ptr))->object) : 0;
+}
+
 static
 void
 test_binder_local_object_gone(
@@ -830,7 +875,7 @@ test_binder_node_fixup_handles_64(
             if (object->ptr) {
                 object->type = BINDER_TYPE_HANDLE;
                 object->handle = test_binder_node_object_to_handle_locked(node,
-                    object->ptr);
+                    test_binder_ptr_to_object(object->ptr));
             }
         } else if (*obj_ptr == BINDER_TYPE_PTR) {
             BinderBuffer64* buffer = (BinderBuffer64*) obj_ptr;
@@ -912,7 +957,44 @@ test_binder_node_bc_clear_death_notification_64(
     TestBinderNode* node,
     const BinderHandleCookie64* bc)
 {
+    gpointer key = GUINT_TO_POINTER(bc->handle);
+    gpointer cookie;
+
+    /* Lock */
+    test_binder_node_lock(node);
+    if (g_hash_table_lookup_extended(node->death_requests, key, NULL,
+        &cookie) && GPOINTER_TO_SIZE(cookie) == bc->cookie) {
+        g_hash_table_remove(node->death_requests, key);
+    } else {
+        /* The kernel says "death notification cookie mismatch" */
+        GDEBUG("No death notification for handle %u", (guint)bc->handle);
+    }
+    test_binder_node_unlock(node);
+    /* Unlock */
+
     test_binder_node_br_clear_death_notification_done_64(node, bc->cookie);
+}
+
+static
+void
+test_binder_node_bc_request_death_notification_64(
+    TestBinderNode* node,
+    const BinderHandleCookie64* bc)
+{
+    gpointer key = GUINT_TO_POINTER(bc->handle);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    if (g_hash_table_contains(node->death_requests, key)) {
+        /* The kernel says "death notification already set" */
+        GDEBUG("Death notification for handle %u is already set",
+            (guint)bc->handle);
+    } else {
+        g_hash_table_insert(node->death_requests, key,
+            GSIZE_TO_POINTER(bc->cookie));
+    }
+    test_binder_node_unlock(node);
+    /* Unlock */
 }
 
 static
@@ -936,7 +1018,7 @@ test_binder_node_bc_transaction_64(
         tx->cookie = tid;
         tx->sender_pid = getpid();
         tx->sender_euid = geteuid();
-        tx->target.ptr = obj;
+        tx->target.ptr = test_binder_object_to_ptr(GSIZE_TO_POINTER(obj));
         test_binder_node_fixup_handles_64(node, tx);
         test_binder_node_queue_cmd_data(node, ANY_THREAD, br);
     } else if (test_binder_node_ignore_dead_object(node)) {
@@ -1011,7 +1093,7 @@ test_binder_node_bc_acquire_release(
 
         memcpy(br, &code, sizeof(code));
         memset(data, 0, sizeof(*data));
-        data->ptr = ptr;
+        data->ptr = test_binder_object_to_ptr(GSIZE_TO_POINTER(ptr));
 
         /* These commands are not tied to a particular thread */
         test_binder_node_queue_cmd_data_locked(node, ANY_THREAD, br);
@@ -1073,11 +1155,37 @@ test_binder_node_handle_cmd_64(
         test_binder_node_bc_acquire_release(node, BR_ACQUIRE_64, payload);
         break;
     case BC_RELEASE:
+        /*
+         * libgbinder holds one reference per handle. Like the kernel,
+         * forget the death notification together with the reference.
+         */
+
+        /* Lock */
+        test_binder_node_lock(node);
+        g_hash_table_remove(node->deaths,
+            GSIZE_TO_POINTER(*(const guint32*)payload));
+        test_binder_node_unlock(node);
+        /* Unlock */
+
         test_binder_node_bc_acquire_release(node, BR_RELEASE_64, payload);
         break;
-    case BC_ACQUIRE_DONE_64:
     case BC_DEAD_BINDER_DONE:
+
+        /* Lock */
+        test_binder_node_lock(node);
+        if (!g_hash_table_remove(node->deaths,
+            GSIZE_TO_POINTER(*(const guint64*)payload))) {
+            /* The kernel says "BC_DEAD_BINDER_DONE ... not found" */
+            GDEBUG("Unknown BC_DEAD_BINDER_DONE cookie");
+            node->stray_dead_binder_done++;
+        }
+        test_binder_node_unlock(node);
+        /* Unlock */
+        break;
     case BC_REQUEST_DEATH_NOTIFICATION_64:
+        test_binder_node_bc_request_death_notification_64(node, payload);
+        break;
+    case BC_ACQUIRE_DONE_64:
         /* Ignore these for now */
         break;
     default:
@@ -1159,6 +1267,10 @@ test_binder_io_handle_write_read_64(
 
         g_assert_cmpint(nbytes, <= ,avail);
         switch (code) {
+        case BR_DEAD_BINDER_64:
+            g_hash_table_add(node->deaths, GSIZE_TO_POINTER
+                (*(const guint64*)test_binder_cmd_payload(cmd)));
+            break;
         case BR_TRANSACTION_64:
             flags |= CMD_DEQUEUE_FLAG_STOP_AT_TRANSACTION;
             test_binder_node_handle_br_transaction_64_locked(node,
@@ -1252,6 +1364,39 @@ test_binder_push_data(
     }
 }
 
+/*
+ * Like test_binder_push_data() but for BR_TRANSACTION_64 and BR_REPLY_64
+ * carrying the data allocated by the caller. Normally the data is freed
+ * by BC_FREE_BUFFER_64, failing that, together with the node, the same
+ * way as the kernel releases the buffers of a closed binder file.
+ */
+static
+void
+test_binder_push_tx_data(
+    int fd,
+    TEST_BR_THREAD dest,
+    const void* data)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    const BinderTransactionData64* tr = (const BinderTransactionData64*)
+        ((const guint8*)data + sizeof(guint32));
+    gpointer buf = GSIZE_TO_POINTER(tr->data_buffer);
+
+    if (node) {
+        /* Lock */
+        test_binder_node_lock(node);
+        g_hash_table_replace(node->destroy_map, buf, NULL);
+        test_binder_node_unlock(node);
+        /* Unlock */
+
+        test_binder_node_queue_cmd_data(node, (dest == THIS_THREAD) ?
+            gettid() : dest, data);
+        test_binder_node_unref(node);
+    } else {
+        g_free(buf);
+    }
+}
+
 static
 void
 test_binder_push_ptr_cookie(
@@ -1266,7 +1411,7 @@ test_binder_push_ptr_cookie(
     g_assert_cmpuint(_IOC_SIZE(cmd), == ,sizeof(BinderPtrCookie64));
     memcpy(buf, &cmd, sizeof(cmd));
     memset(data, 0, sizeof(*data));
-    data->ptr = GPOINTER_TO_SIZE(ptr);
+    data->ptr = test_binder_object_to_ptr(ptr);
 
     test_binder_push_data(fd, dest, buf);
 }
@@ -1423,14 +1568,14 @@ test_binder_br_transaction(
     BinderTarget64 target;
 
     memset(&target, 0, sizeof(target));
-    target.ptr = GPOINTER_TO_SIZE(ptr);
+    target.ptr = test_binder_object_to_ptr(ptr);
 
     memset(br, 0, sizeof(br));
     memcpy(br, &cmd, sizeof(cmd));
     test_binder_fill_transaction_data((void*)(br + sizeof(cmd)), &target,
         code, bytes);
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 void
@@ -1453,7 +1598,7 @@ test_binder_br_reply(
     test_binder_fill_transaction_data((void*)(br + sizeof(cmd)), &target,
         code, bytes);
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 void
@@ -1473,7 +1618,7 @@ test_binder_br_reply_status(
     /* This memory should eventually get deallocated with BC_FREE_BUFFER_64 */
     tr->data_buffer = (gsize) gutil_memdup(&status, sizeof(status));
 
-    test_binder_push_data(fd, dest, br);
+    test_binder_push_tx_data(fd, dest, br);
 }
 
 int
@@ -1698,6 +1843,70 @@ gbinder_system_close(
         test_binder_fd_free(binder_fd);
     }
     return ret;
+}
+
+int
+gbinder_system_flush(
+    int fd)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+
+    if (node) {
+        /* Reads never block here, there's nobody to wake up */
+        g_atomic_int_inc(&test_binder_flushes);
+        test_binder_node_unref(node);
+        return 0;
+    } else {
+        errno = EBADF;
+        return -1;
+    }
+}
+
+guint
+test_binder_stray_dead_binder_done(
+    int fd)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    guint n;
+
+    g_assert(node);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    n = node->stray_dead_binder_done;
+    test_binder_node_unlock(node);
+    /* Unlock */
+
+    test_binder_node_unref(node);
+    return n;
+}
+
+gboolean
+test_binder_death_requested(
+    int fd,
+    guint32 handle)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    gboolean requested;
+
+    g_assert(node);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    requested = g_hash_table_contains(node->death_requests,
+        GUINT_TO_POINTER(handle));
+    test_binder_node_unlock(node);
+    /* Unlock */
+
+    test_binder_node_unref(node);
+    return requested;
+}
+
+guint
+test_binder_flush_count(
+    void)
+{
+    return (guint) g_atomic_int_get(&test_binder_flushes);
 }
 
 int
