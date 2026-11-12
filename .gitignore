@@ -7,7 +7,6 @@ debian/*.debhelper.log
 debian/*.debhelper
 debian/*.substvars
 debian/libgbinder.install
-debian/libgbinder-dev.install
 debian/tmp
 documentation.list
 installroot
