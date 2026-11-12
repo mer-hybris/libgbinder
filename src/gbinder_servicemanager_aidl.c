@@ -49,6 +49,7 @@ typedef struct gbinder_servicemanager_aidl_poll {
 
 typedef struct gbinder_servicemanager_aidl_callback_registration_call {
     int ref_count;  /* tx and registration_call_table hold the refs */
+    gboolean is_register;
     GBinderServiceManagerAidl* obj;
     gulong tx;
     char* name;
@@ -216,7 +217,9 @@ gbinder_servicemanager_aidl_callback_registration_call_done(
     GBinderServiceManagerAidlPriv* priv = call->obj->priv;
 
     call->tx = 0;
-    if (priv->registration_call_table) {
+    /* Only remove our own entry, a newer call may have replaced it */
+    if (priv->registration_call_table && g_hash_table_lookup
+        (priv->registration_call_table, call->name) == call) {
         g_hash_table_remove(priv->registration_call_table, call->name);
     }
 }
@@ -240,14 +243,37 @@ gbinder_servicemanager_aidl_callback_register_reply(
      * to polling.
      */
     if (status != GBINDER_STATUS_OK) {
+        GHashTable* table = priv->registration_call_table;
+        GPtrArray* names = g_ptr_array_new_with_free_func(g_free);
+        guint i;
+
         GWARN("registerForNotifications(%s) tx error %d", call->name, status);
         gbinder_local_object_drop(priv->callback);
         priv->callback = NULL;
-        g_hash_table_destroy(priv->registration_call_table);
         priv->registration_call_table = NULL;
+        g_ptr_array_add(names, g_strdup(call->name));
+        if (table) {
+            GHashTableIter it;
+            gpointer value;
+
+            /* Other pending registrations are going to fail too */
+            g_hash_table_iter_init(&it, table);
+            while (g_hash_table_iter_next(&it, NULL, &value)) {
+                GBinderServiceManagerAidlCallbackRegistrationCall* other =
+                    value;
+
+                if (other->is_register && g_strcmp0(other->name, call->name)) {
+                    g_ptr_array_add(names, g_strdup(other->name));
+                }
+            }
+            g_hash_table_destroy(table);
+        }
 
         /* Revert to polling */
-        gbinder_servicemanager_aidl_poll_start(self, call->name);
+        for (i = 0; i < names->len; i++) {
+            gbinder_servicemanager_aidl_poll_start(self, names->pdata[i]);
+        }
+        g_ptr_array_free(names, TRUE);
     }
 }
 
@@ -318,6 +344,8 @@ gbinder_servicemanager_aidl_callback_registration_call_submit(
         g_new0(GBinderServiceManagerAidlCallbackRegistrationCall, 1);
 
     call->ref_count = 1; /* Reference for the transaction */
+    call->is_register =
+        (fn == gbinder_servicemanager_aidl_callback_register_reply);
     g_object_ref(call->obj = self);
     call->name = g_strdup(name);
 
