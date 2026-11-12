@@ -76,21 +76,24 @@ test_local_request_new_with_io(
 
 static
 GBinderLocalRequest*
-test_local_request_new()
+test_local_request_new(
+    void)
 {
     return test_local_request_new_with_io(&gbinder_io_32);
 }
 
 static
 GBinderLocalRequest*
-test_local_request_new_64()
+test_local_request_new_64(
+    void)
 {
     return test_local_request_new_with_io(&gbinder_io_64);
 }
 
 static
 GBinderLocalRequest*
-test_local_request_new_64_hidl()
+test_local_request_new_64_hidl(
+    void)
 {
     return test_local_request_new_with_io_dev(&gbinder_io_64,
         GBINDER_DEFAULT_HWBINDER);

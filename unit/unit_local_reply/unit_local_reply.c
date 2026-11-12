@@ -69,7 +69,8 @@ test_buffer_from_bytes(
 
 static
 GBinderLocalReply*
-test_local_reply_new()
+test_local_reply_new(
+    void)
 {
     return gbinder_local_reply_new(&gbinder_io_32,
         gbinder_rpc_protocol_for_device(NULL));

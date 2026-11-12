@@ -297,7 +297,8 @@ test_hwservicemanager_class_init(
 }
 
 GType
-gbinder_servicemanager_hidl_get_type()
+gbinder_servicemanager_hidl_get_type(
+    void)
 {
     return TEST_TYPE_HWSERVICEMANAGER;
 }
@@ -376,13 +377,15 @@ test_defservicemanager_class_init(
 }
 
 GType
-gbinder_servicemanager_aidl_get_type()
+gbinder_servicemanager_aidl_get_type(
+    void)
 {
     return TEST_TYPE_DEFSERVICEMANAGER;
 }
 
 GType
-gbinder_servicemanager_aidl2_get_type()
+gbinder_servicemanager_aidl2_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl2 */
     g_assert_not_reached();
@@ -390,7 +393,8 @@ gbinder_servicemanager_aidl2_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl3_get_type()
+gbinder_servicemanager_aidl3_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
     g_assert_not_reached();
@@ -398,7 +402,8 @@ gbinder_servicemanager_aidl3_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl5_get_type()
+gbinder_servicemanager_aidl5_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
     g_assert_not_reached();
@@ -406,7 +411,8 @@ gbinder_servicemanager_aidl5_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl6_get_type()
+gbinder_servicemanager_aidl6_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
     g_assert_not_reached();
@@ -847,7 +853,8 @@ test_wait_async(
 
 static
 void
-test_death_run()
+test_death_run(
+    void)
 {
     const char* dev = GBINDER_DEFAULT_HWBINDER;
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
@@ -895,7 +902,8 @@ test_death_run()
 
 static
 void
-test_death()
+test_death(
+    void)
 {
     test_run_in_context(&test_opt, test_death_run);
 }

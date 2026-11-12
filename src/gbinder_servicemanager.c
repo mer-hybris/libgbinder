@@ -485,7 +485,8 @@ gbinder_servicemanager_value_map(
 
 static
 GHashTable*
-gbinder_servicemanager_load_config()
+gbinder_servicemanager_load_config(
+    void)
 {
     GHashTable* map = gbinder_config_load(CONF_GROUP,
         gbinder_servicemanager_value_map);

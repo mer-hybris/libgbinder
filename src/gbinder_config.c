@@ -295,7 +295,8 @@ gbinder_config_apply_presets(
 
 static
 GKeyFile*
-gbinder_config_load_files()
+gbinder_config_load_files(
+    void)
 {
     GError* error = NULL;
     GKeyFile* out = NULL;
@@ -385,7 +386,8 @@ gbinder_config_autorelease_cb(
 }
 
 GKeyFile* /* autoreleased */
-gbinder_config_get()
+gbinder_config_get(
+    void)
 {
     if (!gbinder_config_keyfile &&
         (gbinder_config_file || gbinder_config_dir)) {
@@ -439,7 +441,8 @@ gbinder_config_load(
 }
 
 void
-gbinder_config_exit()
+gbinder_config_exit(
+    void)
 {
     if (gbinder_config_autorelease) {
         gbinder_idle_callback_destroy(gbinder_config_autorelease);

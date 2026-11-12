@@ -50,7 +50,8 @@ static const char TMP_DIR_TEMPLATE[] =
     "gbinder-test-servicemanager_aidl3-XXXXXX";
 
 GType
-gbinder_servicemanager_hidl_get_type()
+gbinder_servicemanager_hidl_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_hidl */
     g_assert_not_reached();
@@ -58,7 +59,8 @@ gbinder_servicemanager_hidl_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl5_get_type()
+gbinder_servicemanager_aidl5_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl5 */
     g_assert_not_reached();
@@ -66,7 +68,8 @@ gbinder_servicemanager_aidl5_get_type()
 }
 
 GType
-gbinder_servicemanager_aidl6_get_type()
+gbinder_servicemanager_aidl6_get_type(
+    void)
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl6 */
     g_assert_not_reached();
@@ -367,7 +370,8 @@ test_context_wait_ref(
 
 static
 void
-test_get_run()
+test_get_run(
+    void)
 {
     TestContext test;
     const char* name = "name";
@@ -404,7 +408,8 @@ test_get_run()
 
 static
 void
-test_get()
+test_get(
+    void)
 {
     test_run_in_context(&test_opt, test_get_run);
 }
@@ -415,7 +420,8 @@ test_get()
 
 static
 void
-test_list_run()
+test_list_run(
+    void)
 {
     TestContext test;
     const char* name = "name";
@@ -453,7 +459,8 @@ test_list_run()
 
 static
 void
-test_list()
+test_list(
+    void)
 {
     test_run_in_context(&test_opt, test_list_run);
 }
