@@ -457,6 +457,89 @@ test_reply_ok3(
 }
 
 /*==========================================================================*
+ * reply/cancel
+ *
+ * The reply callback cancels its own transaction. The destroy callback
+ * must not be invoked until the reply callback has returned.
+ *==========================================================================*/
+
+typedef struct test_reply_cancel_data {
+    GMainLoop* loop;
+    GBinderClient* client;
+    gulong id;
+    int replied;
+    int destroyed;
+} TestReplyCancelData;
+
+static
+void
+test_reply_cancel_reply(
+    GBinderClient* client,
+    GBinderRemoteReply* reply,
+    int status,
+    void* user_data)
+{
+    TestReplyCancelData* test = user_data;
+
+    test_reply_ok_reply(client, reply, status, user_data);
+    gbinder_client_cancel(client, test->id);
+    g_assert_cmpint(test->destroyed, == ,0);
+    test->replied++;
+}
+
+static
+void
+test_reply_cancel_destroy(
+    void* user_data)
+{
+    TestReplyCancelData* test = user_data;
+
+    g_assert_cmpint(test->replied, == ,1);
+    test->destroyed++;
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_reply_cancel(
+    void)
+{
+    GBinderClient* client = test_client_new(0, TEST_INTERFACE);
+    GBinderDriver* driver = gbinder_client_ipc(client)->driver;
+    int fd = gbinder_driver_fd(driver);
+    const GBinderIo* io = gbinder_driver_io(driver);
+    const GBinderRpcProtocol* protocol = gbinder_driver_protocol(driver);
+    GBinderLocalReply* reply = gbinder_local_reply_new(io, protocol);
+    TestReplyCancelData test;
+
+    test.loop = g_main_loop_new(NULL, FALSE);
+    test.client = client;
+    test.id = 0;
+    test.replied = 0;
+    test.destroyed = 0;
+
+    g_assert(gbinder_local_reply_append_string16(reply, TEST_REQ_PARAM_STR));
+    test_binder_ignore_dead_object(fd);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_transaction_complete(fd, TX_THREAD);
+    test_binder_br_noop(fd, TX_THREAD);
+    test_binder_br_reply(fd, TX_THREAD, 0, 1,
+        gbinder_local_reply_data(reply)->bytes);
+
+    test.id = gbinder_client_transact(client, 0, 0, NULL,
+        test_reply_cancel_reply, test_reply_cancel_destroy, &test);
+    g_assert(test.id);
+    test_run(&test_opt, test.loop);
+    g_assert_cmpint(test.replied, == ,1);
+    g_assert_cmpint(test.destroyed, == ,1);
+
+    gbinder_local_reply_unref(reply);
+    gbinder_client_unref(client);
+    test_binder_exit_wait(&test_opt, test.loop);
+    g_main_loop_unref(test.loop);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -479,6 +562,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("reply/ok1"), test_reply_ok1);
     g_test_add_func(TEST_("reply/ok2"), test_reply_ok2);
     g_test_add_func(TEST_("reply/ok3"), test_reply_ok3);
+    g_test_add_func(TEST_("reply/cancel"), test_reply_cancel);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

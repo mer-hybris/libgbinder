@@ -63,6 +63,7 @@ typedef struct gbinder_client_tx {
     GBinderClientReplyFunc reply;
     GDestroyNotify destroy;
     void* user_data;
+    gboolean in_reply;
 } GBinderClientTx;
 
 static inline GBinderClientPriv* gbinder_client_cast(GBinderClient* client)
@@ -159,7 +160,9 @@ gbinder_client_transact_reply(
     GBinderClientTx* tx = data;
 
     if (tx->reply) {
+        tx->in_reply = TRUE;
         tx->reply(tx->client, reply, status, tx->user_data);
+        tx->in_reply = FALSE;
     }
 }
 
@@ -475,14 +478,22 @@ gbinder_client_cancel(
         GBinderClientTx* tx = gbinder_ipc_get_tx_user_data(ipc, id);
 
         if (tx) {
-            GDestroyNotify destroy = tx->destroy;
-            void* user_data = tx->user_data;
-
             tx->reply = NULL;
-            tx->destroy = NULL;
             gbinder_ipc_cancel(ipc, id);
-            if (destroy) {
-                destroy(user_data);
+            if (tx->in_reply) {
+                /*
+                 * Cancelled by its own reply callback, which may still
+                 * be using user_data. gbinder_client_transact_destroy()
+                 * will invoke the destroy callback once the reply
+                 * callback has returned.
+                 */
+            } else {
+                GDestroyNotify destroy = tx->destroy;
+
+                tx->destroy = NULL;
+                if (destroy) {
+                    destroy(tx->user_data);
+                }
             }
         }
     }
