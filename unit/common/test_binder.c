@@ -114,6 +114,8 @@ struct test_binder_node {
     GHashTable* object_map;   /* GBinderLocalObject* => handle */
     GHashTable* handle_map;   /* handle => GBinderLocalObject* */
     GHashTable* destroy_map;  /* gpointer => GDestroyNotify */
+    GHashTable* deaths;       /* Cookies of delivered BR_DEAD_BINDER */
+    guint stray_dead_binder_done;
     TestBinderCmd* cmd_first;
     TestBinderCmd* cmd_last;
 };
@@ -309,6 +311,7 @@ test_binder_node_new(
     node->object_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->handle_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    node->deaths = g_hash_table_new(g_direct_hash, g_direct_equal);
     GDEBUG("Created node %s (%d)", path, node->public_fd);
     return node;
 }
@@ -348,6 +351,7 @@ test_binder_node_free(
     g_hash_table_unref(node->object_map);
     g_hash_table_unref(node->handle_map);
     g_hash_table_unref(node->destroy_map);
+    g_hash_table_unref(node->deaths);
     gutil_int_array_free(node->loopers, TRUE);
     g_assert(!close(node->fd[0]));
     g_assert(!close(node->fd[1]));
@@ -1084,10 +1088,34 @@ test_binder_node_handle_cmd_64(
         test_binder_node_bc_acquire_release(node, BR_ACQUIRE_64, payload);
         break;
     case BC_RELEASE:
+        /*
+         * libgbinder holds one reference per handle. Like the kernel,
+         * forget the death notification together with the reference.
+         */
+
+        /* Lock */
+        test_binder_node_lock(node);
+        g_hash_table_remove(node->deaths,
+            GSIZE_TO_POINTER(*(const guint32*)payload));
+        test_binder_node_unlock(node);
+        /* Unlock */
+
         test_binder_node_bc_acquire_release(node, BR_RELEASE_64, payload);
         break;
-    case BC_ACQUIRE_DONE_64:
     case BC_DEAD_BINDER_DONE:
+
+        /* Lock */
+        test_binder_node_lock(node);
+        if (!g_hash_table_remove(node->deaths,
+            GSIZE_TO_POINTER(*(const guint64*)payload))) {
+            /* The kernel says "BC_DEAD_BINDER_DONE ... not found" */
+            GDEBUG("Unknown BC_DEAD_BINDER_DONE cookie");
+            node->stray_dead_binder_done++;
+        }
+        test_binder_node_unlock(node);
+        /* Unlock */
+        break;
+    case BC_ACQUIRE_DONE_64:
     case BC_REQUEST_DEATH_NOTIFICATION_64:
         /* Ignore these for now */
         break;
@@ -1170,6 +1198,10 @@ test_binder_io_handle_write_read_64(
 
         g_assert_cmpint(nbytes, <= ,avail);
         switch (code) {
+        case BR_DEAD_BINDER_64:
+            g_hash_table_add(node->deaths, GSIZE_TO_POINTER
+                (*(const guint64*)test_binder_cmd_payload(cmd)));
+            break;
         case BR_TRANSACTION_64:
             flags |= CMD_DEQUEUE_FLAG_STOP_AT_TRANSACTION;
             test_binder_node_handle_br_transaction_64_locked(node,
@@ -1759,6 +1791,25 @@ gbinder_system_flush(
         errno = EBADF;
         return -1;
     }
+}
+
+guint
+test_binder_stray_dead_binder_done(
+    int fd)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    guint n;
+
+    g_assert(node);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    n = node->stray_dead_binder_done;
+    test_binder_node_unlock(node);
+    /* Unlock */
+
+    test_binder_node_unref(node);
+    return n;
 }
 
 guint

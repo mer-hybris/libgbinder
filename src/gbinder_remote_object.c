@@ -75,6 +75,12 @@ gbinder_remote_object_handle_death_on_main_thread(
         GBinderRemoteObjectPriv* priv = self->priv;
 
         self->dead = TRUE;
+        /*
+         * Acknowledge the death notification first. Releasing the last
+         * reference to the node makes the kernel free the notification,
+         * and BC_DEAD_BINDER_DONE would then refer to nothing.
+         */
+        gbinder_driver_dead_binder_done(driver, self);
         if (priv->acquired) {
             priv->acquired = FALSE;
             /* Release the dead node */
@@ -84,7 +90,6 @@ gbinder_remote_object_handle_death_on_main_thread(
         if (self->handle != GBINDER_SERVICEMANAGER_HANDLE) {
             gbinder_ipc_invalidate_remote_object(ipc, self);
         }
-        gbinder_driver_dead_binder_done(driver, self);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
     }
 }

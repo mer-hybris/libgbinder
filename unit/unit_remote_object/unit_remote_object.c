@@ -141,6 +141,49 @@ test_dead(
 }
 
 /*==========================================================================*
+ * dead_acquired
+ *
+ * BC_DEAD_BINDER_DONE must reach the driver before the last reference
+ * to the dead node is released, otherwise the kernel has already freed
+ * the death notification.
+ *==========================================================================*/
+
+static
+void
+test_dead_acquired_run(
+    void)
+{
+    const guint h = 1;
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderRemoteObject* obj = gbinder_object_registry_get_remote(reg, h,
+        REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE);
+    gulong id = gbinder_remote_object_add_death_handler
+        (obj, test_dead_done, loop);
+
+    test_binder_br_dead_binder(fd, ANY_THREAD, h);
+    test_run(&test_opt, loop);
+    g_assert(gbinder_remote_object_is_dead(obj));
+    g_assert_cmpuint(test_binder_stray_dead_binder_done(fd), == ,0);
+
+    gbinder_remote_object_remove_handler(obj, id);
+    gbinder_remote_object_unref(obj);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_dead_acquired(
+    void)
+{
+    test_run_in_context(&test_opt, test_dead_acquired_run);
+}
+
+/*==========================================================================*
  * reuse
  *
  * When a dead object finally goes away, it must not evict a newer object
@@ -209,6 +252,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "dead", test_dead);
+    g_test_add_func(TEST_PREFIX "dead_acquired", test_dead_acquired);
     g_test_add_func(TEST_PREFIX "reuse", test_reuse);
     test_init(&test_opt, argc, argv);
     return g_test_run();

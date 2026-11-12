@@ -171,6 +171,10 @@ guint
 test_binder_flush_count(
     void);
 
+guint
+test_binder_stray_dead_binder_done(
+    int fd);
+
 #endif /* TEST_BINDER_H */
 
 /*
