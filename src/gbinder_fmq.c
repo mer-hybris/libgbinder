@@ -33,11 +33,13 @@
 #include "gbinder_log.h"
 
 #include <gutil_macros.h>
+#include <gutil_misc.h>
 
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -58,6 +60,7 @@ typedef struct gbinder_fmq {
     guint64* write_ptr;
     guint32* event_flag_ptr;
     guint32 refcount;
+    gboolean close_fds;
 } GBinderFmq;
 
 GBINDER_INLINE_FUNC
@@ -102,10 +105,10 @@ gbinder_fmq_available_to_write_bytes(
     GBinderFmq* self,
     gboolean contiguous)
 {
-    const guint32 size = gbinder_fmq_get_grantor_descriptor(self,
+    const gsize size = gbinder_fmq_get_grantor_descriptor(self,
         DATA_PTR_POS)->extent;
-    const gsize available_total = size -
-        gbinder_fmq_available_to_read_bytes(self, FALSE);
+    const gsize used = gbinder_fmq_available_to_read_bytes(self, FALSE);
+    const gsize available_total = used > size ? 0 : size - used;
 
     if (contiguous) {
         /*
@@ -173,7 +176,7 @@ gbinder_fmq_map_grantor_descriptor(
             gbinder_fmq_get_grantor_descriptor(self, index);
         /* Offset for mmap must be a multiple of PAGE_SIZE */
         const guint32 map_offset = (desc->offset & ~(getpagesize()-1));
-        const guint32 map_length = desc->offset - map_offset + desc->extent;
+        const gsize map_length = desc->offset - map_offset + desc->extent;
         const GBinderFds* fds = self->desc->data.fds;
         void* address = mmap(0, map_length, PROT_READ | PROT_WRITE, MAP_SHARED,
             gbinder_fds_get_fd(fds, desc->fd_index), map_offset);
@@ -205,6 +208,48 @@ gbinder_fmq_unmap_grantor_descriptor(
 
 static
 void
+gbinder_fmq_free_fds(
+    GBinderFds* fds)
+{
+    guint i;
+
+    for (i = 0; i < fds->num_fds; i++) {
+        const int fd = gbinder_fds_get_fd(fds, i);
+
+        if (fd >= 0) {
+            close(fd);
+        }
+    }
+    g_free(fds);
+}
+
+static
+GBinderFds*
+gbinder_fmq_dup_fds(
+    const GBinderFds* fds)
+{
+    const gsize size = sizeof(*fds) +
+        (((gsize) fds->num_fds) + fds->num_ints) * sizeof(int);
+    GBinderFds* copy = gutil_memdup(fds, size);
+    int* values = (int*)(copy + 1);
+    guint i;
+
+    copy->version = sizeof(*copy);
+    for (i = 0; i < copy->num_fds; i++) {
+        values[i] = -1;
+    }
+    for (i = 0; i < copy->num_fds; i++) {
+        values[i] = fcntl(gbinder_fds_get_fd(fds, i), F_DUPFD_CLOEXEC, 0);
+        if (values[i] < 0) {
+            gbinder_fmq_free_fds(copy);
+            return NULL;
+        }
+    }
+    return copy;
+}
+
+static
+void
 gbinder_fmq_free(
     GBinderFmq* self)
 {
@@ -223,11 +268,109 @@ gbinder_fmq_free(
             EVENT_FLAG_PTR_POS);
 
         g_free((GBinderFmqGrantorDescriptor*)self->desc->grantors.data.ptr);
-        g_free((GBinderFds*)self->desc->data.fds);
+        if (self->close_fds) {
+            gbinder_fmq_free_fds((GBinderFds*)self->desc->data.fds);
+        } else {
+            g_free((GBinderFds*)self->desc->data.fds);
+        }
 
         g_free(self->desc);
     }
     g_slice_free(GBinderFmq, self);
+}
+
+static
+gboolean
+gbinder_fmq_validate_grantor(
+    const GBinderMQDescriptor* desc,
+    guint index)
+{
+    const GBinderFmqGrantorDescriptor* grantor =
+        ((const GBinderFmqGrantorDescriptor*)desc->grantors.data.ptr) + index;
+    const GBinderFds* fds = desc->data.fds;
+    gsize alignment, minimum;
+    struct stat st;
+    int fd;
+
+    switch (index) {
+    case READ_PTR_POS:
+    case WRITE_PTR_POS:
+        alignment = sizeof(guint64);
+        break;
+    case EVENT_FLAG_PTR_POS:
+        alignment = sizeof(guint32);
+        break;
+    default:
+        alignment = 1;
+        break;
+    }
+    minimum = (index == DATA_PTR_POS) ? desc->quantum : alignment;
+
+    if (grantor->fd_index >= fds->num_fds || grantor->offset % alignment ||
+        grantor->extent < minimum ||
+        grantor->extent > G_MAXSIZE - grantor->offset) {
+        return FALSE;
+    }
+    fd = gbinder_fds_get_fd(fds, grantor->fd_index);
+    if (fd < 0 || fstat(fd, &st) < 0) {
+        return FALSE;
+    }
+    /* Some shared memory devices don't report a size. */
+    return !S_ISREG(st.st_mode) ||
+        grantor->offset + grantor->extent <= (guint64) st.st_size;
+}
+
+static
+gboolean
+gbinder_fmq_validate_descriptor(
+    const GBinderMQDescriptor* desc)
+{
+    const GBinderFmqGrantorDescriptor* grantors = desc->grantors.data.ptr;
+    const GBinderFds* fds = desc->data.fds;
+    const gsize max_values = (G_MAXSIZE - sizeof(*fds)) / sizeof(int);
+    guint i;
+
+    if (desc->grantors.count < 3 || desc->grantors.count > 4 || !grantors ||
+        !desc->quantum || !fds || !fds->num_fds) {
+        return FALSE;
+    }
+    if (fds->num_fds > max_values ||
+        fds->num_ints > max_values - fds->num_fds) {
+        return FALSE;
+    }
+    if (desc->flags != GBINDER_FMQ_TYPE_SYNC_READ_WRITE &&
+        desc->flags != GBINDER_FMQ_TYPE_UNSYNC_WRITE) {
+        return FALSE;
+    }
+    for (i = 0; i < desc->grantors.count; i++) {
+        if (!gbinder_fmq_validate_grantor(desc, i)) {
+            return FALSE;
+        }
+    }
+    return !(grantors[DATA_PTR_POS].extent % desc->quantum);
+}
+
+static
+gboolean
+gbinder_fmq_map_descriptor(
+    GBinderFmq* self)
+{
+    if (self->desc->flags == GBINDER_FMQ_TYPE_UNSYNC_WRITE) {
+        /* Each reader of an unsynchronized queue has its own read counter. */
+        self->read_ptr = g_new0(guint64, 1);
+    } else {
+        self->read_ptr = gbinder_fmq_map_grantor_descriptor(self, READ_PTR_POS);
+    }
+    self->write_ptr = gbinder_fmq_map_grantor_descriptor(self, WRITE_PTR_POS);
+    self->ring = gbinder_fmq_map_grantor_descriptor(self, DATA_PTR_POS);
+    if (self->desc->grantors.count > EVENT_FLAG_PTR_POS) {
+        self->event_flag_ptr = gbinder_fmq_map_grantor_descriptor(self,
+            EVENT_FLAG_PTR_POS);
+        if (!self->event_flag_ptr) {
+            return FALSE;
+        }
+    }
+    return self->read_ptr && self->write_ptr && self->ring;
 }
 
 /* Private API */
@@ -239,7 +382,66 @@ gbinder_fmq_get_descriptor(
     return self->desc;
 }
 
+GBinderFmq*
+gbinder_fmq_new_from_descriptor(
+    const GBinderMQDescriptor* desc,
+    GBINDER_FMQ_FLAGS flags)
+{
+    const guint supported_flags = GBINDER_FMQ_FLAG_NO_RESET_POINTERS |
+        GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG;
+    GBinderFds* fds;
+
+    if (!gbinder_fmq_validate_descriptor(desc) || (flags & ~supported_flags)) {
+        return NULL;
+    }
+    if ((flags & GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG) &&
+        desc->grantors.count <= EVENT_FLAG_PTR_POS) {
+        return NULL;
+    }
+    fds = gbinder_fmq_dup_fds(desc->data.fds);
+    if (fds) {
+        GBinderFmq* self = g_slice_new0(GBinderFmq);
+
+        self->desc = gutil_memdup(desc, sizeof(*desc));
+        self->desc->data.fds = fds;
+        self->desc->grantors.data.ptr = gutil_memdup(desc->grantors.data.ptr,
+            desc->grantors.count * sizeof(GBinderFmqGrantorDescriptor));
+        self->desc->grantors.owns_buffer = TRUE;
+        self->close_fds = TRUE;
+        if (gbinder_fmq_map_descriptor(self)) {
+            if (!(flags & GBINDER_FMQ_FLAG_NO_RESET_POINTERS)) {
+                __atomic_store_n(self->read_ptr, 0, __ATOMIC_RELEASE);
+                __atomic_store_n(self->write_ptr, 0, __ATOMIC_RELEASE);
+            }
+            g_atomic_int_set(&self->refcount, 1);
+            return self;
+        }
+        gbinder_fmq_free(self);
+    }
+    return NULL;
+}
+
 /* Public API */
+
+gsize
+gbinder_fmq_get_item_size(
+    const GBinderFmq* self)
+{
+    return self ? self->desc->quantum : 0;
+}
+
+gsize
+gbinder_fmq_get_capacity(
+    const GBinderFmq* self)
+{
+    if (self) {
+        const GBinderFmqGrantorDescriptor* grantors =
+            self->desc->grantors.data.ptr;
+
+        return grantors[DATA_PTR_POS].extent / self->desc->quantum;
+    }
+    return 0;
+}
 
 GBinderFmq*
 gbinder_fmq_new(
@@ -445,7 +647,8 @@ gbinder_fmq_begin_read(
             GWARN("Unable to write data because of misaligned pointer");
         } else if (write_ptr - read_ptr > size) {
             __atomic_store_n(self->read_ptr, write_ptr, __ATOMIC_RELEASE);
-        } else if (write_ptr - read_ptr < bytes_desired) {
+        } else if (items > size / item_size ||
+            write_ptr - read_ptr < bytes_desired) {
             /* Not enough data to read in FMQ. */
         } else {
             ptr = self->ring + (read_ptr % size);
@@ -672,7 +875,7 @@ gbinder_fmq_wake(
 
             if (~old_value & bit_mask) {
                 ret = syscall(__NR_futex, self->event_flag_ptr,
-                    FUTEX_WAKE_BITSET, G_MAXUINT32, NULL, NULL, bit_mask);
+                    FUTEX_WAKE_BITSET, G_MAXINT, NULL, NULL, bit_mask);
             }
 
             if (ret == -1) {
