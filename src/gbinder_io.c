@@ -679,7 +679,10 @@ const GBinderIo GBINDER_IO_PREFIX = {
         .finished = BR_FINISHED,
         .dead_binder = BR_DEAD_BINDER,
         .clear_death_notification_done = BR_CLEAR_DEATH_NOTIFICATION_DONE,
-        .failed_reply = BR_FAILED_REPLY
+        .failed_reply = BR_FAILED_REPLY,
+        .frozen_reply = BR_FROZEN_REPLY,
+        .oneway_spam_suspect = BR_ONEWAY_SPAM_SUSPECT,
+        .transaction_pending_frozen = BR_TRANSACTION_PENDING_FROZEN
     },
 
     .object_size = GBINDER_IO_FN(object_size),

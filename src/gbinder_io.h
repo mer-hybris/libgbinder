@@ -123,6 +123,9 @@ struct gbinder_io {
         guint dead_binder;
         guint clear_death_notification_done;
         guint failed_reply;
+        guint frozen_reply;
+        guint oneway_spam_suspect;
+        guint transaction_pending_frozen;
     } br;
 
     /* Size of the object and its extra data */
