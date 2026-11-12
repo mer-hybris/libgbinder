@@ -166,6 +166,24 @@ gboolean
 gbinder_reader_skip_parcelable(
     GBinderReader* reader); /* Since 1.1.49 */
 
+/*
+ * gbinder_reader_read_hidl_struct() only checks that the next object
+ * is a buffer of exactly sizeof(type) bytes. It doesn't look inside.
+ * Pointers embedded in the struct (hidl_string, hidl_vec, nested
+ * structs) hold whatever the sender put there, unless the sender also
+ * wrote the buffers they point to as child buffers, in which case the
+ * kernel has patched them. The receiver can't tell which is the case,
+ * nor whether the buffer behind a pointer is as big as the struct
+ * claims, so don't dereference such pointers. Read the child buffers
+ * which follow the struct with gbinder_reader_read_buffer(), use one
+ * only if its data pointer equals the pointer in the struct and its
+ * size is what the field requires (e.g. len + 1 for a hidl_string,
+ * with a NUL at the end), and access the data through the buffer.
+ * The same applies to the elements of gbinder_reader_read_hidl_vec()
+ * and gbinder_reader_read_hidl_type_vec(). A top level hidl_string or
+ * hidl_vec is best read with gbinder_reader_read_hidl_string() or
+ * gbinder_reader_read_hidl_vec(), which do these checks.
+ */
 const void*
 gbinder_reader_read_hidl_struct1(
     GBinderReader* reader,
