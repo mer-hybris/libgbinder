@@ -391,6 +391,26 @@ gbinder_reader_consume_object(
     return FALSE;
 }
 
+/*
+ * Android doesn't record NULL objects in the offsets table (libhwbinder's
+ * Parcel::writeObject skips NULL buffers, libbinder skips NULL binders)
+ * and its Parcel::readObject() steps over them without looking at the
+ * offsets. libgbinder's writer does the same. That's the only kind of
+ * object which may be read without an offsets entry: anything else that's
+ * not in the table hasn't been seen (and translated) by the driver, and
+ * can't be trusted.
+ */
+static
+gboolean
+gbinder_reader_can_read_null_object(
+    GBinderReaderPriv* p)
+{
+    const GBinderReaderData* data = p->data;
+
+    return data && data->reg && data->buffer && p->ptr < p->end &&
+        !gbinder_reader_can_read_object(p);
+}
+
 int
 gbinder_reader_read_fd(
     GBinderReader* reader) /* Since 1.0.18 */
@@ -444,6 +464,17 @@ gbinder_reader_read_nullable_object(
             decode_binder_object(p->ptr,size, data->reg, out, rpc))) {
             return TRUE;
         }
+    } else if (gbinder_reader_can_read_null_object(p)) {
+        const GBinderReaderData* data = p->data;
+        const gsize size = data->reg->io->null_binder_object_size(p->ptr,
+            p->end - p->ptr, gbinder_buffer_protocol(data->buffer));
+
+        if (size) {
+            /* NULL object, not in the offsets table */
+            p->ptr += size;
+            if (out) *out = NULL;
+            return TRUE;
+        }
     }
     if (out) *out = NULL;
     return FALSE;
@@ -476,8 +507,47 @@ gbinder_reader_read_buffer_object(
             decode_buffer_object(buf, offset, out))) {
             return TRUE;
         }
+    } else if (gbinder_reader_can_read_null_object(p)) {
+        const GBinderReaderData* data = p->data;
+        const GBinderIo* io = data->reg->io;
+        GBinderBuffer* buf = data->buffer;
+        const gsize size = io->null_buffer_object_size(p->ptr,
+            p->end - p->ptr);
+
+        /* NULL buffer, not in the offsets table */
+        if (size && io->decode_buffer_object(buf,
+            p->ptr - (guint8*)buf->data, out) == size) {
+            p->ptr += size;
+            return TRUE;
+        }
     }
     return FALSE;
+}
+
+/*
+ * libhwbinder writes the (NULL, zero-sized) data buffer of an empty
+ * hidl_vec but doesn't record it in the offsets table, so the driver
+ * leaves hidl_vec.data.ptr NULL. Skip that buffer, if it's there.
+ */
+static
+void
+gbinder_reader_skip_null_child(
+    GBinderReader* reader,
+    gsize parent_offset)
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+
+    if (gbinder_reader_can_read_null_object(p)) {
+        const guint8* saved_ptr = p->ptr;
+        GBinderIoBufferObject obj;
+
+        /* NULL buffers don't touch p->objects, restoring p->ptr is enough */
+        if (!gbinder_reader_read_buffer_object(reader, &obj) || obj.data ||
+            obj.size || !obj.has_parent ||
+            obj.parent_offset != parent_offset) {
+            p->ptr = saved_ptr;
+        }
+    }
 }
 
 GBinderBuffer*
@@ -731,6 +801,8 @@ gbinder_reader_read_hidl_vec(
         } else if (!vec->count) {
             /* Any non-NULL pointer just to indicate success? */
             out = vec;
+            gbinder_reader_skip_null_child(reader,
+                GBINDER_HIDL_VEC_BUFFER_OFFSET);
         }
     }
     if (elemsize) {
@@ -802,6 +874,8 @@ gbinder_reader_read_hidl_string_vec(
 
         if (!next && !n) {
             /* Should this be considered an error? */
+            gbinder_reader_skip_null_child(reader,
+                GBINDER_HIDL_VEC_BUFFER_OFFSET);
             return g_new0(char*, 1);
         } else if (gbinder_reader_read_buffer_object(reader, &obj) &&
                    /* The second buffer (if any) contains n hidl_string's */

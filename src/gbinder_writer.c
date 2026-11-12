@@ -991,8 +991,19 @@ gbinder_writer_data_append_buffer_object(
     n = data->io->encode_buffer_object(buf->data + offset, ptr, size, parent);
     /* Fix the data size */
     g_byte_array_set_size(buf, offset + n);
-    /* Record the offset */
-    gbinder_writer_data_record_offset(data, offset);
+    /*
+     * Record the offset, but not for a NULL buffer. libhwbinder writes
+     * such an object into the data but leaves it out of the offsets
+     * (Parcel::writeObject), so the driver never translates it and the
+     * pointer in the parent (e.g. an empty hidl_vec) stays NULL on the
+     * receiving side. Recorded, the driver would point it at the target's
+     * buffer and the receiver would see a non-NULL pointer of length 0,
+     * which some HALs reject (Trustonic Gatekeeper's enroll() takes a
+     * first enrolment only when the current password is NULL).
+     */
+    if (ptr) {
+        gbinder_writer_data_record_offset(data, offset);
+    }
     /* The driver seems to require each buffer to be 8-byte aligned */
     data->buffers_size += G_ALIGN8(size);
     return index;

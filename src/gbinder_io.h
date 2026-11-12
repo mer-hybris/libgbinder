@@ -201,6 +201,16 @@ struct gbinder_io {
         GBinderIoBufferObject* out);
     guint (*decode_fd_object)(const void* data, gsize size, int* fd);
 
+    /*
+     * These return the size of the NULL object found at data, zero if
+     * there's no such object there. NULL objects (a BINDER_TYPE_BINDER
+     * with zero binder and cookie, or a BINDER_TYPE_PTR with NULL buffer)
+     * are not listed in the offsets table, see Parcel::readObject().
+     */
+    guint (*null_binder_object_size)(const void* data, gsize size,
+        const GBinderRpcProtocol* protocol);
+    guint (*null_buffer_object_size)(const void* data, gsize size);
+
     /* ioctl wrappers */
     int (*write_read)(int fd, GBinderIoBuf* write, GBinderIoBuf* read);
 };

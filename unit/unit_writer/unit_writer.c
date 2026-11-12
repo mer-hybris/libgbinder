@@ -659,6 +659,8 @@ typedef struct test_hidl_vec_data {
     guint buffers_size;
 } TestHidlVecData;
 
+/* NULL buffers are not recorded in the offsets, like in libhwbinder */
+static guint test_hidl_vec_offsets_null[] = { 0 };
 static guint test_hidl_vec_offsets_32[] =
     { 0, BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_vec_offsets_64[] =
@@ -666,12 +668,14 @@ static guint test_hidl_vec_offsets_64[] =
 
 static const TestHidlVecData test_hidl_vec_tests[] = {
     { "32/null", &gbinder_io_32, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32), sizeof(GBinderHidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_null),
+      sizeof(GBinderHidlVec) },
     { "32/2x1", &gbinder_io_32, "xy", 2, 1,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_32),
       sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ },
     { "64/null", &gbinder_io_64, NULL, 0, 0,
-      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64), sizeof(GBinderHidlVec) },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_null),
+      sizeof(GBinderHidlVec) },
     { "64/2x2", &gbinder_io_64, "xxyy", 2, 2,
       TEST_ARRAY_AND_COUNT(test_hidl_vec_offsets_64),
       sizeof(GBinderHidlVec) + 8 /* vec data aligned at 8 bytes boundary */ }
@@ -716,6 +720,8 @@ typedef struct test_hidl_string_data {
     guint buffers_size;
 } TestHidlStringData;
 
+/* NULL buffers are not recorded in the offsets, like in libhwbinder */
+static guint test_hidl_string_offsets_null[] = { 0 };
 static guint test_hidl_string_offsets_32[] =
     { 0, BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_string_offsets_64[] =
@@ -723,7 +729,7 @@ static guint test_hidl_string_offsets_64[] =
 
 static const TestHidlStringData test_hidl_string_tests[] = {
     { "32/null", &gbinder_io_32, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_null),
       sizeof(GBinderHidlString) },
     { "32/empty", &gbinder_io_32, "",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
@@ -732,7 +738,7 @@ static const TestHidlStringData test_hidl_string_tests[] = {
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_32),
       sizeof(GBinderHidlString) + 8 /* string data aligned at 8 bytes */ },
     { "64/null", &gbinder_io_64, NULL,
-      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
+      TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_null),
       sizeof(GBinderHidlString) },
     { "64/empty", &gbinder_io_64, "",
       TEST_ARRAY_AND_COUNT(test_hidl_string_offsets_64),
@@ -799,7 +805,8 @@ test_hidl_string2(
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert(offsets->count == 4);
+    /* The NULL string's data buffer is not recorded in the offsets */
+    g_assert(offsets->count == 3);
     g_assert(offsets->data[0] == 0);
     g_assert(offsets->data[1] == BUFFER_OBJECT_SIZE_32);
     g_assert(offsets->data[2] == 2*BUFFER_OBJECT_SIZE_32);
@@ -826,10 +833,9 @@ typedef struct test_hidl_string_vec_data {
 
 static char* test_hidl_string_vec_data_1[] = { "test" };
 
-static guint test_hidl_string_vec_offsets_empty_32[] =
-    { 0, BUFFER_OBJECT_SIZE_32 };
-static guint test_hidl_string_vec_offsets_empty_64[] =
-    { 0, BUFFER_OBJECT_SIZE_64 };
+/* The NULL data buffer of an empty vector is not recorded in the offsets */
+static guint test_hidl_string_vec_offsets_empty_32[] = { 0 };
+static guint test_hidl_string_vec_offsets_empty_64[] = { 0 };
 static guint test_hidl_string_vec_offsets_1_32[] =
     { 0, BUFFER_OBJECT_SIZE_32, 2*BUFFER_OBJECT_SIZE_32 };
 static guint test_hidl_string_vec_offsets_1_64[] =
@@ -1115,7 +1121,8 @@ test_struct(
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert_cmpuint(offsets->count, == ,4);
+    /* str2 is NULL, its (NULL) data buffer is not recorded */
+    g_assert_cmpuint(offsets->count, == ,3);
     g_assert_cmpuint(offsets->data[0], == ,0);
     gbinder_local_request_unref(req);
 
@@ -1145,7 +1152,7 @@ test_struct(
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert_cmpuint(offsets->count, == ,5);
+    g_assert_cmpuint(offsets->count, == ,4 /* NULL str2 data is not recorded */);
     g_assert_cmpuint(offsets->data[0], == ,0);
     gbinder_local_request_unref(req);
 
@@ -1157,7 +1164,7 @@ test_struct(
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
     g_assert(offsets);
-    g_assert_cmpuint(offsets->count, == ,5);
+    g_assert_cmpuint(offsets->count, == ,4 /* NULL str2 data is not recorded */);
     g_assert_cmpuint(offsets->data[0], == ,0);
     gbinder_local_request_unref(req);
 

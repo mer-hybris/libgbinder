@@ -3031,6 +3031,209 @@ test_hidl_string_len_wrap(
 }
 
 /*
+ * hidl_vec/null_child
+ *
+ * libhwbinder writes the data buffer of an empty hidl_vec with NULL
+ * pointer and doesn't record it in the offsets. It must be skipped.
+ */
+static
+void
+test_hidl_vec_null_child(
+    void)
+{
+    GBinderHidlVec* vec = g_new0(GBinderHidlVec, 1);
+    const int offsets[] = { 0, -1 };
+    const BinderObject64 objects[] = {
+        {
+            BINDER_TYPE_PTR, 0,
+            { .value = GPOINTER_TO_SIZE(vec) }, sizeof(*vec), 0, 0
+        },{
+            /* NULL child, not in the offsets */
+            BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
+            { .value = 0 }, 0, 0, GBINDER_HIDL_VEC_BUFFER_OFFSET
+        }
+    };
+    guint8 input[sizeof(objects) + 4];
+    const guint32 tail = 0x12345678;
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderIpc* ipc;
+    gsize count = 1, elemsize = 1;
+    guint32 val = 0;
+    char** strv;
+
+    memcpy(input, objects, sizeof(objects));
+    memcpy(input + sizeof(objects), &tail, sizeof(tail));
+
+    /* hidl_vec */
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+        offsets);
+    g_assert(gbinder_reader_read_hidl_vec(&reader, &count, &elemsize));
+    g_assert_cmpuint(count, == ,0);
+    g_assert_cmpuint(elemsize, == ,0);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmphex(val, == ,tail);
+    g_assert(gbinder_reader_at_end(&reader));
+    test_hostile_reader_free(ipc, &data);
+
+    /* vec<string> */
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+        offsets);
+    strv = gbinder_reader_read_hidl_string_vec(&reader);
+    g_assert(strv);
+    g_assert(!strv[0]);
+    g_strfreev(strv);
+    val = 0;
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmphex(val, == ,tail);
+    test_hostile_reader_free(ipc, &data);
+
+    /* A NULL buffer with a different parent offset is not our child */
+    memcpy(input, objects, sizeof(objects));
+    ((BinderObject64*)input)[1].parent_offset =
+        GBINDER_HIDL_VEC_BUFFER_OFFSET + 8;
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+        offsets);
+    g_assert(gbinder_reader_read_hidl_vec(&reader, &count, &elemsize));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,
+        BUFFER_OBJECT_SIZE_64);
+    test_hostile_reader_free(ipc, &data);
+    g_free(vec);
+}
+
+/*
+ * hidl_string_vec/null_data
+ *
+ * A non-empty vector whose data pointer is NULL (and the matching NULL
+ * buffer not in the offsets) must be rejected rather than dereferenced.
+ */
+static
+void
+test_hidl_string_vec_null_data(
+    void)
+{
+    GBinderHidlVec* vec = g_new0(GBinderHidlVec, 1);
+    const int offsets[] = { 0, -1 };
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderIpc* ipc;
+
+    vec->count = 2;
+    {
+        const BinderObject64 input[] = {
+            {
+                BINDER_TYPE_PTR, 0,
+                { .value = GPOINTER_TO_SIZE(vec) }, sizeof(*vec), 0, 0
+            },{
+                BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
+                { .value = 0 }, 2 * sizeof(GBinderHidlString), 0,
+                GBINDER_HIDL_VEC_BUFFER_OFFSET
+            },{
+                /* Make the reader look at the (NULL) strings */
+                BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
+                { .value = 0 }, 1, 1, GBINDER_HIDL_STRING_BUFFER_OFFSET
+            }
+        };
+
+        ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+            offsets);
+        g_assert(!gbinder_reader_read_hidl_string_vec(&reader));
+        test_hostile_reader_free(ipc, &data);
+    }
+    g_free(vec);
+}
+
+/*
+ * object/null_unrecorded
+ *
+ * NULL binder objects are not recorded in the offsets (neither by Android
+ * nor by libgbinder). They must still be readable as NULL objects.
+ */
+static
+void
+test_object_null_unrecorded(
+    void)
+{
+    static const guint8 input[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_BINDER), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0 /* binder */), TEST_INT64_BYTES(0 /* cookie */),
+        TEST_INT32_BYTES(42)
+    };
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderRemoteObject* obj = (void*)&data;
+    guint32 val = 0;
+    GBinderIpc* ipc = test_hostile_reader(&data, &reader,
+        TEST_ARRAY_AND_SIZE(input), NULL);
+
+    g_assert(gbinder_reader_read_nullable_object(&reader, &obj));
+    g_assert(!obj);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,42);
+    test_hostile_reader_free(ipc, &data);
+}
+
+/*
+ * object/unrecorded
+ *
+ * Anything else that's not in the offsets table hasn't been translated
+ * by the driver, i.e. it's whatever the peer wrote there. That includes
+ * handles, pointers to local objects and non-NULL buffers.
+ */
+static
+void
+test_object_unrecorded(
+    void)
+{
+    static const guint8 handle[] = { TEST_BINDER_OBJECT_64(1) };
+    static const guint8 binder[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_BINDER), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0x1000 /* binder */), TEST_INT64_BYTES(0)
+    };
+    static const guint8 cookie[] = {
+        TEST_INT32_BYTES(BINDER_TYPE_BINDER), TEST_INT32_BYTES(0),
+        TEST_INT64_BYTES(0), TEST_INT64_BYTES(0x1000 /* cookie */)
+    };
+    static const BinderObject64 buffer[] = {
+        { BINDER_TYPE_PTR, 0, { (void*)handle }, sizeof(handle), 0, 0 }
+    };
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderRemoteObject* obj = NULL;
+    GBinderIpc* ipc;
+
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(handle),
+        NULL);
+    g_assert(!gbinder_reader_read_nullable_object(&reader, &obj));
+    g_assert(!obj);
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
+    test_hostile_reader_free(ipc, &data);
+
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(binder),
+        NULL);
+    g_assert(!gbinder_reader_read_nullable_object(&reader, &obj));
+    test_hostile_reader_free(ipc, &data);
+
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(cookie),
+        NULL);
+    g_assert(!gbinder_reader_read_nullable_object(&reader, &obj));
+    test_hostile_reader_free(ipc, &data);
+
+    ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(buffer),
+        NULL);
+    g_assert(!gbinder_reader_read_buffer(&reader));
+    g_assert(!gbinder_reader_skip_buffer(&reader));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
+    test_hostile_reader_free(ipc, &data);
+
+    /* Truncated NULL objects */
+    ipc = test_hostile_reader(&data, &reader, binder, sizeof(binder) - 1,
+        NULL);
+    g_assert(!gbinder_reader_read_nullable_object(&reader, &obj));
+    test_hostile_reader_free(ipc, &data);
+}
+
+/*
  * parcelable/huge
  *
  * A huge parcelable size must not pass the bounds check by wrapping the
@@ -3082,6 +3285,90 @@ test_string16_huge(
         &len));
     g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
     test_hostile_reader_free(ipc, &data);
+}
+
+/*
+ * roundtrip/null
+ *
+ * What libgbinder writes, libgbinder must be able to read. NULL objects
+ * and buffers are not recorded in the offsets, so the reader has to step
+ * over them by itself.
+ */
+static
+void
+test_roundtrip_null(
+    void)
+{
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_64,
+        gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_HWBINDER), NULL);
+    static const char* strv[] = { "foo", NULL };
+    GBinderOutputData* out;
+    GUtilIntArray* offsets;
+    GBinderWriter writer;
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderRemoteObject* obj = NULL;
+    GBinderIpc* ipc;
+    int* offs;
+    char** s;
+    gsize count = 1;
+    guint32 val = 0;
+    guint i;
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, 1);
+    gbinder_writer_append_hidl_vec(&writer, NULL, 0, 4);
+    gbinder_writer_append_int32(&writer, 2);
+    gbinder_writer_append_hidl_string(&writer, NULL);
+    gbinder_writer_append_int32(&writer, 3);
+    gbinder_writer_append_hidl_string_vec(&writer, NULL, 0);
+    gbinder_writer_append_int32(&writer, 4);
+    gbinder_writer_append_local_object(&writer, NULL);
+    gbinder_writer_append_int32(&writer, 5);
+    gbinder_writer_append_hidl_string_vec(&writer, strv, -1);
+    gbinder_writer_append_int32(&writer, 6);
+
+    out = gbinder_local_request_data(req);
+    offsets = gbinder_output_data_offsets(out);
+    offs = g_new(int, (offsets ? offsets->count : 0) + 1);
+    for (i = 0; offsets && i < offsets->count; i++) {
+        offs[i] = offsets->data[i];
+    }
+    offs[i] = -1;
+
+    ipc = test_hostile_reader(&data, &reader, out->bytes->data,
+        out->bytes->len, offs);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,1);
+    g_assert(gbinder_reader_read_hidl_vec(&reader, &count, NULL));
+    g_assert_cmpuint(count, == ,0);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,2);
+    g_assert(!gbinder_reader_read_hidl_string_c(&reader));
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,3);
+    s = gbinder_reader_read_hidl_string_vec(&reader);
+    g_assert(s);
+    g_assert(!s[0]);
+    g_strfreev(s);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,4);
+    g_assert(gbinder_reader_read_nullable_object(&reader, &obj));
+    g_assert(!obj);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,5);
+    s = gbinder_reader_read_hidl_string_vec(&reader);
+    g_assert(s);
+    g_assert_cmpstr(s[0], == ,"foo");
+    g_assert(!s[1]);
+    g_strfreev(s);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,6);
+    g_assert(gbinder_reader_at_end(&reader));
+
+    test_hostile_reader_free(ipc, &data);
+    gbinder_local_request_unref(req);
+    g_free(offs);
 }
 
 /*==========================================================================*
@@ -3198,8 +3485,15 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("byte_array"), test_byte_array);
     g_test_add_func(TEST_("byte_array/unpadded"), test_byte_array_unpadded);
     g_test_add_func(TEST_("hidl_string/len_wrap"), test_hidl_string_len_wrap);
+    g_test_add_func(TEST_("hidl_vec/null_child"), test_hidl_vec_null_child);
+    g_test_add_func(TEST_("hidl_string_vec/null_data"),
+        test_hidl_string_vec_null_data);
+    g_test_add_func(TEST_("object/null_unrecorded"),
+        test_object_null_unrecorded);
+    g_test_add_func(TEST_("object/unrecorded"), test_object_unrecorded);
     g_test_add_func(TEST_("parcelable/huge"), test_parcelable_huge);
     g_test_add_func(TEST_("string16/huge"), test_string16_huge);
+    g_test_add_func(TEST_("roundtrip/null"), test_roundtrip_null);
     g_test_add_func(TEST_("copy"), test_copy);
     test_init(&test_opt, argc, argv);
     return g_test_run();

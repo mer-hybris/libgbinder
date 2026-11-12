@@ -395,7 +395,8 @@ test_hidl_string(
     gbinder_local_request_append_hidl_string(req, NULL);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets->count == 2);
+    /* The NULL data buffer is written but not recorded in the offsets */
+    g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
     g_assert(gbinder_output_data_buffers_size(data)==sizeof(GBinderHidlString));
     g_assert(data->bytes->len == 2*BUFFER_OBJECT_SIZE_32);
@@ -418,7 +419,8 @@ test_hidl_string_vec(
     gbinder_local_request_append_hidl_string_vec(req, NULL, 0);
     data = gbinder_local_request_data(req);
     offsets = gbinder_output_data_offsets(data);
-    g_assert(offsets->count == 2);
+    /* The NULL data buffer is written but not recorded in the offsets */
+    g_assert(offsets->count == 1);
     g_assert(offsets->data[0] == 0);
     g_assert(gbinder_output_data_buffers_size(data) == sizeof(GBinderHidlVec));
     g_assert(data->bytes->len == 2*BUFFER_OBJECT_SIZE_32);

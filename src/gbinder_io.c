@@ -613,6 +613,42 @@ GBINDER_IO_FN(decode_buffer_object)(
 
 static
 guint
+GBINDER_IO_FN(null_binder_object_size)(
+    const void* data,
+    gsize size,
+    const GBinderRpcProtocol* protocol)
+{
+    if (size >= sizeof(struct flat_binder_object)) {
+        const struct flat_binder_object* obj = data;
+        const gsize objsize = GBINDER_IO_FN(object_size)(data, protocol);
+
+        if ((obj->hdr.type == BINDER_TYPE_BINDER ||
+            obj->hdr.type == BINDER_TYPE_WEAK_BINDER) &&
+            !obj->binder && !obj->cookie && objsize <= size) {
+            return objsize;
+        }
+    }
+    return 0;
+}
+
+static
+guint
+GBINDER_IO_FN(null_buffer_object_size)(
+    const void* data,
+    gsize size)
+{
+    if (size >= sizeof(struct binder_buffer_object)) {
+        const struct binder_buffer_object* obj = data;
+
+        if (obj->hdr.type == BINDER_TYPE_PTR && !obj->buffer) {
+            return sizeof(*obj);
+        }
+    }
+    return 0;
+}
+
+static
+guint
 GBINDER_IO_FN(decode_fd_object)(
     const void* data,
     gsize size,
@@ -710,6 +746,8 @@ const GBinderIo GBINDER_IO_PREFIX = {
     .decode_binder_object = GBINDER_IO_FN(decode_binder_object),
     .decode_buffer_object = GBINDER_IO_FN(decode_buffer_object),
     .decode_fd_object = GBINDER_IO_FN(decode_fd_object),
+    .null_binder_object_size = GBINDER_IO_FN(null_binder_object_size),
+    .null_buffer_object_size = GBINDER_IO_FN(null_buffer_object_size),
 
     /* ioctl wrappers */
     .write_read = GBINDER_IO_FN(write_read)
