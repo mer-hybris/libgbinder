@@ -81,7 +81,6 @@ FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell $(PKG_CONFIG) --cflags $(PKGS))
 FULL_LDFLAGS = $(BASE_LDFLAGS)
 LIBS = $(shell $(PKG_CONFIG) --libs $(PKGS)) -lpthread
-QUIET_MAKE = $(MAKE) --no-print-directory
 
 DEBUG_LDFLAGS = $(FULL_LDFLAGS)
 RELEASE_LDFLAGS = $(FULL_LDFLAGS)
@@ -91,17 +90,17 @@ DEBUG_CFLAGS = $(FULL_CFLAGS) -DDEBUG
 RELEASE_CFLAGS = $(FULL_CFLAGS) -O2
 COVERAGE_CFLAGS = $(FULL_CFLAGS) -O0 --coverage -fprofile-update=atomic
 
-DEBUG_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_lib)
-RELEASE_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_lib)
-COVERAGE_LIB_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_coverage_lib)
-
-DEBUG_LIB = $(LIB_DIR)/$(DEBUG_LIB_FILE)
-RELEASE_LIB = $(LIB_DIR)/$(RELEASE_LIB_FILE)
-COVERAGE_LIB = $(LIB_DIR)/$(COVERAGE_LIB_FILE)
+DEBUG_LIB = $(LIB_DIR)/build/debug/libgbinder.a
+RELEASE_LIB = $(LIB_DIR)/build/release/libgbinder.a
+COVERAGE_LIB = $(LIB_DIR)/build/coverage/libgbinder.a
 
 DEBUG_LIBS += $(DEBUG_LIB) $(LIBS)
 RELEASE_LIBS += $(RELEASE_LIB) $(LIBS)
 COVERAGE_LIBS += $(COVERAGE_LIB) $(LIBS)
+
+DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
+RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
+COVERAGE_EXE = $(COVERAGE_BUILD_DIR)/$(EXE)
 
 #
 # Files
@@ -140,10 +139,6 @@ $(COVERAGE_OBJS): | $(COVERAGE_BUILD_DIR)
 # Rules
 #
 
-DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
-RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
-COVERAGE_EXE = $(COVERAGE_BUILD_DIR)/$(EXE)
-
 debug: debug_lib $(DEBUG_EXE)
 
 release: release_lib $(RELEASE_EXE)
@@ -173,13 +168,7 @@ test: test-release
 valgrind: test-banner release
 	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no $(RELEASE_EXE) $(TEST_OPTS)
 
-$(DEBUG_BUILD_DIR):
-	mkdir -p $@
-
-$(RELEASE_BUILD_DIR):
-	mkdir -p $@
-
-$(COVERAGE_BUILD_DIR):
+$(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR) $(COVERAGE_BUILD_DIR):
 	mkdir -p $@
 
 $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
@@ -209,11 +198,5 @@ $(RELEASE_EXE): $(RELEASE_LIB) $(RELEASE_OBJS)
 $(COVERAGE_EXE): $(COVERAG_LIB) $(COVERAGE_OBJS)
 	$(LD) $(COVERAGE_LDFLAGS) $(COVERAGE_OBJS) $(COVERAGE_LIBS) -o $@
 
-debug_lib:
-	$(MAKE) -C $(LIB_DIR) $@
-
-release_lib:
-	$(MAKE) -C $(LIB_DIR) $@
-
-coverage_lib:
+debug_lib release_lib coverage_lib:
 	$(MAKE) -C $(LIB_DIR) $@

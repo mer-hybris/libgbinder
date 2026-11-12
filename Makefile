@@ -6,7 +6,6 @@
 
 .PHONY: clean all debug release test
 .PHONY: print_debug_so print_release_so
-.PHONY: print_debug_lib print_release_lib print_coverage_lib
 .PHONY: print_debug_link print_release_link
 .PHONY: print_debug_path print_release_path
 
@@ -209,12 +208,6 @@ print_debug_so:
 
 print_release_so:
 	@echo $(RELEASE_SO)
-
-print_debug_lib:
-	@echo $(DEBUG_LIB)
-
-print_release_lib:
-	@echo $(RELEASE_LIB)
 
 print_coverage_lib:
 	@echo $(COVERAGE_LIB)
