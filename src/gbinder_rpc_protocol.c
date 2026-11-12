@@ -293,14 +293,41 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl2 = {
 
 static
 void
+gbinder_rpc_protocol_aidl3_write_rpc_header2(
+    GBinderWriter* writer,
+    const char* iface,
+    gint32 header)
+{
+    gbinder_writer_append_int32(writer, BINDER_RPC_FLAGS);
+    gbinder_writer_append_int32(writer, UNSET_WORK_SOURCE);
+    gbinder_writer_append_int32(writer, header);
+    gbinder_writer_append_string16(writer, iface);
+}
+
+static
+void
 gbinder_rpc_protocol_aidl3_write_rpc_header(
     GBinderWriter* writer,
     const char* iface)
 {
-    gbinder_writer_append_int32(writer, BINDER_RPC_FLAGS);
-    gbinder_writer_append_int32(writer, UNSET_WORK_SOURCE);
-    gbinder_writer_append_int32(writer, BINDER_SYS_HEADER);
-    gbinder_writer_append_string16(writer, iface);
+    gbinder_rpc_protocol_aidl3_write_rpc_header2(writer, iface,
+        BINDER_SYS_HEADER);
+}
+
+/*
+ * libbinder built for the vendor partition (with __ANDROID_VNDK__)
+ * expects 'VNDR' rather than 'SYST' in the request header, and rejects
+ * the request otherwise. That's what serves /dev/vndbinder, starting
+ * with vndservicemanager.
+ */
+static
+void
+gbinder_rpc_protocol_aidl3_write_vnd_rpc_header(
+    GBinderWriter* writer,
+    const char* iface)
+{
+    gbinder_rpc_protocol_aidl3_write_rpc_header2(writer, iface,
+        BINDER_VND_HEADER);
 }
 
 static
@@ -314,7 +341,7 @@ gbinder_rpc_protocol_aidl3_read_rpc_header(
         *iface = NULL;
     } else if (gbinder_reader_read_int32(reader, NULL) /* flags */ &&
         gbinder_reader_read_int32(reader, NULL) /* work source */ &&
-        gbinder_reader_read_int32(reader, NULL) /* sys header */) {
+        gbinder_reader_read_int32(reader, NULL) /* SYST or VNDR */) {
         *iface = gbinder_reader_read_string16(reader);
     } else {
         *iface = NULL;
@@ -349,6 +376,20 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .ping_tx = GBINDER_PING_TRANSACTION,
     .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
     .write_rpc_header = gbinder_rpc_protocol_aidl3_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
+    .flat_binder_object_extra = 4,
+    .finish_flatten_binder = gbinder_rpc_protocol_aidl3_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl3_finish_unflatten_binder,
+    .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+};
+
+/* Same as aidl3 but for talking to vendor processes */
+static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3v = {
+    .name = "aidl3v",
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
+    .write_rpc_header = gbinder_rpc_protocol_aidl3_write_vnd_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl3_finish_flatten_binder,
@@ -402,6 +443,20 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
     .ping_tx = GBINDER_PING_TRANSACTION,
     .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
     .write_rpc_header = gbinder_rpc_protocol_aidl3_write_rpc_header,
+    .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
+    .flat_binder_object_extra = 4,
+    .finish_flatten_binder = gbinder_rpc_protocol_aidl4_finish_flatten_binder,
+    .finish_unflatten_binder =
+        gbinder_rpc_protocol_aidl4_finish_unflatten_binder,
+    .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+};
+
+/* Same as aidl4 but for talking to vendor processes */
+static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4v = {
+    .name = "aidl4v",
+    .ping_tx = GBINDER_PING_TRANSACTION,
+    .write_ping = gbinder_rpc_protocol_aidl_write_ping, /* no payload */
+    .write_rpc_header = gbinder_rpc_protocol_aidl3_write_vnd_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_aidl3_read_rpc_header,
     .flat_binder_object_extra = 4,
     .finish_flatten_binder = gbinder_rpc_protocol_aidl4_finish_flatten_binder,
@@ -508,7 +563,9 @@ static const GBinderRpcProtocol* gbinder_rpc_protocol_list[] = {
     &gbinder_rpc_protocol_aidl,
     &gbinder_rpc_protocol_aidl2,
     &gbinder_rpc_protocol_aidl3,
+    &gbinder_rpc_protocol_aidl3v,
     &gbinder_rpc_protocol_aidl4,
+    &gbinder_rpc_protocol_aidl4v,
     &gbinder_rpc_protocol_hidl
 };
 

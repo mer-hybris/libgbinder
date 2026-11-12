@@ -52,6 +52,8 @@ static const char TMP_DIR_TEMPLATE[] = "gbinder-test-protocol-XXXXXX";
 #define BINDER_RPC_FLAGS (STRICT_MODE_PENALTY_GATHER)
 #define UNSET_WORK_SOURCE (-1)
 #define BINDER_SYS_HEADER GBINDER_FOURCC('S', 'Y', 'S', 'T')
+#define BINDER_VND_HEADER GBINDER_FOURCC('V', 'N', 'D', 'R')
+#define TEST_VNDBINDER "/dev/vndbinder"
 
 typedef struct test_data {
     const char* name;
@@ -92,6 +94,15 @@ static const guint8 test_header_aidl3 [] = {
     TEST_INT16_BYTES('o'), 0x00, 0x00
 };
 
+static const guint8 test_header_aidl3v [] = {
+    TEST_INT32_BYTES(BINDER_RPC_FLAGS),
+    TEST_INT32_BYTES(UNSET_WORK_SOURCE),
+    TEST_INT32_BYTES(BINDER_VND_HEADER),
+    TEST_INT32_BYTES(3),
+    TEST_INT16_BYTES('f'), TEST_INT16_BYTES('o'),
+    TEST_INT16_BYTES('o'), 0x00, 0x00
+};
+
 static const guint8 test_header_hidl [] = {
     'f', 'o', 'o', 0x00
 };
@@ -117,6 +128,14 @@ static const TestHeaderData test_header_tests[] = {
       test_header_aidl3, 5 }, /* Short packet */
     { "aidl3/short/3", "adl3", GBINDER_DEFAULT_BINDER, NULL,
       test_header_aidl3, 9 }, /* Short packet */
+    { "aidl3v/ok", "aidl3v", TEST_VNDBINDER, "foo",
+      TEST_ARRAY_AND_SIZE(test_header_aidl3v) },
+    { "aidl3v/short", "aidl3v", TEST_VNDBINDER, NULL,
+      test_header_aidl3v, 9 }, /* Short packet */
+    { "aidl4/ok", "aidl4", GBINDER_DEFAULT_BINDER, "foo",
+      TEST_ARRAY_AND_SIZE(test_header_aidl3) },
+    { "aidl4v/ok", "aidl4v", TEST_VNDBINDER, "foo",
+      TEST_ARRAY_AND_SIZE(test_header_aidl3v) },
     { "hidl/ok", "hidl", GBINDER_DEFAULT_HWBINDER, "foo",
       TEST_ARRAY_AND_SIZE(test_header_hidl) },
     { "hidl/short", "hidl", GBINDER_DEFAULT_HWBINDER, NULL,
@@ -195,6 +214,71 @@ test_device(
     g_assert_cmpstr(p->name, == ,"hidl");
 
     test_context_cleanup(&context);
+}
+
+/*==========================================================================*
+ * presets
+ *
+ * Starting with API level 30, requests sent to /dev/vndbinder carry
+ * the 'VNDR' header, the ones sent to /dev/binder 'SYST'.
+ *==========================================================================*/
+
+static
+void
+test_presets_header(
+    const char* dev,
+    gint32 expected)
+{
+    const GBinderRpcProtocol* prot = gbinder_rpc_protocol_for_device(dev);
+    GBinderLocalRequest* req = gbinder_local_request_new(&gbinder_io_32,
+        prot, NULL);
+    GBinderOutputData* data;
+    GBinderWriter writer;
+    gint32 header;
+
+    gbinder_local_request_init_writer(req, &writer);
+    prot->write_rpc_header(&writer, "foo");
+    data = gbinder_local_request_data(req);
+    g_assert_cmpuint(data->bytes->len, > ,3 * sizeof(gint32));
+    memcpy(&header, data->bytes->data + 2 * sizeof(gint32), sizeof(header));
+    g_assert_cmphex(header, == ,expected);
+    gbinder_local_request_unref(req);
+}
+
+static
+void
+test_presets(
+    void)
+{
+    static const struct test_presets_level {
+        const char* config;
+        const char* binder;
+        const char* vndbinder;
+    } levels[] = {
+        { "[General]\nApiLevel = 30\n", "aidl3", "aidl3v" },
+        { "[General]\nApiLevel = 31\n", "aidl4", "aidl4v" },
+        { "[General]\nApiLevel = 33\n", "aidl3", "aidl3v" },
+        { "[General]\nApiLevel = 36\n", "aidl3", "aidl3v" },
+        { "[General]\nApiLevel = 30\n"  /* Explicit config wins */
+          "[Protocol]\n/dev/vndbinder = aidl3\n", "aidl3", "aidl3" }
+    };
+    guint i;
+
+    for (i = 0; i < G_N_ELEMENTS(levels); i++) {
+        const GBinderRpcProtocol* p;
+        TestContext context;
+
+        test_context_init(&context, levels[i].config);
+        p = gbinder_rpc_protocol_for_device(GBINDER_DEFAULT_BINDER);
+        g_assert_cmpstr(p->name, == ,levels[i].binder);
+        test_presets_header(GBINDER_DEFAULT_BINDER, BINDER_SYS_HEADER);
+        p = gbinder_rpc_protocol_for_device(TEST_VNDBINDER);
+        g_assert_cmpstr(p->name, == ,levels[i].vndbinder);
+        test_presets_header(TEST_VNDBINDER,
+            g_str_has_suffix(levels[i].vndbinder, "v") ?
+            BINDER_VND_HEADER : BINDER_SYS_HEADER);
+        test_context_cleanup(&context);
+    }
 }
 
 /*==========================================================================*
@@ -441,6 +525,7 @@ int main(int argc, char* argv[])
 
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("device"), test_device);
+    g_test_add_func(TEST_("presets"), test_presets);
     g_test_add_func(TEST_("config1"), test_config1);
     g_test_add_func(TEST_("config2"), test_config2);
     g_test_add_func(TEST_("config3"), test_config3);
