@@ -38,7 +38,12 @@
 #include "gbinder_reader_p.h"
 #include "gbinder_remote_object_p.h"
 #include "gbinder_io.h"
+#include "gbinder_local_request_p.h"
+#include "gbinder_output_data.h"
+#include "gbinder_rpc_protocol.h"
+#include "gbinder_writer.h"
 
+#include <gutil_intarray.h>
 #include <gutil_misc.h>
 
 #include <unistd.h>
@@ -2896,6 +2901,190 @@ test_copy(
 }
 
 /*==========================================================================*
+ * Hardening: malformed input from a hostile peer
+ *==========================================================================*/
+
+/*
+ * NB: BinderObject64.buffer is initialized via .value, so that all 8 bytes
+ * are set on 32-bit systems too.
+ *
+ * Sets up a reader over a copy of the bytes, with the objects at the
+ * given offsets (terminated by a negative value). 64-bit I/O is used.
+ */
+static
+GBinderIpc*
+test_hostile_reader(
+    GBinderReaderData* data,
+    GBinderReader* reader,
+    const void* bytes,
+    gsize size,
+    const int* offsets)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_HWBINDER, NULL);
+    GBinderBuffer* buf = gbinder_buffer_new(ipc->driver,
+        gutil_memdup(bytes, size), size, NULL);
+    guint i, n = 0;
+
+    while (offsets && offsets[n] >= 0) n++;
+    memset(data, 0, sizeof(*data));
+    data->buffer = buf;
+    data->reg = gbinder_ipc_object_registry(ipc);
+    if (n) {
+        data->objects = g_new(void*, n + 1);
+        for (i = 0; i < n; i++) {
+            data->objects[i] = (guint8*)buf->data + offsets[i];
+        }
+        data->objects[n] = NULL;
+    }
+    gbinder_reader_init(reader, data, 0, size);
+    return ipc;
+}
+
+static
+void
+test_hostile_reader_free(
+    GBinderIpc* ipc,
+    GBinderReaderData* data)
+{
+    g_free(data->objects);
+    gbinder_buffer_free(data->buffer);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, NULL);
+}
+
+/*
+ * byte_array/unpadded
+ *
+ * The data size of a transaction doesn't have to be a multiple of 4.
+ * A byte array at the very end without padding must not move the read
+ * pointer past the end, otherwise every subsequent read would succeed.
+ */
+static
+void
+test_byte_array_unpadded(
+    void)
+{
+    static const guint8 input[] = { TEST_INT32_BYTES(1), 'X' };
+    GBinderReaderData data;
+    GBinderReader reader;
+    gsize len = 0;
+    guint32 val;
+    GBinderIpc* ipc = test_hostile_reader(&data, &reader,
+        TEST_ARRAY_AND_SIZE(input), NULL);
+
+    /* The padded size (8 bytes) is not there */
+    g_assert(!gbinder_reader_read_byte_array(&reader, &len));
+    g_assert_cmpuint(len, == ,0);
+    g_assert_cmpuint(gbinder_reader_bytes_remaining(&reader), == ,5);
+    g_assert(gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(val, == ,1);
+    g_assert(!gbinder_reader_read_uint32(&reader, &val));
+    g_assert_cmpuint(gbinder_reader_bytes_remaining(&reader), == ,1);
+    test_hostile_reader_free(ipc, &data);
+}
+
+/*
+ * hidl_string/len_wrap
+ *
+ * hidl_string.len is 32-bit, 0xffffffff + 1 must not wrap to the size
+ * of an empty child buffer.
+ */
+static
+void
+test_hidl_string_len_wrap(
+    void)
+{
+    char* contents = g_malloc0(1);
+    GBinderHidlString* str = g_new0(GBinderHidlString, 1);
+    GBinderReaderData data;
+    GBinderReader reader;
+    GBinderIpc* ipc;
+    const int offsets[] = { 0, BUFFER_OBJECT_SIZE_64, -1 };
+
+    str->data.str = contents;
+    str->len = 0xffffffff;
+    {
+        const BinderObject64 input[] = {
+            {
+                BINDER_TYPE_PTR, 0,
+                { .value = GPOINTER_TO_SIZE(str) }, sizeof(*str), 0, 0
+            },{
+                BINDER_TYPE_PTR, BINDER_BUFFER_FLAG_HAS_PARENT,
+                { .value = GPOINTER_TO_SIZE(contents) }, 0 /* length */, 0,
+                GBINDER_HIDL_STRING_BUFFER_OFFSET
+            }
+        };
+
+        ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+            offsets);
+        g_assert(!gbinder_reader_read_hidl_string_c(&reader));
+        test_hostile_reader_free(ipc, &data);
+
+        str->len = G_MAXUINT32;
+        ipc = test_hostile_reader(&data, &reader, TEST_ARRAY_AND_SIZE(input),
+            offsets);
+        g_assert(!gbinder_reader_read_hidl_string(&reader));
+        test_hostile_reader_free(ipc, &data);
+    }
+    g_free(str);
+    g_free(contents);
+}
+
+/*
+ * parcelable/huge
+ *
+ * A huge parcelable size must not pass the bounds check by wrapping the
+ * pointer around (that's what happened on 32-bit systems).
+ */
+static
+void
+test_parcelable_huge(
+    void)
+{
+    static const guint8 input[] = {
+        TEST_INT32_BYTES(1), TEST_INT32_BYTES(0xffffffff),
+        TEST_INT32_BYTES(0)
+    };
+    GBinderReaderData data;
+    GBinderReader reader;
+    gsize size = 0;
+    gboolean ok = TRUE;
+    GBinderIpc* ipc = test_hostile_reader(&data, &reader,
+        TEST_ARRAY_AND_SIZE(input), NULL);
+
+    g_assert(!gbinder_reader_read_parcelable2(&reader, &size, &ok));
+    g_assert(!ok);
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
+    test_hostile_reader_free(ipc, &data);
+}
+
+/*
+ * string16/huge
+ *
+ * With len = 0x7ffffffd, (len + 1) * 2 + 3 + 4 wraps to zero in 32 bits.
+ */
+static
+void
+test_string16_huge(
+    void)
+{
+    static const guint8 input[] = {
+        TEST_INT32_BYTES(0x7ffffffd), TEST_INT32_BYTES(0)
+    };
+    GBinderReaderData data;
+    GBinderReader reader;
+    const gunichar2* out = NULL;
+    gsize len = 0;
+    GBinderIpc* ipc = test_hostile_reader(&data, &reader,
+        TEST_ARRAY_AND_SIZE(input), NULL);
+
+    g_assert(!gbinder_reader_read_nullable_string16_utf16(&reader, &out,
+        &len));
+    g_assert_cmpuint(gbinder_reader_bytes_read(&reader), == ,0);
+    test_hostile_reader_free(ipc, &data);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -3007,6 +3196,10 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("hidl_string_vec/4"), test_hidl_string_vec4);
     g_test_add_func(TEST_("hidl_string_vec/5"), test_hidl_string_vec5);
     g_test_add_func(TEST_("byte_array"), test_byte_array);
+    g_test_add_func(TEST_("byte_array/unpadded"), test_byte_array_unpadded);
+    g_test_add_func(TEST_("hidl_string/len_wrap"), test_hidl_string_len_wrap);
+    g_test_add_func(TEST_("parcelable/huge"), test_parcelable_huge);
+    g_test_add_func(TEST_("string16/huge"), test_string16_huge);
     g_test_add_func(TEST_("copy"), test_copy);
     test_init(&test_opt, argc, argv);
     return g_test_run();

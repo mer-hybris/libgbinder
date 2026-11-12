@@ -151,7 +151,12 @@ gbinder_reader_can_read(
     GBinderReaderPriv* p,
     gsize len)
 {
-    return (p->end - p->ptr) >= len;
+    /*
+     * Compare sizes, not pointers. p->ptr + len may wrap around on
+     * 32-bit systems where len comes from the peer, and p->end - p->ptr
+     * must never be negative (it would turn into a huge gsize).
+     */
+    return p->ptr <= p->end && (gsize)(p->end - p->ptr) >= len;
 }
 
 gboolean
@@ -521,7 +526,7 @@ gbinder_reader_read_parcelable_header(
             if (gbinder_reader_read_uint32(reader, &payload_size) &&
                 payload_size >= sizeof(payload_size)) {
                 payload_size -= sizeof(payload_size);
-                if (p->ptr + payload_size <= p->end) {
+                if (gbinder_reader_can_read(p, payload_size)) {
                     /* Non-NULL parcelable */
                     *size = payload_size;
                     *nullp = FALSE;
@@ -764,8 +769,9 @@ gbinder_reader_read_hidl_string_c(
         if (gbinder_reader_read_buffer_object(reader, &obj) &&
             obj.has_parent &&
             obj.parent_offset == GBINDER_HIDL_STRING_BUFFER_OFFSET &&
-            obj.data == str->data.str &&
-            obj.size == str->len + 1 &&
+            obj.data && obj.data == str->data.str &&
+            /* 0xffffffff + 1 must not wrap to 0, gsize may be 32-bit too */
+            (guint64)obj.size == (guint64)str->len + 1 &&
             str->data.str[str->len] == 0) {
             return str->data.str;
         }
@@ -801,8 +807,10 @@ gbinder_reader_read_hidl_string_vec(
                    /* The second buffer (if any) contains n hidl_string's */
                    obj.parent_offset == GBINDER_HIDL_VEC_BUFFER_OFFSET &&
                    obj.has_parent &&
-                   obj.data == next &&
-                   obj.size == (sizeof(GBinderHidlString) * n)) {
+                   obj.data && obj.data == next &&
+                   /* sizeof(GBinderHidlString) * n can wrap on 32-bit */
+                   (guint64)obj.size ==
+                   (guint64)sizeof(GBinderHidlString) * n) {
             const GBinderHidlString* strings = obj.data;
             GPtrArray* list = g_ptr_array_sized_new(n + 1);
             guint i;
@@ -815,8 +823,8 @@ gbinder_reader_read_hidl_string_vec(
                     GBINDER_HIDL_STRING_BUFFER_OFFSET;
                 if (obj.has_parent &&
                     obj.parent_offset == expected_offset &&
-                    obj.data == s->data.str &&
-                    obj.size == s->len + 1 &&
+                    obj.data && obj.data == s->data.str &&
+                    (guint64)obj.size == (guint64)s->len + 1 &&
                     s->data.str[s->len] == 0) {
                     char* name = g_strdup(s->data.str);
 
@@ -857,7 +865,7 @@ gbinder_reader_read_string8(
         const gsize len = ptr - p->ptr;
         const gsize size = G_ALIGN4(len+1);
 
-        if (p->ptr + size <= p->end) {
+        if (gbinder_reader_can_read(p, size)) {
             const char* str = (char*)p->ptr;
 
             p->ptr += size;
@@ -876,7 +884,7 @@ gbinder_reader_read_nullable_string8(
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
-    if ((p->ptr + 4) <= p->end) {
+    if (gbinder_reader_can_read(p, 4)) {
         const gint32* len_ptr = (gint32*)p->ptr;
         const gint32 len = *len_ptr;
 
@@ -891,10 +899,11 @@ gbinder_reader_read_nullable_string8(
             }
             return TRUE;
         } else if (len >= 0 && len < INT32_MAX) {
-            const guint32 padded_len = G_ALIGN4(len + 1);
+            /* len < INT32_MAX, computing it as gsize can't overflow */
+            const gsize padded_len = G_ALIGN4((gsize)len + 1);
             const char* str = (char*)(p->ptr + 4);
 
-            if ((p->ptr + padded_len + 4) <= p->end && !str[len]) {
+            if (gbinder_reader_can_read(p, padded_len + 4) && !str[len]) {
                 p->ptr += padded_len + 4;
                 if (out) {
                     *out = str;
@@ -935,7 +944,7 @@ gbinder_reader_read_nullable_string16_utf16(
 {
     GBinderReaderPriv* p = gbinder_reader_cast(reader);
 
-    if ((p->ptr + 4) <= p->end) {
+    if (gbinder_reader_can_read(p, 4)) {
         const gint32* len_ptr = (gint32*)p->ptr;
         const gint32 len = *len_ptr;
 
@@ -950,9 +959,11 @@ gbinder_reader_read_nullable_string16_utf16(
             }
             return TRUE;
         } else if (len >= 0 && len < INT32_MAX) {
-            const gsize padded_len = G_ALIGN4((((gsize)len) + 1) * 2);
+            /* (len + 1) * 2 + 3 + 4 can overflow a 32-bit gsize */
+            const guint64 padded_len = G_ALIGN4((((guint64)len) + 1) * 2);
 
-            if ((p->ptr + padded_len + 4) <= p->end) {
+            /* We know that at least 4 bytes are there */
+            if (padded_len <= (guint64)(p->end - p->ptr) - 4) {
                 const gunichar2* utf16 = (gunichar2*)(p->ptr + 4);
 
                 if (!utf16[len]) {
@@ -1019,7 +1030,10 @@ gbinder_reader_read_byte_array(
             p->ptr += sizeof(*ptr);
             /* Any non-NULL pointer just to indicate success */
             data = p->start;
-        } else if (gbinder_reader_can_read(p, sizeof(*ptr) + *ptr)) {
+        } else if (gbinder_reader_can_read(p, sizeof(*ptr)) &&
+            /* Check the padded size, like Android's Parcel::readInplace */
+            gbinder_reader_can_read(p, sizeof(*ptr) +
+                G_ALIGN4((gsize)*ptr))) {
             *len = (gsize)*ptr;
             p->ptr += sizeof(*ptr);
             data = p->ptr;
@@ -1070,7 +1084,7 @@ gbinder_reader_bytes_remaining(
 {
     const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
 
-    return p ? (p->end - p->ptr) : 0;
+    return (p && p->ptr < p->end) ? (gsize)(p->end - p->ptr) : 0;
 }
 
 void
