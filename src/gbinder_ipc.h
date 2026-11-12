@@ -247,6 +247,12 @@ gbinder_ipc_remote_object_disposed(
     GBinderRemoteObject* obj)
     GBINDER_INTERNAL;
 
+void
+gbinder_ipc_remote_object_finalized(
+    GBinderIpc* ipc,
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
+
 /* Needed by unit tests */
 gboolean
 gbinder_ipc_set_max_threads(

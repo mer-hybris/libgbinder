@@ -184,6 +184,81 @@ test_dead_acquired(
 }
 
 /*==========================================================================*
+ * recreate
+ *
+ * A new object is created for the handle after the old one has been
+ * removed from the registry but before it has been finalized. The old
+ * one must not take the new one's death notification with it.
+ *==========================================================================*/
+
+typedef struct test_recreate {
+    GBinderObjectRegistry* reg;
+    guint32 handle;
+    GBinderRemoteObject* fresh;
+} TestRecreate;
+
+static
+void
+test_recreate_weak_notify(
+    gpointer user_data,
+    GObject* old)
+{
+    TestRecreate* test = user_data;
+
+    /* The old object is being disposed of, and is no longer registered */
+    g_assert(!test->fresh);
+    test->fresh = gbinder_object_registry_get_remote(test->reg, test->handle,
+        REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE);
+    g_assert(test->fresh);
+    g_assert(test->fresh != (gpointer)old);
+}
+
+static
+void
+test_recreate_run(
+    void)
+{
+    const guint h = 1;
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderRemoteObject* old;
+    GBinderRemoteObject* found;
+    TestRecreate test;
+
+    memset(&test, 0, sizeof(test));
+    test.reg = gbinder_ipc_object_registry(ipc);
+    test.handle = h;
+    old = gbinder_object_registry_get_remote(test.reg, h,
+        REMOTE_REGISTRY_CAN_CREATE_AND_ACQUIRE);
+    g_assert(test_binder_death_requested(fd, h));
+
+    g_object_weak_ref(G_OBJECT(old), test_recreate_weak_notify, &test);
+    gbinder_remote_object_unref(old);
+    g_assert(test.fresh);
+
+    /* The new object is registered and still has its death notification */
+    found = gbinder_object_registry_get_remote(test.reg, h,
+        REMOTE_REGISTRY_DONT_CREATE);
+    g_assert(found == test.fresh);
+    gbinder_remote_object_unref(found);
+    g_assert(test_binder_death_requested(fd, h));
+
+    gbinder_remote_object_unref(test.fresh);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_recreate(
+    void)
+{
+    test_run_in_context(&test_opt, test_recreate_run);
+}
+
+/*==========================================================================*
  * reuse
  *
  * When a dead object finally goes away, it must not evict a newer object
@@ -253,6 +328,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "dead", test_dead);
     g_test_add_func(TEST_PREFIX "dead_acquired", test_dead_acquired);
+    g_test_add_func(TEST_PREFIX "recreate", test_recreate);
     g_test_add_func(TEST_PREFIX "reuse", test_reuse);
     test_init(&test_opt, argc, argv);
     return g_test_run();

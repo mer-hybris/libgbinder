@@ -80,6 +80,11 @@ gbinder_remote_object_commit_suicide(
     GBinderRemoteObject* self)
     GBINDER_INTERNAL;
 
+void
+gbinder_remote_object_detach_locked(
+    GBinderRemoteObject* self)
+    GBINDER_INTERNAL;
+
 #endif /* GBINDER_REMOTE_OBJECT_PRIVATE_H */
 
 /*

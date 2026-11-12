@@ -1283,7 +1283,31 @@ gbinder_ipc_remote_object_disposed(
         priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
         GINT_TO_POINTER(obj->handle)) == obj) {
         gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
+        /*
+         * Nobody can find the object anymore. Let go of the node before
+         * a new object can be created for the same handle.
+         */
+        gbinder_remote_object_detach_locked(obj);
     }
+    g_mutex_unlock(&priv->remote_objects_mutex);
+    /* Unlock */
+}
+
+void
+gbinder_ipc_remote_object_finalized(
+    GBinderIpc* self,
+    GBinderRemoteObject* obj)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    /* Lock */
+    g_mutex_lock(&priv->remote_objects_mutex);
+    if (priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
+        gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
+    }
+    /* Does nothing if gbinder_ipc_remote_object_disposed() has done it */
+    gbinder_remote_object_detach_locked(obj);
     g_mutex_unlock(&priv->remote_objects_mutex);
     /* Unlock */
 }

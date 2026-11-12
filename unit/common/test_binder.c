@@ -115,6 +115,7 @@ struct test_binder_node {
     GHashTable* handle_map;   /* handle => GBinderLocalObject* */
     GHashTable* destroy_map;  /* gpointer => GDestroyNotify */
     GHashTable* deaths;       /* Cookies of delivered BR_DEAD_BINDER */
+    GHashTable* death_requests; /* handle => cookie */
     guint stray_dead_binder_done;
     TestBinderCmd* cmd_first;
     TestBinderCmd* cmd_last;
@@ -312,6 +313,7 @@ test_binder_node_new(
     node->handle_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->destroy_map = g_hash_table_new(g_direct_hash, g_direct_equal);
     node->deaths = g_hash_table_new(g_direct_hash, g_direct_equal);
+    node->death_requests = g_hash_table_new(g_direct_hash, g_direct_equal);
     GDEBUG("Created node %s (%d)", path, node->public_fd);
     return node;
 }
@@ -352,6 +354,7 @@ test_binder_node_free(
     g_hash_table_unref(node->handle_map);
     g_hash_table_unref(node->destroy_map);
     g_hash_table_unref(node->deaths);
+    g_hash_table_unref(node->death_requests);
     gutil_int_array_free(node->loopers, TRUE);
     g_assert(!close(node->fd[0]));
     g_assert(!close(node->fd[1]));
@@ -927,7 +930,44 @@ test_binder_node_bc_clear_death_notification_64(
     TestBinderNode* node,
     const BinderHandleCookie64* bc)
 {
+    gpointer key = GUINT_TO_POINTER(bc->handle);
+    gpointer cookie;
+
+    /* Lock */
+    test_binder_node_lock(node);
+    if (g_hash_table_lookup_extended(node->death_requests, key, NULL,
+        &cookie) && GPOINTER_TO_SIZE(cookie) == bc->cookie) {
+        g_hash_table_remove(node->death_requests, key);
+    } else {
+        /* The kernel says "death notification cookie mismatch" */
+        GDEBUG("No death notification for handle %u", (guint)bc->handle);
+    }
+    test_binder_node_unlock(node);
+    /* Unlock */
+
     test_binder_node_br_clear_death_notification_done_64(node, bc->cookie);
+}
+
+static
+void
+test_binder_node_bc_request_death_notification_64(
+    TestBinderNode* node,
+    const BinderHandleCookie64* bc)
+{
+    gpointer key = GUINT_TO_POINTER(bc->handle);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    if (g_hash_table_contains(node->death_requests, key)) {
+        /* The kernel says "death notification already set" */
+        GDEBUG("Death notification for handle %u is already set",
+            (guint)bc->handle);
+    } else {
+        g_hash_table_insert(node->death_requests, key,
+            GSIZE_TO_POINTER(bc->cookie));
+    }
+    test_binder_node_unlock(node);
+    /* Unlock */
 }
 
 static
@@ -1115,8 +1155,10 @@ test_binder_node_handle_cmd_64(
         test_binder_node_unlock(node);
         /* Unlock */
         break;
-    case BC_ACQUIRE_DONE_64:
     case BC_REQUEST_DEATH_NOTIFICATION_64:
+        test_binder_node_bc_request_death_notification_64(node, payload);
+        break;
+    case BC_ACQUIRE_DONE_64:
         /* Ignore these for now */
         break;
     default:
@@ -1810,6 +1852,27 @@ test_binder_stray_dead_binder_done(
 
     test_binder_node_unref(node);
     return n;
+}
+
+gboolean
+test_binder_death_requested(
+    int fd,
+    guint32 handle)
+{
+    TestBinderNode* node = test_binder_node_ref_from_fd(fd);
+    gboolean requested;
+
+    g_assert(node);
+
+    /* Lock */
+    test_binder_node_lock(node);
+    requested = g_hash_table_contains(node->death_requests,
+        GUINT_TO_POINTER(handle));
+    test_binder_node_unlock(node);
+    /* Unlock */
+
+    test_binder_node_unref(node);
+    return requested;
 }
 
 guint

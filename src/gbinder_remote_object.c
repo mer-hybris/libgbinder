@@ -165,6 +165,32 @@ gbinder_remote_object_commit_suicide(
     }
 }
 
+void
+gbinder_remote_object_detach_locked(
+    GBinderRemoteObject* self)
+{
+    /*
+     * The object is going away. The caller holds the lock which protects
+     * the registry of remote objects, and has just removed this object
+     * from it. Whoever is going to create a new object for the same
+     * handle, has to wait for this lock, and will only send its own
+     * BC_ACQUIRE and BC_REQUEST_DEATH_NOTIFICATION after these. The
+     * cookie is the handle, so BC_CLEAR_DEATH_NOTIFICATION sent after
+     * that would clear the new object's death notification instead.
+     */
+    GBinderRemoteObjectPriv* priv = self->priv;
+    GBinderDriver* driver = self->ipc->driver;
+
+    if (!self->dead) {
+        self->dead = TRUE;
+        gbinder_driver_clear_death_notification(driver, self);
+    }
+    if (priv->acquired) {
+        priv->acquired = FALSE;
+        gbinder_driver_release(driver, self->handle);
+    }
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -295,17 +321,10 @@ gbinder_remote_object_finalize(
     GObject* object)
 {
     GBinderRemoteObject* self = THIS(object);
-    GBinderRemoteObjectPriv* priv = self->priv;
     GBinderIpc* ipc = self->ipc;
-    GBinderDriver* driver = ipc->driver;
 
-    gbinder_ipc_invalidate_remote_object(ipc, self);
-    if (!self->dead) {
-        gbinder_driver_clear_death_notification(driver, self);
-    }
-    if (priv->acquired) {
-        gbinder_driver_release(driver, self->handle);
-    }
+    /* Normally it's already done by gbinder_ipc_remote_object_disposed() */
+    gbinder_ipc_remote_object_finalized(ipc, self);
     gbinder_ipc_unref(ipc);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
