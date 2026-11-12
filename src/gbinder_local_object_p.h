@@ -62,6 +62,21 @@ struct gbinder_local_object {
     GBINDER_STABILITY_LEVEL stability;
 };
 
+/*
+ * What the kernel knows a local object by. It's the address of this
+ * structure rather than the address of the object itself, like the
+ * weakref_impl of a BBinder in Android. The kernel keeps weak references
+ * to the node after the object itself may have been destroyed. As long
+ * as it does, the address of the node must not be reused, otherwise
+ * a new object would inherit the old one's node and the references to
+ * it held by other processes. All fields are protected by GBinderIpc.
+ */
+struct gbinder_local_object_node {
+    GBinderLocalObject* object; /* NULL when the object can't be found */
+    guint weak_refs;            /* BR_INCREFS not matched by BR_DECREFS */
+    gboolean orphan;            /* The object has been finalized */
+};
+
 typedef enum gbinder_local_transaction_support {
     GBINDER_LOCAL_TRANSACTION_NOT_SUPPORTED,
     GBINDER_LOCAL_TRANSACTION_SUPPORTED,     /* On the main thread */
@@ -103,6 +118,11 @@ gbinder_local_object_new_with_type(
     const char* const* ifaces,
     GBinderLocalTransactFunc txproc,
     void* user_data)
+    GBINDER_INTERNAL;
+
+GBinderLocalObjectNode*
+gbinder_local_object_node(
+    GBinderLocalObject* obj)
     GBINDER_INTERNAL;
 
 void

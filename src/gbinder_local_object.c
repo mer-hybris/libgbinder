@@ -49,6 +49,7 @@ struct gbinder_local_object_priv {
     char** ifaces;
     GBinderLocalTransactFunc txproc;
     void* user_data;
+    GBinderLocalObjectNode* node;
 };
 
 typedef struct gbinder_local_object_acquire_data {
@@ -413,6 +414,13 @@ gbinder_local_object_new_with_type(
     return NULL;
 }
 
+GBinderLocalObjectNode*
+gbinder_local_object_node(
+    GBinderLocalObject* self)
+{
+    return self->priv->node;
+}
+
 void
 gbinder_local_object_init_base(
     GBinderLocalObject* self,
@@ -638,6 +646,8 @@ gbinder_local_object_init(
         GBINDER_TYPE_LOCAL_OBJECT, GBinderLocalObjectPriv);
 
     self->priv = priv;
+    priv->node = g_new0(GBinderLocalObjectNode, 1);
+    priv->node->object = self;
 }
 
 static
@@ -660,8 +670,15 @@ gbinder_local_object_finalize(
     GBinderLocalObjectPriv* priv = self->priv;
 
     GASSERT(!self->strong_refs);
-    gbinder_ipc_invalidate_local_object(self->ipc, self);
-    gbinder_ipc_unref(self->ipc);
+    if (self->ipc) {
+        /* The node may have to outlive the object */
+        gbinder_ipc_invalidate_local_object(self->ipc, self);
+        gbinder_ipc_release_local_node(self->ipc, priv->node);
+        gbinder_ipc_unref(self->ipc);
+    } else {
+        g_free(priv->node);
+    }
+    priv->node = NULL;
     g_strfreev(priv->ifaces);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }

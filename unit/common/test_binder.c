@@ -706,6 +706,33 @@ test_binder_node_br_dead_object_64(
     test_binder_node_queue_cmd_data(node, ANY_THREAD, br);
 }
 
+/*
+ * The kernel knows local objects by their nodes (GBinderLocalObjectNode),
+ * this file and the tests by GBinderLocalObject pointers. Convert at the
+ * boundary. Tests pass other pointers too, to test unknown objects.
+ */
+static
+guint64
+test_binder_object_to_ptr(
+    gconstpointer obj)
+{
+    if (obj && G_TYPE_CHECK_INSTANCE_TYPE(obj, GBINDER_TYPE_LOCAL_OBJECT)) {
+        return GPOINTER_TO_SIZE(gbinder_local_object_node
+            ((GBinderLocalObject*)obj));
+    }
+    return GPOINTER_TO_SIZE(obj);
+}
+
+static
+guint64
+test_binder_ptr_to_object(
+    guint64 ptr)
+{
+    /* Only called for the pointers written by libgbinder */
+    return ptr ? GPOINTER_TO_SIZE(((GBinderLocalObjectNode*)
+        GSIZE_TO_POINTER(ptr))->object) : 0;
+}
+
 static
 void
 test_binder_local_object_gone(
@@ -848,7 +875,7 @@ test_binder_node_fixup_handles_64(
             if (object->ptr) {
                 object->type = BINDER_TYPE_HANDLE;
                 object->handle = test_binder_node_object_to_handle_locked(node,
-                    object->ptr);
+                    test_binder_ptr_to_object(object->ptr));
             }
         } else if (*obj_ptr == BINDER_TYPE_PTR) {
             BinderBuffer64* buffer = (BinderBuffer64*) obj_ptr;
@@ -991,7 +1018,7 @@ test_binder_node_bc_transaction_64(
         tx->cookie = tid;
         tx->sender_pid = getpid();
         tx->sender_euid = geteuid();
-        tx->target.ptr = obj;
+        tx->target.ptr = test_binder_object_to_ptr(GSIZE_TO_POINTER(obj));
         test_binder_node_fixup_handles_64(node, tx);
         test_binder_node_queue_cmd_data(node, ANY_THREAD, br);
     } else if (test_binder_node_ignore_dead_object(node)) {
@@ -1066,7 +1093,7 @@ test_binder_node_bc_acquire_release(
 
         memcpy(br, &code, sizeof(code));
         memset(data, 0, sizeof(*data));
-        data->ptr = ptr;
+        data->ptr = test_binder_object_to_ptr(GSIZE_TO_POINTER(ptr));
 
         /* These commands are not tied to a particular thread */
         test_binder_node_queue_cmd_data_locked(node, ANY_THREAD, br);
@@ -1384,7 +1411,7 @@ test_binder_push_ptr_cookie(
     g_assert_cmpuint(_IOC_SIZE(cmd), == ,sizeof(BinderPtrCookie64));
     memcpy(buf, &cmd, sizeof(cmd));
     memset(data, 0, sizeof(*data));
-    data->ptr = GPOINTER_TO_SIZE(ptr);
+    data->ptr = test_binder_object_to_ptr(ptr);
 
     test_binder_push_data(fd, dest, buf);
 }
@@ -1541,7 +1568,7 @@ test_binder_br_transaction(
     BinderTarget64 target;
 
     memset(&target, 0, sizeof(target));
-    target.ptr = GPOINTER_TO_SIZE(ptr);
+    target.ptr = test_binder_object_to_ptr(ptr);
 
     memset(br, 0, sizeof(br));
     memcpy(br, &cmd, sizeof(cmd));

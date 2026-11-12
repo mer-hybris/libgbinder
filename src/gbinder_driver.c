@@ -666,7 +666,8 @@ gbinder_driver_handle_command(
         GVERBOSE("> BR_FINISHED");
     } else if (cmd == io->br.increfs) {
         guint8 buf[4 + GBINDER_MAX_PTR_COOKIE_SIZE];
-        GBinderLocalObject* obj = gbinder_object_registry_get_local
+        /* Keeps the node alive until BR_DECREFS */
+        GBinderLocalObject* obj = gbinder_object_registry_increfs
             (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_INCREFS %p", obj);
@@ -675,7 +676,7 @@ gbinder_driver_handle_command(
         GVERBOSE("< BC_INCREFS_DONE %p", obj);
         gbinder_driver_cmd_data(self, io->bc.increfs_done, data, buf);
     } else if (cmd == io->br.decrefs) {
-        GBinderLocalObject* obj = gbinder_object_registry_get_local
+        GBinderLocalObject* obj = gbinder_object_registry_decrefs
             (reg, io->decode_ptr_cookie(data));
 
         GVERBOSE("> BR_DECREFS %p", obj);

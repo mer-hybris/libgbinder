@@ -40,6 +40,7 @@ typedef struct gbinder_cleanup GBinderCleanup;
 typedef struct gbinder_driver GBinderDriver;
 typedef struct gbinder_handler GBinderHandler;
 typedef struct gbinder_io GBinderIo;
+typedef struct gbinder_local_object_node GBinderLocalObjectNode;
 typedef struct gbinder_object_converter GBinderObjectConverter;
 typedef struct gbinder_object_registry GBinderObjectRegistry;
 typedef struct gbinder_output_data GBinderOutputData;

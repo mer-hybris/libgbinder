@@ -248,6 +248,12 @@ gbinder_ipc_remote_object_disposed(
     GBINDER_INTERNAL;
 
 void
+gbinder_ipc_release_local_node(
+    GBinderIpc* ipc,
+    GBinderLocalObjectNode* node)
+    GBINDER_INTERNAL;
+
+void
 gbinder_ipc_remote_object_finalized(
     GBinderIpc* ipc,
     GBinderRemoteObject* obj)

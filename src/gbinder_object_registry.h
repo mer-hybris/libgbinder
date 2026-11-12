@@ -48,6 +48,11 @@ typedef struct gbinder_object_registry_functions {
         void* pointer);
     GBinderRemoteObject* (*get_remote)(GBinderObjectRegistry* reg,
         guint32 handle, REMOTE_REGISTRY_CREATE create);
+    /* get_local() for BR_INCREFS and BR_DECREFS */
+    GBinderLocalObject* (*increfs)(GBinderObjectRegistry* reg,
+        void* pointer);
+    GBinderLocalObject* (*decrefs)(GBinderObjectRegistry* reg,
+        void* pointer);
 } GBinderObjectRegistryFunctions;
 
 struct gbinder_object_registry {
@@ -81,6 +86,26 @@ gbinder_object_registry_get_local(
     void* pointer)
 {
     return reg ? reg->f->get_local(reg, pointer) : NULL;
+}
+
+GBINDER_INLINE_FUNC
+GBinderLocalObject*
+gbinder_object_registry_increfs(
+    GBinderObjectRegistry* reg,
+    void* pointer)
+{
+    return reg ? reg->f->increfs ? reg->f->increfs(reg, pointer) :
+        reg->f->get_local(reg, pointer) : NULL;
+}
+
+GBINDER_INLINE_FUNC
+GBinderLocalObject*
+gbinder_object_registry_decrefs(
+    GBinderObjectRegistry* reg,
+    void* pointer)
+{
+    return reg ? reg->f->decrefs ? reg->f->decrefs(reg, pointer) :
+        reg->f->get_local(reg, pointer) : NULL;
 }
 
 GBINDER_INLINE_FUNC
