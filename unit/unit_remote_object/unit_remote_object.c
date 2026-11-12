@@ -141,6 +141,60 @@ test_dead(
 }
 
 /*==========================================================================*
+ * reuse
+ *
+ * When a dead object finally goes away, it must not evict a newer object
+ * registered for the same (reused) handle.
+ *==========================================================================*/
+
+static
+void
+test_reuse_run(
+    void)
+{
+    const guint h = 1;
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    const int fd = gbinder_driver_fd(ipc->driver);
+    GBinderRemoteObject* old = gbinder_object_registry_get_remote(reg, h, TRUE);
+    GBinderRemoteObject* fresh;
+    GBinderRemoteObject* found;
+    gulong id = gbinder_remote_object_add_death_handler
+        (old, test_dead_done, loop);
+
+    test_binder_br_dead_binder(fd, ANY_THREAD, h);
+    test_run(&test_opt, loop);
+    g_assert(gbinder_remote_object_is_dead(old));
+    gbinder_remote_object_remove_handler(old, id);
+
+    /* Kernel hands out the same handle number for a new node */
+    fresh = gbinder_object_registry_get_remote(reg, h, TRUE);
+    g_assert(fresh != old);
+    g_assert(!gbinder_remote_object_is_dead(fresh));
+
+    /* User finally drops the dead object */
+    gbinder_remote_object_unref(old);
+
+    found = gbinder_object_registry_get_remote(reg, h, FALSE);
+    GDEBUG("fresh=%p found=%p", fresh, found);
+    g_assert(found == fresh);
+    gbinder_remote_object_unref(found);
+    gbinder_remote_object_unref(fresh);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_reuse(
+    void)
+{
+    test_run_in_context(&test_opt, test_reuse_run);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -155,6 +209,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "null", test_null);
     g_test_add_func(TEST_PREFIX "basic", test_basic);
     g_test_add_func(TEST_PREFIX "dead", test_dead);
+    g_test_add_func(TEST_PREFIX "reuse", test_reuse);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

@@ -82,7 +82,7 @@ gbinder_remote_object_handle_death_on_main_thread(
         }
         /* ServiceManager always has the same handle, and can be reanimated. */
         if (self->handle != GBINDER_SERVICEMANAGER_HANDLE) {
-            gbinder_ipc_invalidate_remote_handle(ipc, self->handle);
+            gbinder_ipc_invalidate_remote_object(ipc, self);
         }
         gbinder_driver_dead_binder_done(driver, self);
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
@@ -154,7 +154,7 @@ gbinder_remote_object_commit_suicide(
             gbinder_driver_release(driver, self->handle);
         }
         GVERBOSE_("%p %u", self, self->handle);
-        gbinder_ipc_invalidate_remote_handle(self->ipc, self->handle);
+        gbinder_ipc_invalidate_remote_object(self->ipc, self);
         /* Don't submit BC_DEAD_BINDER_DONE because this is a suicide */
         g_signal_emit(self, gbinder_remote_object_signals[SIGNAL_DEATH], 0);
     }
@@ -294,7 +294,7 @@ gbinder_remote_object_finalize(
     GBinderIpc* ipc = self->ipc;
     GBinderDriver* driver = ipc->driver;
 
-    gbinder_ipc_invalidate_remote_handle(ipc, self->handle);
+    gbinder_ipc_invalidate_remote_object(ipc, self);
     if (!self->dead) {
         gbinder_driver_clear_death_notification(driver, self);
     }

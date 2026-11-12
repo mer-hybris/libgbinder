@@ -1176,6 +1176,21 @@ gbinder_ipc_invalidate_local_object(
 }
 
 void
+gbinder_ipc_invalidate_remote_object(
+    GBinderIpc* self,
+    GBinderRemoteObject* obj)
+{
+    GBinderIpcPriv* priv = self->priv;
+
+    g_mutex_lock(&priv->remote_objects_mutex);
+    if (priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
+        gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
+    }
+    g_mutex_unlock(&priv->remote_objects_mutex);
+}
+
+void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* self,
     guint32 handle)
@@ -1257,7 +1272,9 @@ gbinder_ipc_remote_object_disposed(
 
     /* Lock */
     g_mutex_lock(&priv->remote_objects_mutex);
-    if (g_atomic_int_get(&obj->object.ref_count) == 1) {
+    if (g_atomic_int_get(&obj->object.ref_count) == 1 &&
+        priv->remote_objects && g_hash_table_lookup(priv->remote_objects,
+        GINT_TO_POINTER(obj->handle)) == obj) {
         gbinder_ipc_invalidate_remote_handle_locked(self, obj->handle);
     }
     g_mutex_unlock(&priv->remote_objects_mutex);

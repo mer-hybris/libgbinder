@@ -159,6 +159,12 @@ gbinder_ipc_get_service_manager(
     G_GNUC_WARN_UNUSED_RESULT;
 
 void
+gbinder_ipc_invalidate_remote_object(
+    GBinderIpc* ipc,
+    GBinderRemoteObject* obj)
+    GBINDER_INTERNAL;
+
+void
 gbinder_ipc_invalidate_remote_handle(
     GBinderIpc* ipc,
     guint32 handle)
