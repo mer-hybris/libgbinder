@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -2016,8 +2015,7 @@ gbinder_ipc_cancel(
 {
     if (G_LIKELY(self) && G_LIKELY(id)) {
         gconstpointer key = GINT_TO_POINTER(id);
-        GBinderIpcPriv* priv = self->priv;
-        GBinderIpcTx* tx = g_hash_table_lookup(priv->tx_table, key);
+        GBinderIpcTx* tx = g_hash_table_lookup(self->priv->tx_table, key);
 
         if (tx) {
             tx->cancelled = TRUE;
@@ -2026,6 +2024,22 @@ gbinder_ipc_cancel(
             GWARN("Invalid transaction id %lu", id);
         }
     }
+}
+
+gpointer
+gbinder_ipc_get_tx_user_data(
+    GBinderIpc* self,
+    gulong id)
+{
+    if (G_LIKELY(self) && G_LIKELY(id)) {
+        gconstpointer key = GINT_TO_POINTER(id);
+        GBinderIpcTx* tx = g_hash_table_lookup(self->priv->tx_table, key);
+
+        if (tx) {
+            return tx->user_data;
+        }
+    }
+    return NULL;
 }
 
 gboolean

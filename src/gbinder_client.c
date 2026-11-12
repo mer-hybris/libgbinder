@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2022 Jolla Ltd.
  * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -471,8 +470,21 @@ gbinder_client_cancel(
     GBinderClient* self,
     gulong id)
 {
-    if (G_LIKELY(self)) {
-        gbinder_ipc_cancel(gbinder_client_ipc(self), id);
+    if (G_LIKELY(self) && G_LIKELY(id)) {
+        GBinderIpc* ipc = gbinder_client_ipc(self);
+        GBinderClientTx* tx = gbinder_ipc_get_tx_user_data(ipc, id);
+
+        if (tx) {
+            GDestroyNotify destroy = tx->destroy;
+            void* user_data = tx->user_data;
+
+            tx->reply = NULL;
+            tx->destroy = NULL;
+            gbinder_ipc_cancel(ipc, id);
+            if (destroy) {
+                destroy(user_data);
+            }
+        }
     }
 }
 
