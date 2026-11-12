@@ -740,7 +740,8 @@ test_transact_cancel2_exec(
     const GBinderIpcTx* tx)
 {
     GVERBOSE_("");
-    g_assert(!tx->cancelled);
+    /* Main thread may be setting it at any time */
+    g_assert(!g_atomic_int_get(&tx->cancelled));
     g_main_context_invoke(NULL, test_transact_cancel2_cancel, (void*)tx);
 }
 
