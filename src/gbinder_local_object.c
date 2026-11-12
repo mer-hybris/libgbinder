@@ -113,7 +113,7 @@ gbinder_local_object_default_can_handle_transaction(
         if (!g_strcmp0(iface, hidl_base_interface)) {
             return GBINDER_LOCAL_TRANSACTION_LOOPER;
         }
-        /* no break */
+        /* fall through */
     default:
         return self->priv->txproc ? GBINDER_LOCAL_TRANSACTION_SUPPORTED :
             GBINDER_LOCAL_TRANSACTION_NOT_SUPPORTED;

@@ -436,8 +436,17 @@ void
 gbinder_ipc_looper_free(
     GBinderIpcLooper* looper)
 {
-    if (!looper->joined && looper->thread != pthread_self()) {
-        pthread_join(looper->thread, NULL);
+    if (!looper->joined) {
+        if (looper->thread != pthread_self()) {
+            pthread_join(looper->thread, NULL);
+        } else {
+            /*
+             * The last reference is being released by the looper thread
+             * itself (spontaneous exit). Nobody is going to join it, and
+             * an unjoined joinable thread never releases its stack.
+             */
+            pthread_detach(looper->thread);
+        }
     }
     close(looper->pipefd[0]);
     close(looper->pipefd[1]);
@@ -1509,7 +1518,7 @@ gbinder_ipc_tx_done(
     GBinderIpcTxPriv* tx = data;
     GBinderIpcTx* pub = &tx->pub;
 
-    if (!pub->cancelled) {
+    if (!g_atomic_int_get(&pub->cancelled)) {
         tx->fn_done(tx);
     }
 }
@@ -1710,7 +1719,8 @@ gbinder_ipc_tx_proc(
 {
     GBinderIpcTxPriv* tx = data;
 
-    if (!tx->pub.cancelled) {
+    /* Set by gbinder_ipc_cancel() on the main thread */
+    if (!g_atomic_int_get(&tx->pub.cancelled)) {
         tx->fn_exec(tx);
     } else {
         GVERBOSE_("not executing transaction %lu (cancelled)", tx->pub.id);
@@ -2018,7 +2028,8 @@ gbinder_ipc_cancel(
         GBinderIpcTx* tx = g_hash_table_lookup(self->priv->tx_table, key);
 
         if (tx) {
-            tx->cancelled = TRUE;
+            /* Read by gbinder_ipc_tx_proc() on a tx_pool thread */
+            g_atomic_int_set(&tx->cancelled, TRUE);
             GVERBOSE_("%lu", id);
         } else {
             GWARN("Invalid transaction id %lu", id);

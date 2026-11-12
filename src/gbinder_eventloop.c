@@ -149,7 +149,8 @@ gbinder_eventloop_glib_callback_dispatch(
     GSourceFunc callback,
     gpointer user_data)
 {
-    ((GBinderEventLoopCallbackFunc)callback)(user_data);
+    /* Cast back to what gbinder_eventloop_glib_callback_new() was given */
+    ((GBinderEventLoopCallbackFunc)(void(*)(void))callback)(user_data);
     return G_SOURCE_REMOVE;
 }
 
@@ -170,7 +171,9 @@ gbinder_eventloop_glib_callback_new(
         g_source_new(&callback_funcs, sizeof(GBinderEventLoopCallbackGLib));
 
     impl->callback.eventloop = &gbinder_eventloop_glib;
-    g_source_set_callback(&impl->source, (GSourceFunc) func, data, finalize);
+    /* Only ever called by gbinder_eventloop_glib_callback_dispatch() */
+    g_source_set_callback(&impl->source, (GSourceFunc)(void(*)(void)) func,
+        data, finalize);
     return &impl->callback;
 }
 
@@ -195,10 +198,12 @@ void
 gbinder_eventloop_glib_callback_schedule(
     GBinderEventLoopCallback* cb)
 {
-    static GMainContext* context = NULL;
-
-    if (!context) context = g_main_context_default();
-    g_source_attach(gbinder_eventloop_glib_callback_source(cb), context);
+    /*
+     * This gets called from looper and tx_pool threads too. Caching
+     * g_main_context_default() in an unprotected static was a data race,
+     * and NULL means the default context anyway.
+     */
+    g_source_attach(gbinder_eventloop_glib_callback_source(cb), NULL);
 }
 
 static
