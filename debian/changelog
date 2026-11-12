@@ -1,3 +1,10 @@
+libgbinder (1.1.55) unstable; urgency=low
+
+  * Invoke destroy callback from gbinder_client_cancel
+  * Fixed make test with -j
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 12 Nov 2026 02:54:57 +0200
+
 libgbinder (1.1.54) unstable; urgency=low
 
   * Drop gbinder_cleanup in favor of gutil_cleanup
