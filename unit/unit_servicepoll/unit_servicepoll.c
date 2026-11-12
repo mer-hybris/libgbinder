@@ -475,7 +475,9 @@ test_already_there(
     poll = gbinder_servicepoll_new(manager, &weakptr);
     test = TEST_SERVICEMANAGER(manager);
 
+    g_mutex_lock(&test->mutex);
     test->services = gutil_strv_add(test->services, "foo");
+    g_mutex_unlock(&test->mutex);
     id = gbinder_servicepoll_add_handler(poll, test_already_there_proc, loop);
 
     g_assert(id);

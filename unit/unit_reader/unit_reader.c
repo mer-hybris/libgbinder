@@ -1102,29 +1102,29 @@ static const BinderObject64 test_hidl_vec_badcount2_buf [] = {
 
 static const TestHidlVec test_hidl_vec_tests[] = {
     { "2bytes", TEST_ARRAY_AND_SIZE(test_hidl_vec_2bytes_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets),
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets),
       TEST_ARRAY_AND_SIZE(test_hidl_vec_2bytes_data), 1 },
     { "empty", TEST_ARRAY_AND_SIZE(test_hidl_vec_empty_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets),
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets),
       test_hidl_vec_2bytes_data, 0, 0 },
     { "null", TEST_ARRAY_AND_SIZE(test_hidl_vec_null_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_1offset),
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_1offset),
       &test_hidl_vec_null, 0, 0 },
     { "missingbuf", test_hidl_vec_2bytes_buf,
       sizeof(test_hidl_vec_2bytes_buf[0]),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_1offset), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_1offset), NULL, 0, 0 },
     { "shortbuf", TEST_ARRAY_AND_SIZE(test_hidl_vec_short_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_1offset), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_1offset), NULL, 0, 0 },
     { "badnull", TEST_ARRAY_AND_SIZE(test_hidl_vec_badnull_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_1offset), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_1offset), NULL, 0, 0 },
     { "badsize", TEST_ARRAY_AND_SIZE(test_hidl_vec_badsize_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets), NULL, 0, 0 },
     { "badbuf", TEST_ARRAY_AND_SIZE(test_hidl_vec_badbuf_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets), NULL, 0, 0 },
     { "badcount1", TEST_ARRAY_AND_SIZE(test_hidl_vec_badcount1_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets), NULL, 0, 0 },
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets), NULL, 0, 0 },
     { "badcount2", TEST_ARRAY_AND_SIZE(test_hidl_vec_badcount2_buf),
-      TEST_ARRAY_AND_SIZE(test_hidl_vec_2offsets), NULL, 0, 0 }
+      TEST_ARRAY_AND_COUNT(test_hidl_vec_2offsets), NULL, 0, 0 }
 };
 
 static

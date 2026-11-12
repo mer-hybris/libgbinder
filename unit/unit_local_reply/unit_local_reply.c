@@ -458,6 +458,7 @@ test_local_object(
     g_assert_cmpuint(gbinder_output_data_buffers_size(data), == ,0);
     g_assert_cmpuint(data->bytes->len, == ,BINDER_OBJECT_SIZE_32);
     gbinder_local_reply_unref(reply);
+    gbinder_local_object_unref(obj);
     gbinder_ipc_unref(ipc);
 }
 
