@@ -281,7 +281,6 @@ gbinder_proxy_tx_reply(
     gbinder_proxy_object_converter_init(&convert, self, ipc, self->parent.ipc);
     fwd = gbinder_remote_reply_convert_to_local(reply, &convert.pub);
     tx->id = 0;
-    gbinder_proxy_tx_dequeue(tx);
     gbinder_remote_request_complete(tx->req, fwd,
         (status > 0) ? (-EFAULT) : status);
     if (status == GBINDER_STATUS_DEAD_OBJECT) {
@@ -293,6 +292,12 @@ gbinder_proxy_tx_reply(
         gbinder_remote_object_commit_suicide(self->remote);
     }
     gbinder_local_reply_unref(fwd);
+    /*
+     * This drops the reference to self held by the transaction, and it
+     * may be the last one: once gbinder_remote_request_complete() has
+     * woken up the looper, the other references can go away at any time.
+     */
+    gbinder_proxy_tx_dequeue(tx);
 }
 
 static
