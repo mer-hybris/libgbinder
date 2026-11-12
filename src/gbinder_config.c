@@ -380,6 +380,9 @@ gbinder_config_autorelease_cb(
     gpointer data)
 {
     GASSERT(gbinder_config_keyfile == data);
+    /* The callback has fired, drop the reference held by us */
+    gbinder_idle_callback_unref(gbinder_config_autorelease);
+    gbinder_config_autorelease = NULL;
     gbinder_config_keyfile = NULL;
     g_key_file_unref(data);
 }
