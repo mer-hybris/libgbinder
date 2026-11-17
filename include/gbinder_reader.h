@@ -32,7 +32,7 @@
 #ifndef GBINDER_READER_H
 #define GBINDER_READER_H
 
-#include "gbinder_types.h"
+#include "gbinder_fmq.h"
 
 G_BEGIN_DECLS
 
@@ -117,6 +117,14 @@ gbinder_reader_read_double(
 int
 gbinder_reader_read_fd(
     GBinderReader* reader); /* Since 1.0.18 */
+
+/*
+ * The queue duplicates the received fds. NO_RESET_POINTERS preserves counters.
+ */
+GBinderFmq*
+gbinder_reader_read_fmq_descriptor(
+    GBinderReader* reader,
+    GBINDER_FMQ_FLAGS flags);
 
 int
 gbinder_reader_read_dup_fd(

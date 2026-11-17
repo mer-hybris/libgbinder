@@ -86,6 +86,12 @@ G_STATIC_ASSERT(G_STRUCT_OFFSET(GBinderMQDescriptor, data) ==
     GBINDER_MQ_DESCRIPTOR_FDS_OFFSET);
 G_STATIC_ASSERT(sizeof(GBinderMQDescriptor) == 32);
 
+GBinderFmq*
+gbinder_fmq_new_from_descriptor(
+    const GBinderMQDescriptor* descriptor,
+    GBINDER_FMQ_FLAGS flags)
+    GBINDER_INTERNAL;
+
 GBinderMQDescriptor*
 gbinder_fmq_get_descriptor(
     const GBinderFmq* self)

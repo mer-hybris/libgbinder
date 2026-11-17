@@ -35,6 +35,7 @@
 #define GBINDER_RPC_PROTOCOL_H
 
 #include "gbinder_types_p.h"
+#include <gbinder_fmq.h>
 
 /*
  * There are several versions of binder RPC protocol with diffferent
@@ -61,6 +62,8 @@ struct gbinder_rpc_protocol {
         GBINDER_STABILITY_LEVEL stability);
     void (*finish_unflatten_binder)(const void* in, GBinderRemoteObject* obj);
     void (*write_fmq_descriptor)(GBinderWriter* writer, const GBinderFmq* queue);
+    GBinderFmq* (*read_fmq_descriptor)(GBinderReader* reader,
+        GBINDER_FMQ_FLAGS flags);
 };
 
 const GBinderRpcProtocol*
