@@ -397,6 +397,8 @@ test_read_write_external_fd(
     }
 
     gbinder_fmq_unref(fmq);
+    /* The caller-supplied fd remains owned by the caller */
+    g_assert(close(shmem_fd) == 0);
 }
 
 /*==========================================================================*
@@ -416,6 +418,47 @@ test_ref(
     g_assert(gbinder_fmq_ref(fmq) == fmq);
     gbinder_fmq_unref(fmq);
     gbinder_fmq_unref(fmq);
+}
+
+/*==========================================================================*
+ * fd_close
+ *==========================================================================*/
+
+static
+guint
+test_count_fds(
+    void)
+{
+    GDir* dir = g_dir_open("/proc/self/fd", 0, NULL);
+    guint n = 0;
+
+    g_assert(dir);
+    while (g_dir_read_name(dir)) {
+        n++;
+    }
+    g_dir_close(dir);
+    return n;
+}
+
+static
+void
+test_fd_close(
+    void)
+{
+    const guint before = test_count_fds();
+    int i;
+
+    /* The memfd allocated by gbinder_fmq_new() must not leak */
+    for (i = 0; i < 4; i++) {
+        GBinderFmq* fmq = gbinder_fmq_new(sizeof(gint64), 2,
+            GBINDER_FMQ_TYPE_SYNC_READ_WRITE,
+            GBINDER_FMQ_FLAG_CONFIGURE_EVENT_FLAG, -1, 0);
+
+        g_assert(fmq);
+        g_assert_cmpuint(test_count_fds(), > , before);
+        gbinder_fmq_unref(fmq);
+        g_assert_cmpuint(test_count_fds(), == , before);
+    }
 }
 
 /*==========================================================================*
@@ -579,6 +622,7 @@ int main(int argc, char* argv[])
         g_test_add_func(TEST_("read_write_external_fd"),
             test_read_write_external_fd);
         g_test_add_func(TEST_("ref"), test_ref);
+        g_test_add_func(TEST_("fd_close"), test_fd_close);
         g_test_add_func(TEST_("wait_wake"), test_wait_wake);
         g_test_add_func(TEST_("zero_copy"), test_zero_copy);
     }
