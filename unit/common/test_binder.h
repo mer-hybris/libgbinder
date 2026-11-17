@@ -108,6 +108,22 @@ test_binder_br_failed_reply(
     TEST_BR_THREAD dest);
 
 void
+test_binder_br_frozen_reply(
+    int fd,
+    TEST_BR_THREAD dest);
+
+void
+test_binder_br_error(
+    int fd,
+    TEST_BR_THREAD dest,
+    gint32 err);
+
+void
+test_binder_br_transaction_pending_frozen(
+    int fd,
+    TEST_BR_THREAD dest);
+
+void
 test_binder_br_transaction(
     int fd,
     TEST_BR_THREAD dest,

@@ -46,6 +46,7 @@
 #include <gutil_macros.h>
 
 #include <errno.h>
+#include <string.h>
 
 /*
  * This file is included from gbinder_io_32.c and gbinder_io_64.c to
@@ -445,9 +446,23 @@ GBINDER_IO_FN(decode_transaction_data)(
     tx->euid = tr->sender_euid;
     tx->target = (void*)(uintptr_t)tr->target.ptr;
     tx->data = (void*)(uintptr_t)tr->data.ptr.buffer;
+
+    /*
+     * The kernel passes the sender's flags through, a oneway transaction
+     * may have TF_STATUS_CODE set too. It must not be replied to.
+     */
+    if (tr->flags & TF_ONE_WAY) {
+        tx->flags |= GBINDER_TX_FLAG_ONEWAY;
+    }
     if (tr->flags & TF_STATUS_CODE) {
-        GASSERT(tr->data_size == 4);
-        tx->status = *((gint32*)tx->data);
+        /* The size comes from the other side, don't trust it */
+        if (tx->data && tr->data_size >= sizeof(gint32)) {
+            memcpy(&tx->status, tx->data, sizeof(gint32));
+        } else {
+            GWARN("Invalid status code transaction size %u",
+                (guint)tr->data_size);
+            tx->status = GBINDER_STATUS_FAILED;
+        }
         tx->size = 0;
     } else {
         guint objcount = tr->offsets_size/sizeof(binder_size_t);
@@ -455,9 +470,6 @@ GBINDER_IO_FN(decode_transaction_data)(
 
         tx->status = GBINDER_STATUS_OK;
         tx->size = tr->data_size;
-        if (tr->flags & TF_ONE_WAY) {
-            tx->flags |= GBINDER_TX_FLAG_ONEWAY;
-        }
 
         if (objcount > 0) {
             binder_size_t min_offset = 0;
@@ -679,7 +691,10 @@ const GBinderIo GBINDER_IO_PREFIX = {
         .finished = BR_FINISHED,
         .dead_binder = BR_DEAD_BINDER,
         .clear_death_notification_done = BR_CLEAR_DEATH_NOTIFICATION_DONE,
-        .failed_reply = BR_FAILED_REPLY
+        .failed_reply = BR_FAILED_REPLY,
+        .frozen_reply = BR_FROZEN_REPLY,
+        .oneway_spam_suspect = BR_ONEWAY_SPAM_SUSPECT,
+        .transaction_pending_frozen = BR_TRANSACTION_PENDING_FROZEN
     },
 
     .object_size = GBINDER_IO_FN(object_size),
