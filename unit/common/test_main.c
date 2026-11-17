@@ -32,6 +32,7 @@
 #include "test_common.h"
 
 #include "gbinder_config.h"
+#include "gbinder_eventloop.h"
 #include "gbinder_rpc_protocol.h"
 
 #include <gutil_log.h>
@@ -177,6 +178,198 @@ test_run(
             alarm(0);
         }
     }
+}
+
+/*==========================================================================*
+ * Event loop integration counting live callbacks
+ *==========================================================================*/
+
+typedef struct test_counting_timeout {
+    GBinderEventLoopTimeout timeout;
+    GSourceFunc func;
+    gpointer data;
+    guint id;
+} TestCountingTimeout;
+
+typedef struct test_counting_callback {
+    GBinderEventLoopCallback cb;
+    gint refcount;
+    guint id;
+    GBinderEventLoopCallbackFunc func;
+    gpointer data;
+    GDestroyNotify finalize;
+} TestCountingCallback;
+
+static const GBinderEventLoopIntegration test_counting_eventloop;
+static gint test_counting_callbacks = 0;
+G_LOCK_DEFINE_STATIC(test_counting);
+
+static
+gboolean
+test_counting_timeout_proc(
+    gpointer user_data)
+{
+    TestCountingTimeout* t = user_data;
+
+    return t->func(t->data);
+}
+
+static
+GBinderEventLoopTimeout*
+test_counting_timeout_add(
+    guint interval,
+    GSourceFunc func,
+    gpointer data)
+{
+    TestCountingTimeout* t = g_new0(TestCountingTimeout, 1);
+
+    t->timeout.eventloop = &test_counting_eventloop;
+    t->func = func;
+    t->data = data;
+    t->id = g_timeout_add_full(G_PRIORITY_DEFAULT, interval,
+        test_counting_timeout_proc, t, g_free);
+    return &t->timeout;
+}
+
+static
+void
+test_counting_timeout_remove(
+    GBinderEventLoopTimeout* timeout)
+{
+    g_source_remove(((TestCountingTimeout*)timeout)->id);
+}
+
+static
+GBinderEventLoopCallback*
+test_counting_callback_new(
+    GBinderEventLoopCallbackFunc func,
+    gpointer data,
+    GDestroyNotify finalize)
+{
+    TestCountingCallback* c = g_new0(TestCountingCallback, 1);
+
+    c->cb.eventloop = &test_counting_eventloop;
+    c->refcount = 1;
+    c->func = func;
+    c->data = data;
+    c->finalize = finalize;
+    g_atomic_int_inc(&test_counting_callbacks);
+    return &c->cb;
+}
+
+static
+void
+test_counting_callback_ref(
+    GBinderEventLoopCallback* cb)
+{
+    g_atomic_int_inc(&((TestCountingCallback*)cb)->refcount);
+}
+
+static
+void
+test_counting_callback_unref(
+    GBinderEventLoopCallback* cb)
+{
+    TestCountingCallback* c = (TestCountingCallback*)cb;
+
+    if (g_atomic_int_dec_and_test(&c->refcount)) {
+        /* Pending callbacks hold a reference, so this one isn't pending */
+        if (c->finalize) {
+            c->finalize(c->data);
+        }
+        g_free(c);
+        g_atomic_int_add(&test_counting_callbacks, -1);
+    }
+}
+
+static
+gboolean
+test_counting_callback_proc(
+    gpointer user_data)
+{
+    TestCountingCallback* c = user_data;
+
+    G_LOCK(test_counting);
+    c->id = 0;
+    G_UNLOCK(test_counting);
+    c->func(c->data);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_counting_callback_pending_done(
+    gpointer user_data)
+{
+    /* GLib calls this after the dispatch (if any) has completed */
+    test_counting_callback_unref(user_data);
+}
+
+static
+void
+test_counting_callback_schedule(
+    GBinderEventLoopCallback* cb)
+{
+    TestCountingCallback* c = (TestCountingCallback*)cb;
+
+    G_LOCK(test_counting);
+    if (!c->id) {
+        test_counting_callback_ref(cb);
+        c->id = g_idle_add_full(G_PRIORITY_DEFAULT,
+            test_counting_callback_proc, c,
+            test_counting_callback_pending_done);
+    }
+    G_UNLOCK(test_counting);
+}
+
+static
+void
+test_counting_callback_cancel(
+    GBinderEventLoopCallback* cb)
+{
+    TestCountingCallback* c = (TestCountingCallback*)cb;
+    guint id;
+
+    G_LOCK(test_counting);
+    id = c->id;
+    c->id = 0;
+    G_UNLOCK(test_counting);
+    if (id) {
+        /* The pending reference goes with the source */
+        g_source_remove(id);
+    }
+}
+
+static
+void
+test_counting_cleanup(
+    void)
+{
+}
+
+static const GBinderEventLoopIntegration test_counting_eventloop = {
+    test_counting_timeout_add,
+    test_counting_timeout_remove,
+    test_counting_callback_new,
+    test_counting_callback_ref,
+    test_counting_callback_unref,
+    test_counting_callback_schedule,
+    test_counting_callback_cancel,
+    test_counting_cleanup
+};
+
+void
+test_eventloop_counting_set(
+    void)
+{
+    gbinder_eventloop_set(&test_counting_eventloop);
+}
+
+int
+test_eventloop_counting_callbacks(
+    void)
+{
+    return g_atomic_int_get(&test_counting_callbacks);
 }
 
 void
