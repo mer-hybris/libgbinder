@@ -54,6 +54,16 @@ gbinder_system_close(
 }
 
 int
+gbinder_system_flush(
+    int fd)
+{
+    /* Close a duplicate, so that only the driver's flush() gets invoked */
+    const int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+
+    return (dup_fd >= 0) ? close(dup_fd) : -1;
+}
+
+int
 gbinder_system_ioctl(
     int fd,
     int request,
