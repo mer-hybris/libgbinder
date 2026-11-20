@@ -1291,6 +1291,10 @@ gbinder_writer_data_append_local_object(
     if (obj) {
         /* Record the offset */
         gbinder_writer_data_record_offset(data, offset);
+
+        /* Make sure that the object doesn't go away too soon */
+        gbinder_writer_cleanup_add(data, gutil_object_unref,
+            gbinder_local_object_ref(obj));
     }
 }
 
