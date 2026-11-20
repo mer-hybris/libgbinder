@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  *
@@ -39,6 +40,7 @@
 #include <gbinder_remote_reply.h>
 #include <gbinder_remote_request.h>
 #include <gbinder_reader.h>
+#include <gbinder_writer.h>
 
 #include <errno.h>
 
@@ -361,6 +363,7 @@ gbinder_servicemanager_hidl_watch(
 {
     GBinderServiceManagerHidl* self = GBINDER_SERVICEMANAGER_HIDL(manager);
     GBinderLocalRequest* req = gbinder_client_new_request(manager->client);
+    GBinderWriter writer;
     GBinderServiceManagerHidlWatch* watch =
         g_new0(GBinderServiceManagerHidlWatch, 1);
     GBinderServiceManagerHidlWatchCall* call =
@@ -375,9 +378,10 @@ gbinder_servicemanager_hidl_watch(
 
     /* registerForNotifications(string fqName, string name,
      * IServiceNotification callback) generates (bool success); */
-    gbinder_local_request_append_hidl_string(req, name);
-    gbinder_local_request_append_hidl_string(req, "");
-    gbinder_local_request_append_local_object(req, watch->callback);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_hidl_string_copy(&writer, name);
+    gbinder_writer_append_hidl_string(&writer, "");
+    gbinder_writer_append_local_object(&writer, watch->callback);
 
     /*
      * GBinderServiceManagerHidlWatchCall keeps the additional reference
