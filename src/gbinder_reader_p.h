@@ -43,6 +43,12 @@ typedef struct gbinder_reader_data {
     void** objects;
 } GBinderReaderData;
 
+GBinderFmq*
+gbinder_reader_read_hidl_fmq_descriptor(
+    GBinderReader* reader,
+    GBINDER_FMQ_FLAGS flags)
+    GBINDER_INTERNAL;
+
 void
 gbinder_reader_init(
     GBinderReader* reader,

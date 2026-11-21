@@ -30,10 +30,14 @@
  */
 
 #include "gbinder_reader_p.h"
+#include "gbinder_fmq_p.h"
+#include "gbinder_rpc_protocol.h"
 #include "gbinder_buffer_p.h"
 #include "gbinder_io.h"
 #include "gbinder_object_registry.h"
 #include "gbinder_log.h"
+
+#include "binder.h"
 
 #include <gutil_macros.h>
 
@@ -133,6 +137,24 @@ gbinder_reader_init(
     gsize len)
 {
     gbinder_reader_init2(reader, data, offset, len, NULL);
+}
+
+GBinderFmq*
+gbinder_reader_read_fmq_descriptor(
+    GBinderReader* reader,
+    GBINDER_FMQ_FLAGS flags)
+{
+    const GBinderReaderPriv* p = gbinder_reader_cast_c(reader);
+
+    if (p->data && p->data->buffer) {
+        const GBinderRpcProtocol* rpc =
+            gbinder_buffer_protocol(p->data->buffer);
+
+        if (rpc->read_fmq_descriptor) {
+            return rpc->read_fmq_descriptor(reader, flags);
+        }
+    }
+    return NULL;
 }
 
 gboolean
@@ -466,13 +488,89 @@ gbinder_reader_read_buffer_object(
         const GBinderReaderData* data = p->data;
         GBinderBuffer* buf = data->buffer;
         const gsize offset = p->ptr - (guint8*)buf->data;
+        const gsize size =
+            data->reg->io->decode_buffer_object(buf, offset, out);
 
-        if (gbinder_reader_consume_object(p, data->reg->io->
-            decode_buffer_object(buf, offset, out))) {
+        if (size && size <= gbinder_reader_bytes_remaining(reader) &&
+            gbinder_reader_consume_object(p, size)) {
             return TRUE;
         }
     }
     return FALSE;
+}
+
+static
+gboolean
+gbinder_reader_skip_fda_object(
+    GBinderReader* reader)
+{
+    GBinderReaderPriv* p = gbinder_reader_cast(reader);
+    const gsize remaining = gbinder_reader_bytes_remaining(reader);
+
+    if (gbinder_reader_can_read_object(p) && remaining >= sizeof(guint32)) {
+        guint32 type;
+
+        memcpy(&type, p->ptr, sizeof(type));
+        if (type == BINDER_TYPE_FDA) {
+            const GBinderIo* io = p->data->reg->io;
+            const gsize size = io->object_size(p->ptr,
+                gbinder_buffer_protocol(p->data->buffer));
+
+            return size && size <= remaining &&
+                gbinder_reader_consume_object(p, size);
+        }
+    }
+    return FALSE;
+}
+
+static
+const GBinderFds*
+gbinder_reader_read_hidl_fds(
+    GBinderReader* reader)
+{
+    GBinderIoBufferObject handle;
+    gint64 handle_size;
+
+    /* HIDL writes the handle size, its buffer, then an fd array object. */
+    if (gbinder_reader_read_int64(reader, &handle_size) && handle_size > 0 &&
+        gbinder_reader_read_buffer_object(reader, &handle) && handle.data &&
+        handle.size >= sizeof(GBinderFds) &&
+        (guint64) handle_size == handle.size) {
+        const GBinderFds* fds = handle.data;
+        const gsize count = (handle.size - sizeof(*fds)) / sizeof(int);
+
+        if (fds->num_fds > 0 && fds->num_fds <= count &&
+            fds->num_ints <= count - fds->num_fds &&
+            gbinder_reader_skip_fda_object(reader)) {
+            return fds;
+        }
+    }
+    return NULL;
+}
+
+GBinderFmq*
+gbinder_reader_read_hidl_fmq_descriptor(
+    GBinderReader* reader,
+    GBINDER_FMQ_FLAGS flags)
+{
+    GBinderIoBufferObject object, grantors;
+
+    if (gbinder_reader_read_buffer_object(reader, &object) &&
+        object.data && object.size == sizeof(GBinderMQDescriptor)) {
+        const GBinderMQDescriptor* desc = object.data;
+
+        if (desc->grantors.count >= 3 && desc->grantors.count <= 4 &&
+            gbinder_reader_read_buffer_object(reader, &grantors) &&
+            grantors.data == desc->grantors.data.ptr && grantors.size ==
+            desc->grantors.count * sizeof(GBinderFmqGrantorDescriptor)) {
+            const GBinderFds* fds = gbinder_reader_read_hidl_fds(reader);
+
+            if (fds && fds == desc->data.fds) {
+                return gbinder_fmq_new_from_descriptor(desc, flags);
+            }
+        }
+    }
+    return NULL;
 }
 
 GBinderBuffer*

@@ -33,7 +33,7 @@
 
 #include "gbinder_fmq_p.h"
 #include "gbinder_rpc_protocol.h"
-#include "gbinder_reader.h"
+#include "gbinder_reader_p.h"
 #include "gbinder_writer_p.h"
 #include "gbinder_config.h"
 #include "gbinder_log.h"
@@ -184,6 +184,160 @@ gbinder_rpc_protocol_aidl_write_fmq_descriptor(
     }
 }
 
+static
+gboolean
+gbinder_rpc_protocol_aidl_read_fmq_grantor_descriptor(
+    GBinderReader* reader,
+    GBinderFmqGrantorDescriptor* grantor)
+{
+    GBinderReader parcelable;
+    gboolean non_null;
+    gboolean ok = FALSE;
+
+    if (gbinder_reader_start_parcelable(reader, &parcelable, &non_null)) {
+        gint32 fd_index, offset;
+        gint64 extent;
+
+        ok = non_null &&
+            gbinder_reader_read_int32(&parcelable, &fd_index) &&
+            fd_index >= 0 &&
+            gbinder_reader_read_int32(&parcelable, &offset) && offset >= 0 &&
+            gbinder_reader_read_int64(&parcelable, &extent) && extent > 0;
+        if (ok) {
+            grantor->flags = 0;
+            grantor->fd_index = fd_index;
+            grantor->offset = offset;
+            grantor->extent = extent;
+        }
+        gbinder_reader_finish_parcelable(&parcelable);
+    }
+    return ok;
+}
+
+static
+int
+gbinder_rpc_protocol_aidl_read_fd(
+    GBinderReader* reader)
+{
+    gint32 non_null, has_comm;
+
+    /* ParcelFileDescriptor may include a second fd for status messages. */
+    if (gbinder_reader_read_int32(reader, &non_null) && non_null == 1 &&
+        gbinder_reader_read_int32(reader, &has_comm) &&
+        (has_comm == 0 || has_comm == 1)) {
+        const int fd = gbinder_reader_read_fd(reader);
+
+        if (fd >= 0 && (!has_comm || gbinder_reader_read_fd(reader) >= 0)) {
+            return fd;
+        }
+    }
+    return -1;
+}
+
+static
+GBinderFds*
+gbinder_rpc_protocol_aidl_read_fds(
+    GBinderReader* reader)
+{
+    GBinderReader parcelable;
+    GBinderFds* fds = NULL;
+    gboolean non_null;
+
+    if (gbinder_reader_start_parcelable(reader, &parcelable, &non_null)) {
+        gint32 count;
+        gboolean ok = non_null &&
+            gbinder_reader_read_int32(&parcelable, &count) && count > 0 &&
+            (gsize) count <= (G_MAXSIZE - sizeof(*fds)) / sizeof(int) &&
+            (gsize) count <= gbinder_reader_bytes_remaining(&parcelable) /
+            sizeof(gint32);
+
+        if (ok) {
+            int* values;
+            guint i;
+
+            /* The reader borrows these fds. The queue duplicates them. */
+            fds = g_malloc0(sizeof(*fds) + ((gsize) count) * sizeof(int));
+            fds->version = sizeof(*fds);
+            fds->num_fds = count;
+            values = (int*)(fds + 1);
+            for (i = 0; ok && i < fds->num_fds; i++) {
+                values[i] = gbinder_rpc_protocol_aidl_read_fd(&parcelable);
+                ok = values[i] >= 0;
+            }
+
+            /* NativeHandle also contains an array of opaque integers. */
+            ok = ok && gbinder_reader_read_int32(&parcelable, &count) &&
+                count >= 0 && (gsize) count <=
+                gbinder_reader_bytes_remaining(&parcelable) / sizeof(gint32) &&
+                (gsize) count <= (G_MAXSIZE - sizeof(*fds)) / sizeof(int) -
+                fds->num_fds;
+            if (ok) {
+                const gsize size = sizeof(*fds) +
+                    (((gsize) fds->num_fds) + count) * sizeof(int);
+
+                fds = g_realloc(fds, size);
+                fds->num_ints = count;
+                values = (int*)(fds + 1) + fds->num_fds;
+                for (i = 0; ok && i < fds->num_ints; i++) {
+                    ok = gbinder_reader_read_int32(&parcelable, values + i);
+                }
+            }
+            if (!ok) {
+                g_free(fds);
+                fds = NULL;
+            }
+        }
+        gbinder_reader_finish_parcelable(&parcelable);
+    }
+    return fds;
+}
+
+static
+GBinderFmq*
+gbinder_rpc_protocol_aidl_read_fmq_descriptor(
+    GBinderReader* reader,
+    GBINDER_FMQ_FLAGS flags)
+{
+    GBinderReader parcelable;
+    GBinderFmq* queue = NULL;
+    gboolean non_null;
+
+    if (gbinder_reader_start_parcelable(reader, &parcelable, &non_null)) {
+        gint32 count;
+
+        if (non_null && gbinder_reader_read_int32(&parcelable, &count) &&
+            count >= 3 && count <= 4) {
+            GBinderFmqGrantorDescriptor grantors[4];
+            GBinderMQDescriptor desc;
+            GBinderFds* fds;
+            gboolean ok = TRUE;
+            gint32 quantum, type;
+            gint32 i;
+
+            memset(&desc, 0, sizeof(desc));
+            memset(grantors, 0, sizeof(grantors));
+            desc.grantors.count = count;
+            desc.grantors.data.ptr = grantors;
+            for (i = 0; ok && i < count; i++) {
+                ok = gbinder_rpc_protocol_aidl_read_fmq_grantor_descriptor
+                    (&parcelable, grantors + i);
+            }
+            fds = ok ? gbinder_rpc_protocol_aidl_read_fds(&parcelable) : NULL;
+            if (fds && gbinder_reader_read_int32(&parcelable, &quantum) &&
+                quantum > 0 && gbinder_reader_read_int32(&parcelable, &type) &&
+                type > 0) {
+                desc.data.fds = fds;
+                desc.quantum = quantum;
+                desc.flags = type;
+                queue = gbinder_fmq_new_from_descriptor(&desc, flags);
+            }
+            g_free(fds);
+        }
+        gbinder_reader_finish_parcelable(&parcelable);
+    }
+    return queue;
+}
+
 /*==========================================================================*
  * The original AIDL protocol.
  *==========================================================================*/
@@ -236,6 +390,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl = {
     .write_rpc_header = gbinder_rpc_protocol_aidl_write_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_aidl_read_rpc_header,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+    .read_fmq_descriptor = gbinder_rpc_protocol_aidl_read_fmq_descriptor,
 };
 
 /*==========================================================================*
@@ -285,6 +440,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl2 = {
     .write_rpc_header = gbinder_rpc_protocol_aidl2_write_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_aidl2_read_rpc_header,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+    .read_fmq_descriptor = gbinder_rpc_protocol_aidl_read_fmq_descriptor,
 };
 
 /*==========================================================================*
@@ -355,6 +511,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl3 = {
     .finish_unflatten_binder =
         gbinder_rpc_protocol_aidl3_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+    .read_fmq_descriptor = gbinder_rpc_protocol_aidl_read_fmq_descriptor,
 };
 
 /*==========================================================================*
@@ -408,6 +565,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_aidl4 = {
     .finish_unflatten_binder =
         gbinder_rpc_protocol_aidl4_finish_unflatten_binder,
     .write_fmq_descriptor = gbinder_rpc_protocol_aidl_write_fmq_descriptor,
+    .read_fmq_descriptor = gbinder_rpc_protocol_aidl_read_fmq_descriptor,
 };
 
 /*==========================================================================*
@@ -497,6 +655,7 @@ static const GBinderRpcProtocol gbinder_rpc_protocol_hidl = {
     .write_rpc_header = gbinder_rpc_protocol_hidl_write_rpc_header,
     .read_rpc_header = gbinder_rpc_protocol_hidl_read_rpc_header,
     .write_fmq_descriptor = gbinder_rpc_protocol_hidl_write_fmq_descriptor,
+    .read_fmq_descriptor = gbinder_reader_read_hidl_fmq_descriptor,
 };
 
 /*==========================================================================*
