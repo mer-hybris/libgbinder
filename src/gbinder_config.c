@@ -118,7 +118,7 @@ static const GBinderConfigPresetGroup gbinder_config_29[] = {
 
 static const GBinderConfigPresetEntry gbinder_config_30_protocol[] = {
     { "/dev/binder", "aidl3" },
-    { "/dev/vndbinder", "aidl3" },
+    { "/dev/vndbinder", "aidl3v" },
     { NULL, NULL }
 };
 
@@ -138,7 +138,7 @@ static const GBinderConfigPresetGroup gbinder_config_30[] = {
 
 static const GBinderConfigPresetEntry gbinder_config_31_protocol[] = {
     { "/dev/binder", "aidl4" },
-    { "/dev/vndbinder", "aidl4" },
+    { "/dev/vndbinder", "aidl4v" },
     { NULL, NULL }
 };
 
