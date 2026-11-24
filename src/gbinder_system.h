@@ -47,6 +47,11 @@ gbinder_system_close(
     GBINDER_INTERNAL;
 
 int
+gbinder_system_flush(
+    int fd)
+    GBINDER_INTERNAL;
+
+int
 gbinder_system_ioctl(
     int fd,
     int request,

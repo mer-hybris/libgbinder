@@ -81,7 +81,8 @@ test_reader_data_init_for_reply(
     data->buffer = buf;
     data->reg = gbinder_object_registry_ref(reg);
     g_assert(!gbinder_object_registry_get_local(reg, NULL));
-    g_assert(gbinder_object_registry_get_local(reg, obj) == obj);
+    g_assert(gbinder_object_registry_get_local(reg,
+        gbinder_local_object_node(obj)) == obj);
     gbinder_local_object_unref(obj); /* ref added by the above call */
     if (offsets && offsets->count > 0) {
         guint i;
@@ -665,6 +666,82 @@ test_increfs(
 }
 
 /*==========================================================================*
+ * node
+ *
+ * The kernel keeps a weak reference to a local object's node after the
+ * object is gone. Until it lets go, no other object may be known to the
+ * kernel by the same pointer.
+ *==========================================================================*/
+
+static
+void
+test_node_cb(
+    GBinderLocalObject* obj,
+    void* user_data)
+{
+    test_quit_later((GMainLoop*)user_data);
+}
+
+static
+void
+test_node_run(
+    void)
+{
+    GBinderIpc* ipc = gbinder_ipc_new(GBINDER_DEFAULT_BINDER, NULL);
+    GBinderObjectRegistry* reg = gbinder_ipc_object_registry(ipc);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    int fd = gbinder_driver_fd(ipc->driver);
+    GBinderLocalObject* old = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    GBinderLocalObjectNode* old_node = gbinder_local_object_node(old);
+    GBinderLocalObject* obj;
+    gulong id;
+
+    /* The kernel is the address of the node, not of the object */
+    g_assert((gpointer)old_node != (gpointer)old);
+
+    /* Another process takes a weak reference */
+    id = gbinder_local_object_add_weak_refs_changed_handler(old,
+        test_node_cb, loop);
+    test_binder_br_increfs(fd, ANY_THREAD, old);
+    test_run(&test_opt, loop);
+    g_assert_cmpint(old->weak_refs, == ,1);
+    gbinder_local_object_remove_handler(old, id);
+
+    /* The object goes away, its node doesn't */
+    gbinder_local_object_unref(old);
+    g_assert(!gbinder_object_registry_get_local(reg, old_node));
+
+    /* A new object gets a node of its own */
+    obj = gbinder_local_object_new(ipc, NULL, NULL, NULL);
+    g_assert(gbinder_local_object_node(obj) != old_node);
+    g_assert(gbinder_object_registry_get_local(reg,
+        gbinder_local_object_node(obj)) == obj);
+    gbinder_local_object_unref(obj); /* ref added by the above call */
+
+    /* BR_DECREFS for the old node, then a marker to wait for */
+    id = gbinder_local_object_add_weak_refs_changed_handler(obj,
+        test_node_cb, loop);
+    test_binder_br_decrefs(fd, ANY_THREAD, old_node);
+    test_binder_br_increfs(fd, ANY_THREAD, obj);
+    test_run(&test_opt, loop);
+    g_assert_cmpint(obj->weak_refs, == ,1);
+    gbinder_local_object_remove_handler(obj, id);
+
+    gbinder_local_object_unref(obj);
+    gbinder_ipc_unref(ipc);
+    test_binder_exit_wait(&test_opt, loop);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_node(
+    void)
+{
+    test_run_in_context(&test_opt, test_node_run);
+}
+
+/*==========================================================================*
  * decrefs
  *==========================================================================*/
 
@@ -839,6 +916,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_PREFIX "custom_iface", test_custom_iface);
     g_test_add_func(TEST_PREFIX "reply_status", test_reply_status);
     g_test_add_func(TEST_PREFIX "increfs", test_increfs);
+    g_test_add_func(TEST_PREFIX "node", test_node);
     g_test_add_func(TEST_PREFIX "decrefs", test_decrefs);
     g_test_add_func(TEST_PREFIX "acquire", test_acquire);
     g_test_add_func(TEST_PREFIX "release", test_release);

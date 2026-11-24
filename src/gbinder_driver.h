@@ -54,7 +54,7 @@ gbinder_driver_unref(
     GBINDER_INTERNAL;
 
 void
-gbinder_driver_close(
+gbinder_driver_shutdown(
     GBinderDriver* driver)
     GBINDER_INTERNAL;
 
