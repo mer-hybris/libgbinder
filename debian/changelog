@@ -1,3 +1,13 @@
+libgbinder (1.1.56) unstable; urgency=low
+
+  * Handle BR_FROZEN_REPLY, BR_TRANSACTION_PENDING_FROZEN and BR_ERROR
+  * Don't drop TF_ONE_WAY from incoming TF_STATUS_CODE transactions
+  * Add a reference to binder objects for the duration of the tx
+  * gbinder_servicemanager_hidl needs to copy hidl string data for async tx
+  * Really fixed make clean with -j
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 26 Nov 2026 14:23:54 +0200
+
 libgbinder (1.1.55) unstable; urgency=low
 
   * Invoke destroy callback from gbinder_client_cancel
