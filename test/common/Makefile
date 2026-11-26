@@ -50,23 +50,27 @@ WARNINGS = -Wall
 DEFINES += -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_32 \
   -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_MAX_ALLOWED
 INCLUDES = -I$(LIB_DIR)/include
-CFLAGS += -fPIC $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
+BASE_FLAGS = -fPIC -g
+BASE_LDFLAGS = $(LDFLAGS) $(BASE_FLAGS)
+BASE_CFLAGS = $(CFLAGS) $(BASE_FLAGS)
+FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell $(PKG_CONFIG) --cflags $(PKGS))
-LDFLAGS += -pie $(shell $(PKG_CONFIG) --libs $(PKGS))
-QUIET_MAKE = $(MAKE) --no-print-directory
-DEBUG_FLAGS = -g
-RELEASE_FLAGS =
+FULL_LDFLAGS = $(BASE_LDFLAGS)
+LIBS = $(shell $(PKG_CONFIG) --libs $(PKGS))
 
 KEEP_SYMBOLS ?= 0
-ifneq ($(KEEP_SYMBOLS),0)
-RELEASE_FLAGS += -g
-SUBMAKE_OPTS += KEEP_SYMBOLS=1
-endif
 
-DEBUG_LDFLAGS = $(LDFLAGS) $(DEBUG_FLAGS)
-RELEASE_LDFLAGS = $(LDFLAGS) $(RELEASE_FLAGS)
-DEBUG_CFLAGS = $(CFLAGS) $(DEBUG_FLAGS) -DDEBUG
-RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -O2
+DEBUG_CFLAGS = $(FULL_CFLAGS) -DDEBUG
+RELEASE_CFLAGS = $(FULL_CFLAGS) -O2
+
+DEBUG_LIB = $(LIB_DIR)/build/debug/libgbinder.so
+RELEASE_LIB = $(LIB_DIR)/build/release/libgbinder.so
+
+DEBUG_LIBS += $(DEBUG_LIB) $(LIBS)
+RELEASE_LIBS += $(RELEASE_LIB) $(LIBS)
+
+DEBUG_LDFLAGS = $(FULL_LDFLAGS)
+RELEASE_LDFLAGS = $(FULL_LDFLAGS)
 
 #
 # Files
@@ -74,12 +78,6 @@ RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -O2
 
 DEBUG_OBJS = $(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
 RELEASE_OBJS = $(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
-DEBUG_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_so)
-RELEASE_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_so)
-DEBUG_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_link)
-RELEASE_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_link)
-DEBUG_SO = $(LIB_DIR)/$(DEBUG_SO_FILE)
-RELEASE_SO = $(LIB_DIR)/$(RELEASE_SO_FILE)
 
 #
 # Dependencies
@@ -92,6 +90,9 @@ ifneq ($(strip $(DEPS)),)
 endif
 endif
 
+$(DEBUG_LIB): | libgbinder-debug
+$(RELEASE_LIB): | libgbinder-release
+
 $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
 $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 
@@ -102,9 +103,9 @@ $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
 RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
 
-debug: libgbinder-debug $(DEBUG_EXE)
+debug: $(DEBUG_EXE)
 
-release: libgbinder-release $(RELEASE_EXE)
+release: $(RELEASE_EXE)
 
 clean:
 	rm -f *~
@@ -113,10 +114,7 @@ clean:
 cleaner: clean
 	@$(MAKE) -C $(LIB_DIR) clean
 
-$(DEBUG_BUILD_DIR):
-	mkdir -p $@
-
-$(RELEASE_BUILD_DIR):
+$(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR):
 	mkdir -p $@
 
 $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
@@ -125,20 +123,20 @@ $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
 $(RELEASE_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
-$(DEBUG_EXE): $(DEBUG_SO) $(DEBUG_BUILD_DIR) $(DEBUG_OBJS)
-	$(LD) $(DEBUG_OBJS) $(DEBUG_LDFLAGS) $< -o $@
+$(DEBUG_EXE): $(DEBUG_LIB) $(DEBUG_OBJS)
+	$(LD) $(DEBUG_LDFLAGS) $(DEBUG_OBJS) $(DEBUG_LIBS) -o $@
 
-$(RELEASE_EXE): $(RELEASE_SO) $(RELEASE_BUILD_DIR) $(RELEASE_OBJS)
-	$(LD) $(RELEASE_OBJS) $(RELEASE_LDFLAGS) $< -o $@
+$(RELEASE_EXE): $(RELEASE_LIB) $(RELEASE_OBJS)
+	$(LD) $(RELEASE_LDFLAGS) $(RELEASE_OBJS) $(RELEASE_LIBS) -o $@
 ifeq ($(KEEP_SYMBOLS),0)
 	strip $@
 endif
 
 libgbinder-debug:
-	@$(MAKE) $(SUBMAKE_OPTS) -C $(LIB_DIR) $(DEBUG_SO_FILE) $(DEBUG_LINK_FILE)
+	@$(MAKE) -C $(LIB_DIR) debug
 
 libgbinder-release:
-	@$(MAKE) $(SUBMAKE_OPTS) -C $(LIB_DIR) $(RELEASE_SO_FILE) $(RELEASE_LINK_FILE)
+	@$(MAKE) -C $(LIB_DIR) release
 
 #
 # Install
