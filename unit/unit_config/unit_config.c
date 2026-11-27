@@ -33,6 +33,7 @@
 #include "test_common.h"
 
 #include "gbinder_config.h"
+#include "gbinder_eventloop.h"
 
 #include <gutil_strv.h>
 #include <gutil_log.h>
@@ -410,6 +411,48 @@ test_autorelease(
 }
 
 /*==========================================================================*
+ * autorelease_reload
+ *==========================================================================*/
+
+static
+void
+test_autorelease_reload(
+    void)
+{
+    const char* default_file = gbinder_config_file;
+    char* dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+    char* file = g_build_filename(dir, "test.conf", NULL);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    static const char config[] = "[Protocol]";
+    int i;
+
+    test_eventloop_counting_set();
+    gbinder_config_exit(); /* Reset the state */
+    g_assert(g_file_set_contents(file, config, -1, NULL));
+    gbinder_config_file = file;
+
+    /* Each load is released when idle, and so is its callback */
+    for (i = 0; i < 2; i++) {
+        g_assert(gbinder_config_get());
+        test_quit_later_n(loop, 2);
+        test_run(&test_opt, loop);
+        g_assert_cmpint(test_eventloop_counting_callbacks(), == ,0);
+    }
+    g_main_loop_unref(loop);
+
+    /* Reset the state again */
+    gbinder_config_exit();
+    gbinder_config_file = default_file;
+    gbinder_eventloop_set(NULL);
+
+    remove(file);
+    g_free(file);
+
+    remove(dir);
+    g_free(dir);
+}
+
+/*==========================================================================*
  * Presets
  *==========================================================================*/
 
@@ -570,6 +613,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("dirs"), test_dirs);
     g_test_add_func(TEST_("bad_config"), test_bad_config);
     g_test_add_func(TEST_("autorelease"), test_autorelease);
+    g_test_add_func(TEST_("autorelease_reload"), test_autorelease_reload);
     for (i = 0; i < G_N_ELEMENTS(test_presets_data); i++) {
         const TestPresetsData* test = test_presets_data + i;
         char* path;

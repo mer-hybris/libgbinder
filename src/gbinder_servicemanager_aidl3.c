@@ -107,9 +107,18 @@ gbinder_servicemanager_aidl3_list(
         if (gbinder_reader_read_int32(&reader, &count)) {
             int i;
 
-            /* Iterate each service name */
+            /*
+             * Iterate each service name. Don't trust the count, stop
+             * when the data runs out. A NULL in the middle would also
+             * truncate the strv and leak the strings after it.
+             */
             for (i = 0; i < count; i++) {
-                g_ptr_array_add(list, gbinder_reader_read_string16(&reader));
+                char* name = gbinder_reader_read_string16(&reader);
+
+                if (!name) {
+                    break;
+                }
+                g_ptr_array_add(list, name);
             }
         }
         gbinder_remote_reply_unref(reply);
