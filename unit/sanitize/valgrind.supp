@@ -1,0 +1,57 @@
+# valgrind suppressions for unit/sanitize/run
+#
+# GLib's default main context keeps its wakeup eventfd open for the
+# lifetime of the process.
+{
+   glib_main_context_wakeup_fd
+   CoreError:FdNotClosed
+   ...
+   fun:g_main_context_new_with_flags
+}
+# GType registration data lives for the lifetime of the process.
+{
+   glib_type_registration
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:g_type_register_*
+}
+# unit_writer passes an invalid fd and makes close() fail on purpose.
+{
+   unit_writer_fd_invalid
+   CoreError:FdBadUse
+   ...
+   fun:gbinder_writer_data_append_fd
+   fun:test_fd2
+}
+{
+   unit_writer_fd_close_error
+   CoreError:FdBadClose
+   ...
+   fun:gbinder_writer_data_close_fd
+   ...
+   fun:test_fd_close_error
+}
+# unit_reader checks that the fd has been closed by closing it again.
+{
+   unit_reader_fd_closed
+   CoreError:FdBadClose
+   fun:close
+   fun:test_*fd_ok
+}
+# unit_reader closes the fd to make it invalid, then makes gbinder_reader
+# and gbinder_driver use and close it.
+{
+   unit_reader_dupfd_badfd_use
+   CoreError:FdBadUse
+   ...
+   fun:gbinder_reader_read_dup_fd
+   fun:test_dupfd_badfd
+}
+{
+   unit_reader_dupfd_badfd_close
+   CoreError:FdBadClose
+   fun:close
+   fun:gbinder_driver_close_fds
+   fun:test_dupfd_badfd
+}
